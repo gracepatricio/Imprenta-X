@@ -1,0 +1,36 @@
+name: imprentax
+description: "Imprenta X System"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_core: ^4.7.0
+  firebase_auth: ^6.4.0
+  cloud_firestore: ^6.3.0
+  cupertino_icons: ^1.0.8
+  http: ^1.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/imprentalogo.jpg
+    - assets/images/sysbackground.jpg
+
+  fonts:
+    - family: Spartan
+      fonts:
+        - asset: assets/fonts/LeagueSpartan-Regular.ttf
+        - asset: assets/fonts/LeagueSpartan-Bold.ttf
+          weight: 700
