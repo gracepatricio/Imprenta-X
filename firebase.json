@@ -1,1 +1,32 @@
+<<<<<<< HEAD
 {"flutter":{"platforms":{"android":{"default":{"projectId":"imprenta-x-system","appId":"1:844000396103:android:4bc88c4940822550930262","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"imprenta-x-system","configurations":{"android":"1:844000396103:android:4bc88c4940822550930262","ios":"1:844000396103:ios:7dd407a3c1380c18930262","macos":"1:844000396103:ios:7dd407a3c1380c18930262","web":"1:844000396103:web:2b33ca52bdf4defe930262","windows":"1:844000396103:web:ec033d48884ae374930262"}}}}}}
+=======
+{
+  "functions": {
+    "source": "functions"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "imprenta-x-system",
+          "appId": "1:844000396103:android:4bc88c4940822550930262",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "imprenta-x-system",
+          "configurations": {
+            "android": "1:844000396103:android:4bc88c4940822550930262",
+            "ios": "1:844000396103:ios:7dd407a3c1380c18930262",
+            "macos": "1:844000396103:ios:7dd407a3c1380c18930262",
+            "web": "1:844000396103:web:2b33ca52bdf4defe930262",
+            "windows": "1:844000396103:web:ec033d48884ae374930262"
+          }
+        }
+      }
+    }
+  }
+}
+>>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138

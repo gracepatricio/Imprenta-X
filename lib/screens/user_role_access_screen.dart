@@ -19,10 +19,13 @@ class _UserRoleAccessScreenEmbeddedState
   final Map<String, String> _editedRoles = {};
   bool _isSaving = false;
 
+<<<<<<< HEAD
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedRoleFilter = 'all';
 
+=======
+>>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138
   Future<void> _saveChanges() async {
     if (_editedRoles.isEmpty) return;
     setState(() => _isSaving = true);
@@ -47,12 +50,15 @@ class _UserRoleAccessScreenEmbeddedState
     }
   }
 
+<<<<<<< HEAD
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 
+=======
+>>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138
   void _confirmDelete(String userId, String name, String email) {
     showDialog(
       context: context,
@@ -169,6 +175,7 @@ class _UserRoleAccessScreenEmbeddedState
 
         const SizedBox(height: 16),
 
+<<<<<<< HEAD
         Row(
           children: [
             Expanded(
@@ -238,6 +245,8 @@ class _UserRoleAccessScreenEmbeddedState
         ),
         const SizedBox(height: 12),
 
+=======
+>>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138
         // ── Table header ─────────────────────────────────────────────
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -256,12 +265,21 @@ class _UserRoleAccessScreenEmbeddedState
                 child: Text("EMAIL", style: _headerStyle),
               ),
               Expanded(
+<<<<<<< HEAD
                 flex: 3,
                 child: Text("ROLE", style: _headerStyle),
               ),
               Expanded(
                 flex: 2,
                 child: Center(child: Text("DELETE USER?", style: _headerStyle)),
+=======
+                flex: 4,
+                child: Text("ROLE", style: _headerStyle),
+              ),
+              SizedBox(
+                width: 28,
+                child: Center(child: Text("DEL", style: _headerStyle)),
+>>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138
               ),
             ],
           ),
@@ -284,6 +302,7 @@ class _UserRoleAccessScreenEmbeddedState
                 final data = d.data() as Map<String, dynamic>;
                 return data['is_deleted'] != true;
               }).toList();
+<<<<<<< HEAD
               final searchedUsers = users.where((d) {
                 final data = d.data() as Map<String, dynamic>;
                 final name = (data['full_name'] ?? '').toString().toLowerCase();
@@ -298,16 +317,26 @@ class _UserRoleAccessScreenEmbeddedState
                 return matchesSearch && matchesRole;
               }).toList();
               if (searchedUsers.isEmpty) {
+=======
+              if (users.isEmpty) {
+>>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138
                 return const Center(
                   child: Text("No users found",
                       style: TextStyle(color: Colors.white38)),
                 );
               }
               return ListView.separated(
+<<<<<<< HEAD
                 itemCount: searchedUsers.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 5),
                 itemBuilder: (context, i) {
                   final user = searchedUsers[i];
+=======
+                itemCount: users.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 5),
+                itemBuilder: (context, i) {
+                  final user = users[i];
+>>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138
                   final uid = user.id;
                   final data = user.data() as Map<String, dynamic>;
                   final name = data['full_name']?.toString() ?? '—';
@@ -451,7 +480,11 @@ class _UserRow extends StatelessWidget {
 
           // Role dropdown column
           Expanded(
+<<<<<<< HEAD
             flex: 3,
+=======
+            flex: 4,
+>>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138
             child: _RoleDropdown(
               currentRole: currentRole,
               onChanged: onRoleChanged,
@@ -459,8 +492,13 @@ class _UserRow extends StatelessWidget {
           ),
 
           // Delete button
+<<<<<<< HEAD
           Expanded(
             flex: 2,
+=======
+          SizedBox(
+            width: 28,
+>>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138
             child: Center(
               child: IconButton(
                 onPressed: onDelete,
@@ -495,7 +533,11 @@ class _RoleDropdown extends StatelessWidget {
   Color _colorFor(String role) {
     switch (role) {
       case 'admin':    return AppTheme.gold;
+<<<<<<< HEAD
       case 'employee': return Colors.lightBlueAccent;
+=======
+      case 'employee': return Colors.pinkAccent;
+>>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138
       default:         return Colors.tealAccent;
     }
   }
