@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
+import 'employee_manage_account.dart';
 
 class EmployeeAccountScreen extends StatefulWidget {
   const EmployeeAccountScreen({super.key});
@@ -246,9 +247,10 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
               label: "Messages",
             );
           case "manage":
-            return const _Placeholder(
-              icon: Icons.manage_accounts_outlined,
-              label: "Manage Account",
+            return EmployeeManageAccount(
+              onNameUpdated: (newName) {
+                setState(() => fullName = newName);
+              },
             );
           default:
             return const SizedBox.shrink();
