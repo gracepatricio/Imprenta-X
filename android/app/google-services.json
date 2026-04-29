@@ -8,28 +8,6 @@
   "client": [
     {
       "client_info": {
-<<<<<<< HEAD
-        "mobilesdk_app_id": "1:844000396103:android:da07c400c0af50de930262",
-        "android_client_info": {
-          "package_name": "com.example.imprenta_x"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyBRRi0oXqVozfJVaIHAhhMB9w9ltK7chm8"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-=======
->>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138
         "mobilesdk_app_id": "1:844000396103:android:4bc88c4940822550930262",
         "android_client_info": {
           "package_name": "com.example.imprentax"
