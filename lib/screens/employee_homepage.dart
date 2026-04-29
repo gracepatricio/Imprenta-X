@@ -4,13 +4,22 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
 import 'app_navbar.dart';
+import 'employee_home_screen.dart';
+import 'employee_inventory_screen.dart';
+import 'employee_logs_screen.dart';
+import 'employee_account_screen.dart';
 
 class EmployeeHomepage extends StatefulWidget {
+  const EmployeeHomepage({super.key});
+
   @override
   State<EmployeeHomepage> createState() => _EmployeeHomepageState();
 }
 
 class _EmployeeHomepageState extends State<EmployeeHomepage> {
+  static const _items = ['Home', 'Inventory', 'Logs & History', 'Account'];
+  String _active = 'Home';
+
   StreamSubscription<DocumentSnapshot>? _deletionSub;
 
   @override
@@ -27,16 +36,15 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
         .doc(user.uid)
         .snapshots()
         .listen((snap) async {
-      final deleted = !snap.exists ||
-          (snap.data() as Map?)?['is_deleted'] == true;
-      if (deleted && mounted) {
-        await FirebaseAuth.instance.signOut();
-        if (mounted) {
-          Navigator.of(context)
-              .pushNamedAndRemoveUntil('/', (_) => false);
-        }
-      }
-    });
+          final deleted =
+              !snap.exists || (snap.data() as Map?)?['is_deleted'] == true;
+          if (deleted && mounted) {
+            await FirebaseAuth.instance.signOut();
+            if (mounted) {
+              Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+            }
+          }
+        });
   }
 
   @override
@@ -45,10 +53,16 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
     super.dispose();
   }
 
-  void _logout() async {
-    await FirebaseAuth.instance.signOut();
-    if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+  Widget get _screen {
+    switch (_active) {
+      case 'Inventory':
+        return const EmployeeInventoryScreen();
+      case 'Logs & History':
+        return const EmployeeLogsScreen();
+      case 'Account':
+        return const EmployeeAccountScreen();
+      default:
+        return const EmployeeHomeScreen();
     }
   }
 
@@ -60,48 +74,11 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
         child: Column(
           children: [
             AppNavBar(
-              activeItem: 'Home',
-              onTap: (_) {},
+              items: _items,
+              activeItem: _active,
+              onTap: (item) => setState(() => _active = item),
             ),
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.construction_outlined,
-                        size: 64, color: Colors.white24),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Employee Dashboard',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Coming soon',
-                      style: TextStyle(color: Colors.white38, fontSize: 13),
-                    ),
-                    const SizedBox(height: 32),
-                    ElevatedButton.icon(
-                      onPressed: _logout,
-                      icon: const Icon(Icons.logout, size: 16),
-                      label: const Text('Logout'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red.shade700,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            Expanded(child: _screen),
           ],
         ),
       ),
