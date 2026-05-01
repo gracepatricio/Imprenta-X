@@ -162,12 +162,12 @@ class _CompactMenu extends StatelessWidget {
       color: const Color(0xFF1a1a2e),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.white.withValues(alpha:0.15)),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
       ),
       icon: Container(
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha:0.12),
+          color: Colors.white.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
         ),
         child: const Icon(Icons.menu, color: Colors.white, size: 20),
@@ -178,11 +178,13 @@ class _CompactMenu extends StatelessWidget {
               value: item,
               child: Text(
                 item,
+                // No fontFamily — asset fonts can fail in popup overlay context
                 style: TextStyle(
                   color: item == activeItem ? AppTheme.gold : Colors.white,
-                  fontWeight:
-                      item == activeItem ? FontWeight.bold : FontWeight.normal,
-                  fontFamily: 'Spartan',
+                  fontWeight: item == activeItem
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                  fontSize: 14,
                 ),
               ),
             ),

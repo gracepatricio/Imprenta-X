@@ -200,13 +200,6 @@ class _FeaturedSection extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                Text(
-                  'Admin curated',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4),
-                    fontSize: 12,
-                  ),
-                ),
               ],
             ),
           ),

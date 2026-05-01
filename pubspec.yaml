@@ -13,8 +13,13 @@ dependencies:
   firebase_core: ^4.7.0
   firebase_auth: ^6.4.0
   cloud_firestore: ^6.3.0
+  firebase_storage: ^13.3.0 # Added Dependency
   cupertino_icons: ^1.0.8
   http: ^1.6.0
+  mobile_scanner: ^6.0.0 # Added Dependency
+  qr_flutter: ^4.1.0 # Added Dependency
+  image_picker: ^1.1.2 # Added Dependency
+  intl: ^0.20.1 # Added Dependency
 
 dev_dependencies:
   flutter_test:

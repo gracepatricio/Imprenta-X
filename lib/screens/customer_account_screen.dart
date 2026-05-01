@@ -381,6 +381,15 @@ class _OrderStatsRow extends StatelessWidget {
           .where('customer_uid', isEqualTo: uid)
           .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Row(children: [
+            Expanded(child: _StatCard('Pending', 0, Icons.hourglass_empty_outlined, Colors.orangeAccent)),
+            const SizedBox(width: 8),
+            Expanded(child: _StatCard('Active', 0, Icons.precision_manufacturing_outlined, Colors.blueAccent)),
+            const SizedBox(width: 8),
+            Expanded(child: _StatCard('Ready', 0, Icons.inventory_2_outlined, Colors.greenAccent)),
+          ]);
+        }
         final docs = snapshot.data?.docs ?? [];
         int pending = 0, active = 0, ready = 0;
         for (final d in docs) {
@@ -471,13 +480,18 @@ class _UnreadMessagesPreview extends StatelessWidget {
                 fontWeight: FontWeight.w600)),
         const SizedBox(height: 10),
         StreamBuilder<QuerySnapshot>(
+          // Fetch all messages for this customer and filter unread client-side.
+          // Avoids a composite index on (customer_uid, unread_customer).
           stream: FirebaseFirestore.instance
               .collection('Messages')
               .where('customer_uid', isEqualTo: uid)
-              .where('unread_customer', isGreaterThan: 0)
               .snapshots(),
           builder: (context, snapshot) {
-            final docs = snapshot.data?.docs ?? [];
+            if (snapshot.hasError) return const SizedBox.shrink();
+            final docs = (snapshot.data?.docs ?? []).where((d) {
+              final unread = (d.data() as Map)['unread_customer'];
+              return unread != null && (unread as num) > 0;
+            }).toList();
             if (docs.isEmpty) {
               return Container(
                 padding: const EdgeInsets.all(16),
@@ -664,19 +678,38 @@ class _OrdersContentState extends State<_OrdersContent> {
         const SizedBox(height: 14),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
+            // No orderBy here — avoids the composite-index requirement.
+            // We sort client-side after fetching.
             stream: FirebaseFirestore.instance
                 .collection('Orders')
                 .where('customer_uid', isEqualTo: widget.uid)
                 .where('status', isEqualTo: _filter)
-                .orderBy('created_at', descending: true)
                 .snapshots(),
             builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
+              if (snap.connectionState == ConnectionState.waiting &&
+                  !snap.hasData) {
                 return const Center(
                     child:
                         CircularProgressIndicator(color: Colors.white38));
               }
-              final docs = snap.data?.docs ?? [];
+              if (snap.hasError) {
+                return Center(
+                  child: Text(
+                    'Could not load orders.\nCheck your connection.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: Colors.white38, fontSize: 13),
+                  ),
+                );
+              }
+              // Sort newest-first client-side
+              final docs = List.from(snap.data?.docs ?? [])
+                ..sort((a, b) {
+                  final aTs = (a.data() as Map)['created_at'];
+                  final bTs = (b.data() as Map)['created_at'];
+                  if (aTs == null || bTs == null) return 0;
+                  return (bTs as dynamic).compareTo(aTs);
+                });
               if (docs.isEmpty) {
                 return Center(
                   child: Text(
@@ -692,8 +725,8 @@ class _OrdersContentState extends State<_OrdersContent> {
                 itemBuilder: (_, i) {
                   final d = docs[i].data() as Map<String, dynamic>;
                   return _OrderCard(
-                    orderId:   d['order_id']?.toString() ?? docs[i].id,
-                    data:      d,
+                    orderId: d['order_id']?.toString() ?? docs[i].id,
+                    data: d,
                     showMessage: _filter != 'cancelled',
                   );
                 },
@@ -876,13 +909,33 @@ class _MessagesContent extends StatelessWidget {
         const SizedBox(height: 14),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
+            // No orderBy — avoids composite index requirement.
+            // Sort by last_updated client-side.
             stream: FirebaseFirestore.instance
                 .collection('Messages')
                 .where('customer_uid', isEqualTo: uid)
-                .orderBy('last_updated', descending: true)
                 .snapshots(),
             builder: (context, snap) {
-              final docs = snap.data?.docs ?? [];
+              if (snap.hasError) {
+                return const Center(
+                  child: Text('Could not load messages.\nCheck your connection.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white38, fontSize: 13)),
+                );
+              }
+              if (snap.connectionState == ConnectionState.waiting &&
+                  !snap.hasData) {
+                return const Center(
+                    child: CircularProgressIndicator(color: Colors.white38));
+              }
+              // Sort newest-first client-side
+              final docs = List.from(snap.data?.docs ?? [])
+                ..sort((a, b) {
+                  final at = (a.data() as Map)['last_updated'];
+                  final bt = (b.data() as Map)['last_updated'];
+                  if (at == null || bt == null) return 0;
+                  return (bt as dynamic).compareTo(at);
+                });
               if (docs.isEmpty) {
                 return const Center(
                   child: Text('No messages yet',
@@ -897,7 +950,8 @@ class _MessagesContent extends StatelessWidget {
                   final orderId      = d['order_id']?.toString() ?? '';
                   final orderDisplay = d['order_display']?.toString() ?? orderId;
                   final lastMsg      = d['last_message']?.toString() ?? '';
-                  final unread       = (d['unread_customer'] ?? 0) as int;
+                  // Safe cast: Firestore may store numeric fields as num/double
+                  final unread = ((d['unread_customer'] as num?) ?? 0).toInt();
                   return GestureDetector(
                     onTap: () => Navigator.push(
                       context,

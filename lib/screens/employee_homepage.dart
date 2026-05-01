@@ -35,16 +35,22 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
         .collection('User')
         .doc(user.uid)
         .snapshots()
-        .listen((snap) async {
-          final deleted =
-              !snap.exists || (snap.data() as Map?)?['is_deleted'] == true;
-          if (deleted && mounted) {
-            await FirebaseAuth.instance.signOut();
-            if (mounted) {
-              Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+        .listen(
+          (snap) async {
+            final deleted =
+                !snap.exists || (snap.data() as Map?)?['is_deleted'] == true;
+            if (deleted && mounted) {
+              await FirebaseAuth.instance.signOut();
+              if (mounted) {
+                Navigator.of(context)
+                    .pushNamedAndRemoveUntil('/', (_) => false);
+              }
             }
-          }
-        });
+          },
+          onError: (_) {
+            // Network unavailable — ignore, listener will resume when reconnected
+          },
+        );
   }
 
   @override

@@ -170,19 +170,19 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
         _sidebarButton(
           "Dashboard",
           selectedMenu == "dashboard",
-          () => setState(() => selectedMenu = "dashboard"),
+              () => setState(() => selectedMenu = "dashboard"),
         ),
         const SizedBox(height: 8),
         _sidebarButton(
           "Messages",
           selectedMenu == "messages",
-          () => setState(() => selectedMenu = "messages"),
+              () => setState(() => selectedMenu = "messages"),
         ),
         const SizedBox(height: 8),
         _sidebarButton(
           "Manage Account",
           selectedMenu == "manage",
-          () => setState(() => selectedMenu = "manage"),
+              () => setState(() => selectedMenu = "manage"),
         ),
       ],
     );
