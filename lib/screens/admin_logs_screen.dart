@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
+import 'sales_widgets.dart';
 
 class AdminLogsScreen extends StatefulWidget {
   const AdminLogsScreen({super.key});
@@ -11,6 +12,85 @@ class AdminLogsScreen extends StatefulWidget {
 }
 
 class _AdminLogsScreenState extends State<AdminLogsScreen> {
+  int _topTab = 0; // 0 = Inventory Logs, 1 = Sales
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _PillTabBar(
+          tabs: const ['Inventory Logs', 'Sales'],
+          active: _topTab,
+          onTap: (i) => setState(() => _topTab = i),
+        ),
+        const SizedBox(height: 16),
+
+        Expanded(
+          child: _topTab == 0
+              ? const _InventoryLogsTab()
+              : const _SalesTab(),
+        ),
+      ],
+    );
+  }
+}
+
+class _PillTabBar extends StatelessWidget {
+  final List<String> tabs;
+  final int active;
+  final ValueChanged<int> onTap;
+
+  const _PillTabBar({
+    required this.tabs,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(tabs.length, (i) {
+        final isActive = i == active;
+        return Padding(
+          padding: EdgeInsets.only(right: i < tabs.length - 1 ? 8 : 0),
+          child: GestureDetector(
+            onTap: () => onTap(i),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              decoration: BoxDecoration(
+                color: isActive
+                    ? AppTheme.gold
+                    : Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Text(
+                tabs[i],
+                style: TextStyle(
+                  color: isActive ? Colors.black : Colors.white70,
+                  fontWeight:
+                  isActive ? FontWeight.w700 : FontWeight.w400,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _InventoryLogsTab extends StatefulWidget {
+  const _InventoryLogsTab();
+
+  @override
+  State<_InventoryLogsTab> createState() => _InventoryLogsTabState();
+}
+
+class _InventoryLogsTabState extends State<_InventoryLogsTab> {
   String _employeeFilter = '';
   String _materialFilter = '';
   final _empCtrl = TextEditingController();
@@ -63,8 +143,6 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
     if (confirmed != true) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      // Firestore doesn't allow deleting collections directly from client;
-      // we fetch and delete in batches of 400.
       const batchSize = 400;
       while (true) {
         final snap = await FirebaseFirestore.instance
@@ -87,7 +165,8 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -111,7 +190,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                           fontWeight: FontWeight.bold)),
                   Text('Employee inventory activity',
                       style:
-                          TextStyle(color: Colors.white54, fontSize: 12)),
+                      TextStyle(color: Colors.white54, fontSize: 12)),
                 ],
               ),
             ),
@@ -135,10 +214,12 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
             Expanded(
               child: TextField(
                 controller: _empCtrl,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
+                style:
+                const TextStyle(color: Colors.white, fontSize: 13),
                 onChanged: (v) =>
                     setState(() => _employeeFilter = v.toLowerCase()),
-                decoration: AppTheme.inputDecoration('Filter by employee',
+                decoration: AppTheme.inputDecoration(
+                    'Filter by employee',
                     icon: Icons.person_search_outlined),
               ),
             ),
@@ -146,16 +227,19 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
             Expanded(
               child: TextField(
                 controller: _matCtrl,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
+                style:
+                const TextStyle(color: Colors.white, fontSize: 13),
                 onChanged: (v) =>
                     setState(() => _materialFilter = v.toLowerCase()),
-                decoration: AppTheme.inputDecoration('Filter by material',
+                decoration: AppTheme.inputDecoration(
+                    'Filter by material',
                     icon: Icons.inventory_2_outlined),
               ),
             ),
             if (_employeeFilter.isNotEmpty || _materialFilter.isNotEmpty)
               IconButton(
-                icon: const Icon(Icons.clear, color: Colors.white38, size: 18),
+                icon: const Icon(Icons.clear,
+                    color: Colors.white38, size: 18),
                 onPressed: () {
                   _empCtrl.clear();
                   _matCtrl.clear();
@@ -171,7 +255,8 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
 
         // Table header
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding:
+          const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
@@ -183,13 +268,16 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
               Expanded(flex: 3, child: Text('Material', style: _h)),
               SizedBox(
                   width: 70,
-                  child: Text('Added', style: _h, textAlign: TextAlign.right)),
+                  child: Text('Added',
+                      style: _h, textAlign: TextAlign.right)),
               SizedBox(
                   width: 70,
-                  child: Text('New Stock', style: _h, textAlign: TextAlign.right)),
+                  child: Text('New Stock',
+                      style: _h, textAlign: TextAlign.right)),
               SizedBox(
                   width: 60,
-                  child: Text('Method', style: _h, textAlign: TextAlign.center)),
+                  child: Text('Method',
+                      style: _h, textAlign: TextAlign.center)),
             ],
           ),
         ),
@@ -206,7 +294,8 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
-                    child: CircularProgressIndicator(color: Colors.white));
+                    child:
+                    CircularProgressIndicator(color: Colors.white));
               }
 
               final docs = snapshot.data?.docs ?? [];
@@ -225,8 +314,8 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                       SizedBox(height: 8),
                       Text(
                           'Logs appear here when employees replenish stock',
-                          style:
-                              TextStyle(color: Colors.white38, fontSize: 12)),
+                          style: TextStyle(
+                              color: Colors.white38, fontSize: 12)),
                     ],
                   ),
                 );
@@ -234,24 +323,23 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
 
               final filtered = docs.where((d) {
                 final data = d.data() as Map<String, dynamic>;
-                final emp = data['updated_by_name']
-                        ?.toString()
-                        .toLowerCase() ??
-                    '';
-                final mat = data['material_name']
-                        ?.toString()
-                        .toLowerCase() ??
-                    '';
+                final emp =
+                    data['updated_by_name']?.toString().toLowerCase() ??
+                        '';
+                final mat =
+                    data['material_name']?.toString().toLowerCase() ??
+                        '';
                 return (_employeeFilter.isEmpty ||
-                        emp.contains(_employeeFilter)) &&
-                    (_materialFilter.isEmpty || mat.contains(_materialFilter));
+                    emp.contains(_employeeFilter)) &&
+                    (_materialFilter.isEmpty ||
+                        mat.contains(_materialFilter));
               }).toList();
 
               if (filtered.isEmpty) {
-                return Center(
+                return const Center(
                   child: Text(
                     'No logs matching your filter',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: Colors.white38, fontSize: 13),
                   ),
                 );
@@ -261,7 +349,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                 itemCount: filtered.length,
                 itemBuilder: (_, i) {
                   final data =
-                      filtered[i].data() as Map<String, dynamic>;
+                  filtered[i].data() as Map<String, dynamic>;
                   return _LogRow(data: data, dateFmt: _dateFmt);
                 },
               );
@@ -273,7 +361,98 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
   }
 
   static const _h = TextStyle(
-      color: Colors.white60, fontSize: 11, fontWeight: FontWeight.bold);
+      color: Colors.white60,
+      fontSize: 11,
+      fontWeight: FontWeight.bold);
+}
+
+class _SalesTab extends StatefulWidget {
+  const _SalesTab();
+
+  @override
+  State<_SalesTab> createState() => _SalesTabState();
+}
+
+class _SalesTabState extends State<_SalesTab> {
+  int _subTab = 0; // 0 = Sales Record, 1 = Sales Report
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: AppTheme.glassCard(opacity: 0.13, radius: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Underline sub-tab bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: _UnderlineTabBar(
+              tabs: const ['Sales Record', 'Sales Report'],
+              active: _subTab,
+              onTap: (i) => setState(() => _subTab = i),
+            ),
+          ),
+          Divider(
+            color: Colors.white.withValues(alpha: 0.1),
+            height: 1,
+            thickness: 1,
+          ),
+
+          Expanded(
+            child: _subTab == 0
+                ? const SalesRecordTable()  // ← sales_widgets.dart
+                : const SalesReportView(),  // ← sales_widgets.dart
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UnderlineTabBar extends StatelessWidget {
+  final List<String> tabs;
+  final int active;
+  final ValueChanged<int> onTap;
+
+  const _UnderlineTabBar({
+    required this.tabs,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(tabs.length, (i) {
+        final isActive = i == active;
+        return GestureDetector(
+          onTap: () => onTap(i),
+          child: Container(
+            margin:
+            EdgeInsets.only(right: i < tabs.length - 1 ? 24 : 0),
+            padding: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: isActive ? AppTheme.gold : Colors.transparent,
+                  width: 2.5,
+                ),
+              ),
+            ),
+            child: Text(
+              tabs[i],
+              style: TextStyle(
+                color: isActive ? Colors.white : Colors.white54,
+                fontWeight:
+                isActive ? FontWeight.w600 : FontWeight.w400,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
 }
 
 class _LogRow extends StatelessWidget {
@@ -282,7 +461,6 @@ class _LogRow extends StatelessWidget {
 
   const _LogRow({required this.data, required this.dateFmt});
 
-  // Method badge label
   String _methodLabel(String method) {
     switch (method) {
       case 'qr_scan':
@@ -296,7 +474,6 @@ class _LogRow extends StatelessWidget {
     }
   }
 
-  // Method badge color
   Color _methodColor(String method) {
     switch (method) {
       case 'qr_scan':
@@ -304,7 +481,7 @@ class _LogRow extends StatelessWidget {
       case 'admin_edit':
         return AppTheme.gold;
       case 'order_deduction':
-        return const Color(0xFFAB47BC); // purple
+        return const Color(0xFFAB47BC);
       default:
         return Colors.white60;
     }
@@ -320,8 +497,6 @@ class _LogRow extends StatelessWidget {
     final qtyAdded = (data['quantity_added'] as num?) ?? 0;
     final newStock = (data['new_stock'] as num?) ?? 0;
     final method = data['update_method']?.toString() ?? 'manual';
-
-    // For order deductions, show product name + order ID as context
     final productName = data['product_name']?.toString() ?? '';
     final orderId = data['order_id']?.toString() ?? '';
     final isOrderDeduction = method == 'order_deduction';
@@ -329,22 +504,22 @@ class _LogRow extends StatelessWidget {
     String fmt(num v) =>
         v == v.toInt() ? v.toInt().toString() : v.toStringAsFixed(2);
 
-    // Sign and color: positive = green (+), negative = red (-), zero = white
     final isPositive = qtyAdded > 0;
     final isNegative = qtyAdded < 0;
     final qtyDisplay =
-        isPositive ? '+${fmt(qtyAdded)}' : fmt(qtyAdded);
+    isPositive ? '+${fmt(qtyAdded)}' : fmt(qtyAdded);
     final qtyColor = isPositive
         ? const Color(0xFF4CAF50)
         : isNegative
-            ? const Color(0xFFF44336)
-            : Colors.white60;
+        ? const Color(0xFFF44336)
+        : Colors.white60;
 
     final methodColor = _methodColor(method);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding:
+      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: isOrderDeduction
             ? const Color(0xFFAB47BC).withValues(alpha: 0.05)
@@ -358,14 +533,12 @@ class _LogRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Timestamp
           Expanded(
             flex: 2,
             child: Text(timeStr,
                 style: const TextStyle(
                     color: Colors.white54, fontSize: 11)),
           ),
-          // Employee / Source
           Expanded(
             flex: 2,
             child: Text(
@@ -380,7 +553,6 @@ class _LogRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          // Material + optional order context
           Expanded(
             flex: 3,
             child: Column(
@@ -402,15 +574,13 @@ class _LogRow extends StatelessWidget {
                   Text(
                     'Product: $productName${orderId.isNotEmpty ? ' · #${orderId.substring(0, orderId.length.clamp(0, 6))}' : ''}',
                     style: const TextStyle(
-                        color: Color(0xFFCE93D8),
-                        fontSize: 10),
+                        color: Color(0xFFCE93D8), fontSize: 10),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
               ],
             ),
           ),
-          // Qty change — signed + color
           SizedBox(
             width: 70,
             child: Text(qtyDisplay,
@@ -420,7 +590,6 @@ class _LogRow extends StatelessWidget {
                     fontWeight: FontWeight.bold),
                 textAlign: TextAlign.right),
           ),
-          // New stock
           SizedBox(
             width: 70,
             child: Text(fmt(newStock),
@@ -428,7 +597,6 @@ class _LogRow extends StatelessWidget {
                     color: Colors.white, fontSize: 12),
                 textAlign: TextAlign.right),
           ),
-          // Method badge
           SizedBox(
             width: 60,
             child: Center(
