@@ -127,6 +127,21 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   // ── Add to cart ───────────────────────────────────────────────────────────────
 
   void _addToCart() {
+    // Validate required fields
+    if (_materialList.isNotEmpty && _material == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please select a material / finish.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+    if (_files.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please upload at least one design file.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
     CartManager.add(CartItem(
       productId:   widget.product['product_id']?.toString() ?? '',
       productName: _productName,
@@ -266,7 +281,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   Widget _productImage() {
     return _imageUrl.isNotEmpty
         ? Image.network(_imageUrl, fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _imgPlaceholder())
+        errorBuilder: (_, __, ___) => _imgPlaceholder())
         : _imgPlaceholder();
   }
 
@@ -358,7 +373,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
         Row(
           children: [
             _qtyBtn(Icons.remove,
-                () { if (_quantity > _minQty) setState(() => _quantity--); }),
+                    () { if (_quantity > _minQty) setState(() => _quantity--); }),
             const SizedBox(width: 16),
             Text('$_quantity',
                 style: const TextStyle(
@@ -383,7 +398,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
             runSpacing: 6,
             children: _materialList
                 .map((m) => _chip(
-                    m, _material == m, () => setState(() => _material = m)))
+                m, _material == m, () => setState(() => _material = m)))
                 .toList(),
           ),
           const SizedBox(height: 16),
@@ -416,7 +431,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
                 const SizedBox(height: 6),
                 const Text('Click to upload files',
                     style:
-                        TextStyle(color: Colors.white54, fontSize: 12)),
+                    TextStyle(color: Colors.white54, fontSize: 12)),
                 if (_files.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   ..._files.asMap().entries.map((e) => Padding(
@@ -464,12 +479,12 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
         // ── Pickup notice ────────────────────────────────────────────────
         Container(
           padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: AppTheme.gold.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
             border:
-                Border.all(color: AppTheme.gold.withValues(alpha: 0.3)),
+            Border.all(color: AppTheme.gold.withValues(alpha: 0.3)),
           ),
           child: const Row(
             children: [
@@ -479,7 +494,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
                 child: Text(
                   'Pick-Up Only — no delivery available.',
                   style:
-                      TextStyle(color: AppTheme.gold, fontSize: 12),
+                  TextStyle(color: AppTheme.gold, fontSize: 12),
                 ),
               ),
             ],
@@ -561,7 +576,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
       icon: const Icon(Icons.shopping_cart_outlined, size: 18),
       label: const Text('Add to Cart',
           style:
-              TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
       style: AppTheme.primaryButton(),
     ),
   );
@@ -579,7 +594,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
         onTap: onTap,
         child: Container(
           padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: active
                 ? AppTheme.gold.withValues(alpha: 0.2)
@@ -607,7 +622,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
         color: Colors.white.withValues(alpha: 0.1),
         shape: BoxShape.circle,
         border:
-            Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        Border.all(color: Colors.white.withValues(alpha: 0.2)),
       ),
       child: Icon(icon, color: Colors.white, size: 16),
     ),
@@ -618,7 +633,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     return TextField(
       controller: ctrl,
       keyboardType:
-          const TextInputType.numberWithOptions(decimal: true),
+      const TextInputType.numberWithOptions(decimal: true),
       style: const TextStyle(color: Colors.white, fontSize: 14),
       decoration: AppTheme.inputDecoration('$label (ft)'),
       onChanged: onChanged,

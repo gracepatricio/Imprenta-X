@@ -134,8 +134,8 @@ class _OrderList extends StatelessWidget {
 
     Query query = FirebaseFirestore.instance
         .collection('Orders')
-        .where('user_id', isEqualTo: uid)
-        .orderBy('date_created', descending: true);
+        .where('customer_uid', isEqualTo: uid)
+        .orderBy('created_at', descending: true);
 
     if (status != null) {
       query = query.where('status', isEqualTo: status);
@@ -265,7 +265,16 @@ class _OrderCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  order['product_name']?.toString() ?? 'Order',
+                  (() {
+                    final prods = order['products'];
+                    if (prods is List && prods.isNotEmpty) {
+                      return prods
+                          .map((p) => p['name']?.toString() ?? '')
+                          .where((n) => n.isNotEmpty)
+                          .join(', ');
+                    }
+                    return order['product_name']?.toString() ?? 'Order';
+                  })(),
                   style: const TextStyle(color: Colors.white54, fontSize: 12),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

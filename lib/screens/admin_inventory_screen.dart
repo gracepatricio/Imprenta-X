@@ -128,7 +128,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                               fontWeight: FontWeight.bold)),
                       Text('Raw materials — view and adjust stock',
                           style:
-                              TextStyle(color: Colors.white54, fontSize: 12)),
+                          TextStyle(color: Colors.white54, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -143,15 +143,15 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                   onPressed: _seeding ? null : _seedInitialData,
                   icon: _seeding
                       ? const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white38))
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white38))
                       : const Icon(Icons.refresh, size: 14),
                   label: const Text('Re-seed',
                       style: TextStyle(fontSize: 11)),
                   style:
-                      TextButton.styleFrom(foregroundColor: Colors.white38),
+                  TextButton.styleFrom(foregroundColor: Colors.white38),
                 ),
               ],
             ),
@@ -164,14 +164,14 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                 scrollDirection: Axis.horizontal,
                 children: _statuses
                     .map((s) => _SummaryCard(
-                          status: s,
-                          count: counts[s] ?? 0,
-                          color: _statusColor(s),
-                          isActive: _statusFilter == s,
-                          onTap: () => setState(() =>
-                              _statusFilter =
-                                  _statusFilter == s ? null : s),
-                        ))
+                  status: s,
+                  count: counts[s] ?? 0,
+                  color: _statusColor(s),
+                  isActive: _statusFilter == s,
+                  onTap: () => setState(() =>
+                  _statusFilter =
+                  _statusFilter == s ? null : s),
+                ))
                     .toList(),
               ),
             ),
@@ -189,13 +189,13 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                       onTap: () =>
                           setState(() => _statusFilter = null)),
                   ..._statuses.map((s) => _StatusChip(
-                        label: s,
-                        color: _statusColor(s),
-                        isActive: _statusFilter == s,
-                        onTap: () => setState(() =>
-                            _statusFilter =
-                                _statusFilter == s ? null : s),
-                      )),
+                    label: s,
+                    color: _statusColor(s),
+                    isActive: _statusFilter == s,
+                    onTap: () => setState(() =>
+                    _statusFilter =
+                    _statusFilter == s ? null : s),
+                  )),
                 ],
               ),
             ),
@@ -207,23 +207,23 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
             Expanded(
               child: filtered.isEmpty
                   ? Center(
-                      child: Text(
-                        'No materials with status "$_statusFilter"',
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 13),
-                      ),
-                    )
+                child: Text(
+                  'No materials with status "$_statusFilter"',
+                  style: const TextStyle(
+                      color: Colors.white38, fontSize: 13),
+                ),
+              )
                   : ListView.builder(
-                      itemCount: filtered.length,
-                      itemBuilder: (_, i) => _MaterialRow(
-                        data: filtered[i],
-                        statusColor:
-                            _statusColor(filtered[i]['_status'] as String),
-                        onQrTap: () => _showQr(context, filtered[i]),
-                        onDeleteTap: () =>
-                            _confirmDelete(context, filtered[i]),
-                      ),
-                    ),
+                itemCount: filtered.length,
+                itemBuilder: (_, i) => _MaterialRow(
+                  data: filtered[i],
+                  statusColor:
+                  _statusColor(filtered[i]['_status'] as String),
+                  onQrTap: () => _showQr(context, filtered[i]),
+                  onDeleteTap: () =>
+                      _confirmDelete(context, filtered[i]),
+                ),
+              ),
             ),
           ],
         );
@@ -293,7 +293,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                     decoration: AppTheme.inputDecoration('Material ID',
                         icon: Icons.tag),
                     validator: (v) =>
-                        v?.trim().isEmpty == true ? 'Required' : null,
+                    v?.trim().isEmpty == true ? 'Required' : null,
                   ),
                   const SizedBox(height: 10),
                   // Name
@@ -303,7 +303,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                     decoration: AppTheme.inputDecoration('Material Name',
                         icon: Icons.inventory_2_outlined),
                     validator: (v) =>
-                        v?.trim().isEmpty == true ? 'Required' : null,
+                    v?.trim().isEmpty == true ? 'Required' : null,
                   ),
                   const SizedBox(height: 10),
                   // Unit description
@@ -313,6 +313,8 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                     decoration: AppTheme.inputDecoration(
                         'Unit description  (e.g. 1 roll, 4x8ft sheet)',
                         icon: Icons.straighten),
+                    validator: (v) =>
+                    v?.trim().isEmpty == true ? 'Required' : null,
                   ),
                   const SizedBox(height: 10),
                   // Restock level + initial stock row
@@ -322,12 +324,17 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                         child: TextFormField(
                           controller: restockCtrl,
                           keyboardType:
-                              const TextInputType.numberWithOptions(
-                                  decimal: true),
+                          const TextInputType.numberWithOptions(
+                              decimal: true),
                           style: const TextStyle(
                               color: Colors.white, fontSize: 14),
                           decoration:
-                              AppTheme.inputDecoration('Restock at'),
+                          AppTheme.inputDecoration('Restock at'),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'Required';
+                            if (double.tryParse(v.trim()) == null) return 'Enter a valid number';
+                            return null;
+                          },
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -335,12 +342,17 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                         child: TextFormField(
                           controller: stockCtrl,
                           keyboardType:
-                              const TextInputType.numberWithOptions(
-                                  decimal: true),
+                          const TextInputType.numberWithOptions(
+                              decimal: true),
                           style: const TextStyle(
                               color: Colors.white, fontSize: 14),
                           decoration:
-                              AppTheme.inputDecoration('Initial stock'),
+                          AppTheme.inputDecoration('Initial stock'),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'Required';
+                            if (double.tryParse(v.trim()) == null) return 'Enter a valid number';
+                            return null;
+                          },
                         ),
                       ),
                     ],
@@ -359,46 +371,46 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
               onPressed: saving
                   ? null
                   : () async {
-                      if (!(formKey.currentState?.validate() ?? false))
-                        return;
-                      setDlg(() => saving = true);
-                      final messenger = ScaffoldMessenger.of(context);
-                      try {
-                        final id = idCtrl.text.trim();
-                        await FirebaseFirestore.instance
-                            .collection('RawMaterials')
-                            .doc(id)
-                            .set({
-                          'material_id': id,
-                          'material_name': nameCtrl.text.trim(),
-                          'unit_description': unitCtrl.text.trim(),
-                          'restock_level':
-                              double.tryParse(restockCtrl.text) ?? 5.0,
-                          'current_stock':
-                              double.tryParse(stockCtrl.text) ?? 0.0,
-                          'last_updated': null,
-                          'last_updated_by': '',
-                          'last_updated_by_uid': '',
-                        });
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        messenger.showSnackBar(SnackBar(
-                          content: Text('$id added to inventory'),
-                          backgroundColor: const Color(0xFF4CAF50),
-                        ));
-                      } catch (e) {
-                        messenger.showSnackBar(SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: Colors.red));
-                        setDlg(() => saving = false);
-                      }
-                    },
+                if (!(formKey.currentState?.validate() ?? false))
+                  return;
+                setDlg(() => saving = true);
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  final id = idCtrl.text.trim();
+                  await FirebaseFirestore.instance
+                      .collection('RawMaterials')
+                      .doc(id)
+                      .set({
+                    'material_id': id,
+                    'material_name': nameCtrl.text.trim(),
+                    'unit_description': unitCtrl.text.trim(),
+                    'restock_level':
+                    double.tryParse(restockCtrl.text) ?? 5.0,
+                    'current_stock':
+                    double.tryParse(stockCtrl.text) ?? 0.0,
+                    'last_updated': null,
+                    'last_updated_by': '',
+                    'last_updated_by_uid': '',
+                  });
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  messenger.showSnackBar(SnackBar(
+                    content: Text('$id added to inventory'),
+                    backgroundColor: const Color(0xFF4CAF50),
+                  ));
+                } catch (e) {
+                  messenger.showSnackBar(SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red));
+                  setDlg(() => saving = false);
+                }
+              },
               style: AppTheme.primaryButton(),
               child: saving
                   ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.black))
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.black))
                   : const Text('Add'),
             ),
           ],
@@ -565,10 +577,10 @@ class _EmptyState extends StatelessWidget {
             onPressed: seeding ? null : onSeed,
             icon: seeding
                 ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.black))
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.black))
                 : const Icon(Icons.add_box_outlined, size: 18),
             label: const Text('Seed Initial Materials'),
             style: AppTheme.primaryButton(),
@@ -588,10 +600,10 @@ class _SummaryCard extends StatelessWidget {
 
   const _SummaryCard(
       {required this.status,
-      required this.count,
-      required this.color,
-      required this.isActive,
-      required this.onTap});
+        required this.count,
+        required this.color,
+        required this.isActive,
+        required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -621,7 +633,7 @@ class _SummaryCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(status,
                 style:
-                    const TextStyle(color: Colors.white60, fontSize: 10)),
+                const TextStyle(color: Colors.white60, fontSize: 10)),
           ],
         ),
       ),
@@ -637,9 +649,9 @@ class _StatusChip extends StatelessWidget {
 
   const _StatusChip(
       {required this.label,
-      required this.isActive,
-      this.color,
-      required this.onTap});
+        required this.isActive,
+        this.color,
+        required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -649,7 +661,7 @@ class _StatusChip extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(right: 8),
         padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
           color: isActive
               ? c.withValues(alpha: 0.2)
@@ -665,7 +677,7 @@ class _StatusChip extends StatelessWidget {
                 color: isActive ? c : Colors.white60,
                 fontSize: 11,
                 fontWeight:
-                    isActive ? FontWeight.bold : FontWeight.normal)),
+                isActive ? FontWeight.bold : FontWeight.normal)),
       ),
     );
   }
@@ -714,9 +726,9 @@ class _MaterialRow extends StatelessWidget {
 
   const _MaterialRow(
       {required this.data,
-      required this.statusColor,
-      required this.onQrTap,
-      required this.onDeleteTap});
+        required this.statusColor,
+        required this.onQrTap,
+        required this.onDeleteTap});
 
   @override
   Widget build(BuildContext context) {
@@ -768,20 +780,20 @@ class _MaterialRow extends StatelessWidget {
               width: 80,
               child: Text(fmt(current),
                   style:
-                      const TextStyle(color: Colors.white, fontSize: 12),
+                  const TextStyle(color: Colors.white, fontSize: 12),
                   textAlign: TextAlign.center)),
           SizedBox(
               width: 80,
               child: Text(fmt(restock),
                   style:
-                      const TextStyle(color: Colors.white54, fontSize: 12),
+                  const TextStyle(color: Colors.white54, fontSize: 12),
                   textAlign: TextAlign.center)),
           SizedBox(
             width: 96,
             child: Center(
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(10),
@@ -808,7 +820,7 @@ class _MaterialRow extends StatelessWidget {
                   onPressed: onQrTap,
                   padding: EdgeInsets.zero,
                   constraints:
-                      const BoxConstraints(minWidth: 30, minHeight: 30),
+                  const BoxConstraints(minWidth: 30, minHeight: 30),
                   tooltip: 'View QR Code',
                 ),
                 IconButton(
@@ -817,7 +829,7 @@ class _MaterialRow extends StatelessWidget {
                   onPressed: onDeleteTap,
                   padding: EdgeInsets.zero,
                   constraints:
-                      const BoxConstraints(minWidth: 30, minHeight: 30),
+                  const BoxConstraints(minWidth: 30, minHeight: 30),
                   tooltip: 'Delete material',
                 ),
               ],
