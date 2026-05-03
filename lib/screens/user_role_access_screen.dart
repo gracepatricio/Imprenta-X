@@ -13,8 +13,9 @@ class UserRoleAccessScreenEmbedded extends StatefulWidget {
 
 class _UserRoleAccessScreenEmbeddedState
     extends State<UserRoleAccessScreenEmbedded> {
-  final CollectionReference _usersRef =
-  FirebaseFirestore.instance.collection('User');
+  final CollectionReference _usersRef = FirebaseFirestore.instance.collection(
+    'User',
+  );
 
   final Map<String, String> _editedRoles = {};
   bool _isSaving = false;
@@ -57,33 +58,50 @@ class _UserRoleAccessScreenEmbeddedState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1a1a2e),
+        backgroundColor: const Color(0xFF14142B),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
         ),
-        title: const Text(
-          "Delete User",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        title: Row(
+          children: const [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.redAccent,
+              size: 20,
+            ),
+            SizedBox(width: 10),
+            Text(
+              "Delete User",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
+          ],
         ),
         content: Text(
-          'Remove "$name" from the system? This cannot be undone.',
-          style: const TextStyle(color: Colors.white60, fontSize: 14),
+          'Remove "$name" from the system?\nThis action cannot be undone.',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13.5,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel",
-                style: TextStyle(color: Colors.white54)),
+            child: const Text(
+              "Cancel",
+              style: TextStyle(color: Colors.white, fontSize: 13),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
               final db = FirebaseFirestore.instance;
-              // Mark the User doc as deleted (blocks login).
               await _usersRef.doc(userId).update({'is_deleted': true});
-              // Write a publicly-readable flag so unauthenticated
-              // registration checks can detect admin-deleted accounts.
               await db.collection('email_index').doc(email).set({
                 'status': 'deleted',
                 'uid': userId,
@@ -100,9 +118,14 @@ class _UserRoleAccessScreenEmbeddedState
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
-            child: const Text("Delete"),
+            child: const Text(
+              "Delete",
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
           ),
         ],
       ),
@@ -114,26 +137,33 @@ class _UserRoleAccessScreenEmbeddedState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Header ──────────────────────────────────────────────────
+        // ── Header ───────────────────────────────────────────────
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Expanded(
+            const Icon(
+              Icons.admin_panel_settings_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                children: const [
                   Text(
                     "User Roles & Access",
                     style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
                       color: Colors.white,
+                      letterSpacing: 0.3,
                     ),
                   ),
                   SizedBox(height: 2),
                   Text(
-                    "Manage roles assigned to each user",
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                    "Manage roles assigned to each user account",
+                    style: TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ],
               ),
@@ -146,130 +176,177 @@ class _UserRoleAccessScreenEmbeddedState
                   foregroundColor: Colors.white,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
+                    horizontal: 18,
+                    vertical: 11,
+                  ),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 icon: _isSaving
                     ? const SizedBox(
-                  width: 13,
-                  height: 13,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
-                )
-                    : const Icon(Icons.check, size: 15),
+                        width: 13,
+                        height: 13,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.check_rounded, size: 16),
                 label: Text(
-                  _isSaving ? "Saving..." : "Save ${_editedRoles.length}",
+                  _isSaving
+                      ? "Saving..."
+                      : "Save ${_editedRoles.length} change${_editedRoles.length == 1 ? '' : 's'}",
                   style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
           ],
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
 
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
-                decoration: InputDecoration(
-                  hintText: 'Search by name or email...',
-                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
-                  prefixIcon: const Icon(Icons.search, color: Colors.white38, size: 18),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                    icon: const Icon(Icons.clear, color: Colors.white38, size: 16),
-                    onPressed: () => setState(() {
-                      _searchController.clear();
-                      _searchQuery = '';
-                    }),
-                  )
-                      : null,
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.06),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Colors.white38),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              height: 42,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedRoleFilter,
-                  dropdownColor: const Color(0xFF1e1e3a),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  icon: const Icon(Icons.arrow_drop_down, color: Colors.white38, size: 16),
-                  items: const [
-                    DropdownMenuItem(value: 'all',      child: Text('All Roles')),
-                    DropdownMenuItem(value: 'customer', child: Text('Customer')),
-                    DropdownMenuItem(value: 'employee', child: Text('Employee')),
-                    DropdownMenuItem(value: 'admin',    child: Text('Admin')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setState(() => _selectedRoleFilter = value);
-                  },
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // ── Table header ─────────────────────────────────────────────
+        // ── Search + Filter ──────────────────────────────────────
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(8),
+            color: Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
           ),
-          child: const Row(
+          child: Row(
             children: [
               Expanded(
-                flex: 4,
-                child: Text("NAME", style: _headerStyle),
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  onChanged: (value) =>
+                      setState(() => _searchQuery = value.toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: 'Search by name or email...',
+                    hintStyle: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(
+                              Icons.clear_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                            onPressed: () => setState(() {
+                              _searchController.clear();
+                              _searchQuery = '';
+                            }),
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.15),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: AppTheme.gold, width: 1.5),
+                    ),
+                  ),
+                ),
               ),
-              Expanded(
-                flex: 4,
-                child: Text("EMAIL", style: _headerStyle),
-              ),
-              Expanded(
-                flex: 3,
-                child: Text("ROLE", style: _headerStyle),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(child: Text("DELETE USER?", style: _headerStyle)),
+              const SizedBox(width: 12),
+              Container(
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedRoleFilter,
+                    dropdownColor: const Color(0xFF1a1a2e),
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('All Roles')),
+                      DropdownMenuItem(
+                        value: 'customer',
+                        child: Text('Customer'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'employee',
+                        child: Text('Employee'),
+                      ),
+                      DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null)
+                        setState(() => _selectedRoleFilter = value);
+                    },
+                  ),
+                ),
               ),
             ],
           ),
         ),
 
-        const SizedBox(height: 6),
+        const SizedBox(height: 14),
 
-        // ── User list ────────────────────────────────────────────────
+        // ── Table Header ─────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.20),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+          ),
+          child: Row(
+            children: const [
+              Expanded(flex: 4, child: Text("NAME", style: _headerStyle)),
+              Expanded(flex: 4, child: Text("EMAIL", style: _headerStyle)),
+              Expanded(flex: 3, child: Text("ROLE", style: _headerStyle)),
+              Expanded(
+                flex: 2,
+                child: Center(child: Text("ACTIONS", style: _headerStyle)),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        // ── User List ────────────────────────────────────────────
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
             stream: _usersRef.snapshots(),
@@ -279,41 +356,60 @@ class _UserRoleAccessScreenEmbeddedState
                   child: CircularProgressIndicator(color: Colors.white),
                 );
               }
-              // Filter out soft-deleted accounts.
               final users = snapshot.data!.docs.where((d) {
                 final data = d.data() as Map<String, dynamic>;
                 return data['is_deleted'] != true;
               }).toList();
+
               final searchedUsers = users.where((d) {
                 final data = d.data() as Map<String, dynamic>;
                 final name = (data['full_name'] ?? '').toString().toLowerCase();
                 final email = (data['email'] ?? '').toString().toLowerCase();
-                final role = (_editedRoles[d.id] ?? data['user_role'] ?? 'customer').toString().toLowerCase();
+                final role =
+                    (_editedRoles[d.id] ?? data['user_role'] ?? 'customer')
+                        .toString()
+                        .toLowerCase();
 
-                final matchesSearch = _searchQuery.isEmpty ||
+                final matchesSearch =
+                    _searchQuery.isEmpty ||
                     name.contains(_searchQuery) ||
                     email.contains(_searchQuery);
-                final matchesRole = _selectedRoleFilter == 'all' || role == _selectedRoleFilter;
+                final matchesRole =
+                    _selectedRoleFilter == 'all' || role == _selectedRoleFilter;
 
                 return matchesSearch && matchesRole;
               }).toList();
+
               if (searchedUsers.isEmpty) {
                 return const Center(
-                  child: Text("No users found",
-                      style: TextStyle(color: Colors.white38)),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.search_off_rounded,
+                        color: Colors.white,
+                        size: 36,
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        "No users found",
+                        style: TextStyle(color: Colors.white, fontSize: 14),
+                      ),
+                    ],
+                  ),
                 );
               }
+
               return ListView.separated(
                 itemCount: searchedUsers.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 5),
+                separatorBuilder: (_, __) => const SizedBox(height: 6),
                 itemBuilder: (context, i) {
                   final user = searchedUsers[i];
                   final uid = user.id;
                   final data = user.data() as Map<String, dynamic>;
                   final name = data['full_name']?.toString() ?? '—';
                   final email = data['email']?.toString() ?? '—';
-                  final savedRole =
-                      data['user_role']?.toString() ?? 'customer';
+                  final savedRole = data['user_role']?.toString() ?? 'customer';
                   final displayRole = _editedRoles[uid] ?? savedRole;
                   final isDirty = _editedRoles.containsKey(uid);
 
@@ -343,14 +439,14 @@ class _UserRoleAccessScreenEmbeddedState
   }
 
   static const _headerStyle = TextStyle(
-    color: Colors.white54,
+    color: Colors.white,
     fontWeight: FontWeight.w700,
     fontSize: 11,
     letterSpacing: 1,
   );
 }
 
-// ── User Row ───────────────────────────────────────────────────────────────
+// ── User Row ─────────────────────────────────────────────────────────────────
 
 class _UserRow extends StatelessWidget {
   final String name;
@@ -371,61 +467,67 @@ class _UserRow extends StatelessWidget {
 
   Color get _roleColor {
     switch (currentRole) {
-      case 'admin':    return AppTheme.gold;
-      case 'employee': return Colors.blueAccent;
-      default:         return Colors.tealAccent;
+      case 'admin':
+        return const Color.fromARGB(216, 255, 233, 173);
+      case 'employee':
+        return const Color.fromARGB(221, 21, 101, 192); // darker blue
+      default:
+        return const Color.fromARGB(221, 0, 137, 123); // darker teal
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
+        // Glass look retained — just thicker so it's more opaque
         color: isDirty
-            ? AppTheme.gold.withValues(alpha: 0.07)
-            : Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(10),
+            ? AppTheme.gold.withValues(alpha: 0.18)
+            : Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDirty
-              ? AppTheme.gold.withValues(alpha: 0.3)
-              : Colors.white.withValues(alpha: 0.07),
+              ? AppTheme.gold.withValues(alpha: 0.55)
+              : Colors.white.withValues(alpha: 0.25), // 🔥 reduced
+          width: 1.0, // slightly thinner
         ),
       ),
       child: Row(
         children: [
-          // Name column
+          // ── Name ──────────────────────────────────────────────
           Expanded(
             flex: 4,
             child: Row(
               children: [
                 Container(
-                  width: 26,
-                  height: 26,
+                  width: 32,
+                  height: 32,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _roleColor.withValues(alpha: 0.15),
+                    color: _roleColor.withValues(alpha: 0.25),
+                    border: Border.all(color: _roleColor, width: 1.5),
                   ),
                   child: Center(
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : '?',
                       style: TextStyle(
                         color: _roleColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 5),
+                const SizedBox(width: 10),
                 Flexible(
                   child: Text(
                     name,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                     ),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
@@ -435,21 +537,25 @@ class _UserRow extends StatelessWidget {
             ),
           ),
 
-          // Email column
+          // ── Email ─────────────────────────────────────────────
           Expanded(
             flex: 4,
             child: Padding(
-              padding: const EdgeInsets.only(right: 4),
+              padding: const EdgeInsets.only(right: 8),
               child: Text(
                 email,
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
             ),
           ),
 
-          // Role dropdown column
+          // ── Role Dropdown ─────────────────────────────────────
           Expanded(
             flex: 3,
             child: _RoleDropdown(
@@ -458,18 +564,31 @@ class _UserRow extends StatelessWidget {
             ),
           ),
 
-          // Delete button
+          // ── Delete ────────────────────────────────────────────
           Expanded(
             flex: 2,
             child: Center(
-              child: IconButton(
+              child: ElevatedButton.icon(
                 onPressed: onDelete,
-                icon: const Icon(Icons.delete_outline),
-                color: Colors.red.shade400,
-                iconSize: 16,
-                tooltip: "Delete user",
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+                style: ElevatedButton.styleFrom(
+                  // Glass red — more opaque than before so it's visible
+                  backgroundColor: Colors.red.shade700.withValues(alpha: 0.85),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: Colors.red.shade300, width: 1.2),
+                  ),
+                ),
+                icon: const Icon(Icons.delete_outline_rounded, size: 15),
+                label: const Text(
+                  "Delete",
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
               ),
             ),
           ),
@@ -479,32 +598,35 @@ class _UserRow extends StatelessWidget {
   }
 }
 
-// ── Role Dropdown ──────────────────────────────────────────────────────────
+// ── Role Dropdown ─────────────────────────────────────────────────────────────
 
 class _RoleDropdown extends StatelessWidget {
   final String currentRole;
   final ValueChanged<String> onChanged;
 
-  const _RoleDropdown({
-    required this.currentRole,
-    required this.onChanged,
-  });
+  const _RoleDropdown({required this.currentRole, required this.onChanged});
 
   static const _roles = ['customer', 'employee', 'admin'];
 
   Color _colorFor(String role) {
     switch (role) {
-      case 'admin':    return AppTheme.gold;
-      case 'employee': return Colors.lightBlueAccent;
-      default:         return Colors.tealAccent;
+      case 'admin':
+        return AppTheme.gold;
+      case 'employee':
+        return const Color(0xFF1565C0); // darker blue
+      default:
+        return const Color(0xFF00897B); // darker teal
     }
   }
 
   String _labelFor(String role) {
     switch (role) {
-      case 'admin':    return 'Admin';
-      case 'employee': return 'Employee';
-      default:         return 'Customer';
+      case 'admin':
+        return 'Admin';
+      case 'employee':
+        return 'Employee';
+      default:
+        return 'Customer';
     }
   }
 
@@ -513,11 +635,12 @@ class _RoleDropdown extends StatelessWidget {
     final color = _colorFor(currentRole);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        // 🔥 FIX: solid readable background
+        color: color.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+        border: Border.all(color: color, width: 1.8),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -525,44 +648,50 @@ class _RoleDropdown extends StatelessWidget {
           isDense: true,
           isExpanded: true,
           padding: EdgeInsets.zero,
-          iconSize: 14,
-          dropdownColor: const Color(0xFF1e1e3a),
+          iconSize: 15,
+          dropdownColor: const Color(0xFF1a1a2e),
           borderRadius: BorderRadius.circular(12),
-          icon: Icon(Icons.expand_more, color: color, size: 14),
-          style: TextStyle(
-            color: color,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            fontFamily: 'Spartan',
+
+          // 🔥 FIX: keep icon visible
+          icon: const Icon(
+            Icons.expand_more_rounded,
+            color: Colors.white,
+            size: 16,
           ),
+
+          // 🔥 FIX: text always readable
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+
           items: _roles.map((role) {
             final c = _colorFor(role);
             return DropdownMenuItem(
               value: role,
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
                     width: 7,
                     height: 7,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: c,
-                    ),
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: c),
                   ),
-                  const SizedBox(width: 7),
+                  const SizedBox(width: 8),
                   Text(
                     _labelFor(role),
-                    style: TextStyle(
-                      color: c,
+                    // 🔥 FIX: white text inside dropdown
+                    style: const TextStyle(
+                      color: Colors.white,
                       fontSize: 13,
-                      fontFamily: 'Spartan',
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             );
           }).toList(),
+
           onChanged: (val) {
             if (val != null) onChanged(val);
           },

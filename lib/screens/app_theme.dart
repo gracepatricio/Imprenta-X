@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Background image — replace sysbackground.jpg with your actual image
+  // Background image
   static const DecorationImage backgroundImage = DecorationImage(
     image: AssetImage('assets/images/sysbackground.jpg'),
     fit: BoxFit.cover,
   );
 
-  // Gradient fallback (used if image fails to load)
+  // Gradient fallback
   static const Gradient backgroundGradient = LinearGradient(
     colors: [
       Color(0xFF0d0d1a),
@@ -19,7 +19,7 @@ class AppTheme {
     end: Alignment.bottomRight,
   );
 
-  // Main background — image with gradient fallback
+  // Main background
   static BoxDecoration get backgroundDecoration => const BoxDecoration(
     image: DecorationImage(
       image: AssetImage('assets/images/sysbackground.jpg'),
@@ -27,39 +27,56 @@ class AppTheme {
     ),
   );
 
-  // Frosted glass card
-  static BoxDecoration glassCard({double opacity = 0.15, double radius = 20}) {
+  // ── Frosted glass card ─────────────────────────────────────────────────────
+  // Increased border opacity & slightly stronger fill so content is always
+  // clearly separated from the background image.
+  static BoxDecoration glassCard({double opacity = 0.30, double radius = 20}) {
     return BoxDecoration(
-      color: Colors.white.withValues(alpha:opacity),
+      color: Colors.white.withValues(alpha: opacity),
       borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: Colors.white.withValues(alpha:0.25), width: 1),
+      border: Border.all(
+        color: Colors.white.withValues(alpha: 0.32),
+        width: 1.2,
+      ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha:0.15),
-          blurRadius: 20,
+          color: Colors.black.withValues(alpha: 0.22),
+          blurRadius: 24,
           offset: const Offset(0, 8),
         ),
       ],
     );
   }
 
-  // Navbar glass
+  // ── Navbar glass ───────────────────────────────────────────────────────────
   static BoxDecoration navBarDecoration = BoxDecoration(
-    color: Colors.white.withValues(alpha:0.12),
+    color: Colors.white.withValues(alpha: 0.14),
     borderRadius: BorderRadius.circular(16),
-    border: Border.all(color: Colors.white.withValues(alpha:0.2), width: 1),
+    border: Border.all(color: Colors.white.withValues(alpha: 0.28), width: 1.2),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withValues(alpha:0.1),
-        blurRadius: 12,
+        color: Colors.black.withValues(alpha: 0.18),
+        blurRadius: 16,
         offset: const Offset(0, 4),
       ),
     ],
   );
 
+  // ── Row / item glass (lighter inner card) ─────────────────────────────────
+  static BoxDecoration glassRow({double radius = 10}) {
+    return BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+    );
+  }
+
+  // ── Colors ─────────────────────────────────────────────────────────────────
   static const Color gold = Color(0xFFFFE9AD);
   static const Color accent = Color(0xFF00b89c);
 
+  // ── Text styles ────────────────────────────────────────────────────────────
+  // Using stronger opacity so text is never "blending" into the background.
   static const TextStyle titleStyle = TextStyle(
     color: Colors.white,
     fontSize: 30,
@@ -69,14 +86,25 @@ class AppTheme {
 
   static const TextStyle bodyStyle = TextStyle(
     color: Colors.white,
-    fontSize: 25,
+    fontSize: 16,
+    fontWeight: FontWeight.w400,
   );
 
+  // "Subtle" is now white80 instead of white60 so it stays readable on glass.
   static const TextStyle subtleStyle = TextStyle(
-    color: Colors.white60,
-    fontSize: 23,
+    color: Color(0xCCFFFFFF), // ~80% white
+    fontSize: 13,
   );
 
+  // Section heading used inside glass cards
+  static const TextStyle sectionHeading = TextStyle(
+    color: Colors.white,
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.2,
+  );
+
+  // ── Input decoration ───────────────────────────────────────────────────────
   static InputDecoration inputDecoration(
     String label, {
     IconData? icon,
@@ -84,45 +112,92 @@ class AppTheme {
   }) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.white60, fontSize: 14),
+      // Raised from white60 → white80 for legibility
+      labelStyle: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 14),
       prefixIcon: icon != null
-          ? Icon(icon, color: Colors.white54, size: 18)
+          ? Icon(icon, color: Colors.white70, size: 18)
           : null,
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: Colors.white.withValues(alpha:0.1),
+      fillColor: Colors.white.withValues(alpha: 0.12),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha:0.2)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.28)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha:0.2)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.28)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.white60),
+        borderSide: const BorderSide(color: Colors.white, width: 1.4),
       ),
     );
   }
 
+  // ── Primary button (gold, full pill) ──────────────────────────────────────
+  // Added a subtle inner shadow / border so the pill "pops" off the glass.
   static ButtonStyle primaryButton({Color? color}) {
     return ElevatedButton.styleFrom(
       backgroundColor: color ?? AppTheme.gold,
       foregroundColor: Colors.black,
-      elevation: 0,
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+      elevation: 2,
+      shadowColor: Colors.black.withValues(alpha: 0.35),
+      padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 28),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
     );
   }
 
+  // ── Ghost / outline button ────────────────────────────────────────────────
   static ButtonStyle ghostButton() {
     return OutlinedButton.styleFrom(
       foregroundColor: Colors.white,
-      side: BorderSide(color: Colors.white.withValues(alpha:0.4)),
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+      side: BorderSide(color: Colors.white.withValues(alpha: 0.55), width: 1.2),
+      padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 28),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+      textStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+    );
+  }
+
+  // ── Glass button (for sidebar / secondary actions) ────────────────────────
+  // A rounded-rectangle glass pill to emphasise secondary buttons.
+  static ButtonStyle glassButton({bool isActive = false}) {
+    return ElevatedButton.styleFrom(
+      backgroundColor: isActive
+          ? AppTheme.gold
+          : Colors.white.withValues(alpha: 0.15),
+      foregroundColor: isActive ? Colors.black : Colors.white,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(30),
+        side: BorderSide(
+          color: isActive
+              ? AppTheme.gold.withValues(alpha: 0.7)
+              : Colors.white.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      textStyle: TextStyle(
+        fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+        fontSize: 13,
+      ),
+    );
+  }
+
+  // ── Danger button (for logout / delete) ───────────────────────────────────
+  static ButtonStyle dangerButton() {
+    return ElevatedButton.styleFrom(
+      backgroundColor: Colors.red.shade700,
+      foregroundColor: Colors.white,
+      elevation: 2,
+      shadowColor: Colors.black.withValues(alpha: 0.35),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
     );
   }
 }
