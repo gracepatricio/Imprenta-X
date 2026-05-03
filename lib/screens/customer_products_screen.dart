@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
+import 'customer_order_screen.dart';
 
 class CustomerProductsScreen extends StatefulWidget {
   const CustomerProductsScreen({super.key});
@@ -138,6 +139,7 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
                     itemCount: products.length,
                     itemBuilder: (_, i) => _ProductCard(
                       data: products[i].data() as Map<String, dynamic>,
+                      docId: products[i].id,
                     ),
                   );
                 },
@@ -237,7 +239,8 @@ class _EmptyState extends StatelessWidget {
 
 class _ProductCard extends StatelessWidget {
   final Map<String, dynamic> data;
-  const _ProductCard({required this.data});
+  final String docId;
+  const _ProductCard({required this.data, required this.docId});
 
   @override
   Widget build(BuildContext context) {
@@ -247,7 +250,16 @@ class _ProductCard extends StatelessWidget {
     final imageUrl    = data['image_url']?.toString() ?? '';
     final category    = data['category']?.toString() ?? '';
 
-    return Container(
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CustomerOrderScreen(
+            product: {'product_id': docId, ...data},
+          ),
+        ),
+      ),
+      child: Container(
       decoration: AppTheme.glassCard(opacity: 0.15, radius: 16),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -308,13 +320,34 @@ class _ProductCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis),
                   ],
                   const Spacer(),
-                  Text(
-                    price != null ? '₱$price' : 'See pricing',
-                    style: const TextStyle(
-                      color: AppTheme.gold,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          price != null ? '₱$price' : 'See pricing',
+                          style: const TextStyle(
+                            color: AppTheme.gold,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.gold.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: AppTheme.gold.withValues(alpha: 0.4)),
+                        ),
+                        child: const Text('Order',
+                            style: TextStyle(
+                                color: AppTheme.gold,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -322,6 +355,7 @@ class _ProductCard extends StatelessWidget {
           ),
         ],
       ),
+    ),  // GestureDetector
     );
   }
 

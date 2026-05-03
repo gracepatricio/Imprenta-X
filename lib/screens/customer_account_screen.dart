@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
-import 'customer_order_chat_screen.dart';
+import 'chat_screen.dart';
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
@@ -70,7 +70,11 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
       case 'feedback':
         return _FeedbackContent(uid: uid, fullName: fullName);
       default:
-        return _DashboardContent(uid: uid, onViewOrders: () => setState(() => _menu = 'orders'));
+        return _DashboardContent(
+          uid: uid,
+          onViewOrders:   () => setState(() => _menu = 'orders'),
+          onViewMessages: () => setState(() => _menu = 'messages'),
+        );
     }
   }
 
@@ -122,11 +126,13 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (customerId.isNotEmpty) ...[
+                if (email.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    customerId,
-                    style: const TextStyle(color: AppTheme.gold, fontSize: 11),
+                    email,
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
                 const SizedBox(height: 20),
@@ -207,10 +213,11 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                               fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (customerId.isNotEmpty)
-                          Text(customerId,
+                        if (email.isNotEmpty)
+                          Text(email,
                               style: const TextStyle(
-                                  color: AppTheme.gold, fontSize: 11)),
+                                  color: Colors.white70, fontSize: 11),
+                              overflow: TextOverflow.ellipsis),
                       ],
                     ),
                   ),
@@ -343,7 +350,12 @@ class _SidebarBtn extends StatelessWidget {
 class _DashboardContent extends StatelessWidget {
   final String uid;
   final VoidCallback onViewOrders;
-  const _DashboardContent({required this.uid, required this.onViewOrders});
+  final VoidCallback onViewMessages;
+  const _DashboardContent({
+    required this.uid,
+    required this.onViewOrders,
+    required this.onViewMessages,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -361,7 +373,7 @@ class _DashboardContent extends StatelessWidget {
             SizedBox(height: isNarrow ? 12 : 16),
             _OrderStatsRow(uid: uid),
             SizedBox(height: isNarrow ? 16 : 24),
-            _UnreadMessagesPreview(uid: uid),
+            _UnreadMessagesPreview(uid: uid, onViewAll: onViewMessages),
           ],
         ),
       );
@@ -381,40 +393,30 @@ class _OrderStatsRow extends StatelessWidget {
           .where('customer_uid', isEqualTo: uid)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Row(children: [
-            Expanded(child: _StatCard('Pending', 0, Icons.hourglass_empty_outlined, Colors.orangeAccent)),
-            const SizedBox(width: 8),
-            Expanded(child: _StatCard('Active', 0, Icons.precision_manufacturing_outlined, Colors.blueAccent)),
-            const SizedBox(width: 8),
-            Expanded(child: _StatCard('Ready', 0, Icons.inventory_2_outlined, Colors.greenAccent)),
-          ]);
-        }
         final docs = snapshot.data?.docs ?? [];
         int pending = 0, active = 0, ready = 0;
-        for (final d in docs) {
-          final s = (d.data() as Map)['status']?.toString() ?? '';
-          if (s == 'pending')          pending++;
-          if (s == 'in_production')    active++;
-          if (s == 'ready_for_pickup') ready++;
+        if (!snapshot.hasError) {
+          for (final d in docs) {
+            final s = (d.data() as Map)['status']?.toString() ?? '';
+            if (s == 'pending')          pending++;
+            if (s == 'in_production')    active++;
+            if (s == 'ready_for_pickup') ready++;
+          }
         }
-        // Always use a Row — compact flag trims padding/font on tiny screens.
         return LayoutBuilder(builder: (context, constraints) {
-          final compact = constraints.maxWidth < 280;
-          final gap     = compact ? 6.0 : 8.0;
-          return Row(children: [
-            Expanded(child: _StatCard('Pending', pending,
-                Icons.hourglass_empty_outlined, Colors.orangeAccent,
-                compact: compact)),
-            SizedBox(width: gap),
-            Expanded(child: _StatCard('Active', active,
-                Icons.precision_manufacturing_outlined, Colors.blueAccent,
-                compact: compact)),
-            SizedBox(width: gap),
-            Expanded(child: _StatCard('Ready', ready,
-                Icons.inventory_2_outlined, Colors.greenAccent,
-                compact: compact)),
-          ]);
+          final compact = constraints.maxWidth < 380;
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _StatCard('Pending\nOrders', pending, Icons.sync,                Colors.red,    compact: compact)),
+                SizedBox(width: compact ? 4 : 8),
+                Expanded(child: _StatCard('Active\nOrders',  active,  Icons.inventory_2_outlined, Colors.orange, compact: compact)),
+                SizedBox(width: compact ? 4 : 8),
+                Expanded(child: _StatCard('Ready for\nPickup', ready, Icons.check_circle,       Colors.green,  compact: compact)),
+              ],
+            ),
+          );
         });
       },
     );
@@ -427,37 +429,27 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final bool compact;
-  const _StatCard(this.label, this.count, this.icon, this.color,
-      {this.compact = false});
+  const _StatCard(this.label, this.count, this.icon, this.color, {this.compact = false});
 
   @override
   Widget build(BuildContext context) {
-    final pad       = compact ? 10.0 : 14.0;
-    final countSize = compact ? 22.0 : 26.0;
-    final labelSize = compact ? 10.0 : 11.0;
-    final iconSize  = compact ? 18.0 : 20.0;
-
     return Container(
-      padding: EdgeInsets.all(pad),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
+      padding: EdgeInsets.all(compact ? 10 : 16),
+      decoration: AppTheme.glassCard(opacity: 0.12, radius: 16),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: iconSize),
-          SizedBox(height: compact ? 6 : 8),
+          Icon(icon, color: color, size: compact ? 20 : 28),
+          SizedBox(height: compact ? 6 : 10),
           Text('$count',
               style: TextStyle(
                   color: color,
-                  fontSize: countSize,
+                  fontSize: compact ? 20 : 26,
                   fontWeight: FontWeight.bold)),
+          SizedBox(height: compact ? 2 : 4),
           Text(label,
-              style: TextStyle(color: Colors.white60, fontSize: labelSize),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
+              style: TextStyle(color: Colors.white60, fontSize: compact ? 10 : 12)),
         ],
       ),
     );
@@ -466,47 +458,80 @@ class _StatCard extends StatelessWidget {
 
 class _UnreadMessagesPreview extends StatelessWidget {
   final String uid;
-  const _UnreadMessagesPreview({required this.uid});
+  final VoidCallback onViewAll;
+  const _UnreadMessagesPreview({required this.uid, required this.onViewAll});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Unread Messages',
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600)),
-        const SizedBox(height: 10),
-        StreamBuilder<QuerySnapshot>(
-          // Fetch all messages for this customer and filter unread client-side.
-          // Avoids a composite index on (customer_uid, unread_customer).
-          stream: FirebaseFirestore.instance
-              .collection('Messages')
-              .where('customer_uid', isEqualTo: uid)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) return const SizedBox.shrink();
-            final docs = (snapshot.data?.docs ?? []).where((d) {
-              final unread = (d.data() as Map)['unread_customer'];
-              return unread != null && (unread as num) > 0;
-            }).toList();
-            if (docs.isEmpty) {
-              return Container(
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('Messages')
+          .where('customer_uid', isEqualTo: uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return const SizedBox.shrink();
+        final docs = (snapshot.data?.docs ?? []).where((d) {
+          final unread = (d.data() as Map)['unread_customer'];
+          return unread != null && (unread as num) > 0;
+        }).toList();
+        final totalUnread = docs.fold<int>(
+            0,
+            (sum, d) =>
+                sum +
+                (((d.data() as Map)['unread_customer'] as num?) ?? 0)
+                    .toInt());
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              onTap: docs.isNotEmpty ? onViewAll : null,
+              child: Row(
+                children: [
+                  const Text('Unread Messages',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  if (totalUnread > 0) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text('$totalUnread',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.chevron_right,
+                        color: Colors.white54, size: 16),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (docs.isEmpty)
+              Container(
                 padding: const EdgeInsets.all(16),
                 decoration: AppTheme.glassCard(opacity: 0.1),
                 child: const Center(
                   child: Text('No unread messages',
-                      style: TextStyle(color: Colors.white38, fontSize: 13)),
+                      style:
+                          TextStyle(color: Colors.white38, fontSize: 13)),
                 ),
-              );
-            }
-            return Column(
-              children: docs.map((doc) {
+              )
+            else
+              ...docs.map((doc) {
                 final d           = doc.data() as Map<String, dynamic>;
                 final orderId     = d['order_id']?.toString() ?? '';
-                final orderDisplay = d['order_display']?.toString() ?? orderId;
+                final orderDisplay =
+                    d['order_display']?.toString() ?? orderId;
                 final lastMsg     = d['last_message']?.toString() ?? '';
                 final unread      = d['unread_customer'] ?? 0;
                 return _UnreadMessageCard(
@@ -517,18 +542,18 @@ class _UnreadMessagesPreview extends StatelessWidget {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => CustomerOrderChatScreen(
-                        orderId:      orderId,
-                        orderDisplay: orderDisplay,
+                      builder: (_) => ChatScreen(
+                        customerUid:  uid,
+                        customerName: '',
+                        isEmployee:   false,
                       ),
                     ),
                   ),
                 );
-              }).toList(),
-            );
-          },
-        ),
-      ],
+              }),
+          ],
+        );
+      },
     );
   }
 }
@@ -821,14 +846,19 @@ class _OrderCard extends StatelessWidget {
               if (showMessage)
                 TextButton.icon(
                   onPressed: () {
-                    final display = '$orderId - '
-                        '${products.isNotEmpty ? (products.first['name'] ?? '') : ''}';
+                    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => CustomerOrderChatScreen(
-                          orderId:      orderId,
-                          orderDisplay: display,
+                        builder: (_) => ChatScreen(
+                          customerUid:  uid,
+                          customerName: '',
+                          isEmployee:   false,
+                          orderContext: {
+                            'order_id':    orderId,
+                            'products':    products,
+                            'total_price': total,
+                          },
                         ),
                       ),
                     );
@@ -892,9 +922,41 @@ class _StatusBadge extends StatelessWidget {
 // Messages
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _MessagesContent extends StatelessWidget {
+class _MessagesContent extends StatefulWidget {
   final String uid;
   const _MessagesContent({required this.uid});
+
+  @override
+  State<_MessagesContent> createState() => _MessagesContentState();
+}
+
+class _MessagesContentState extends State<_MessagesContent> {
+  @override
+  void initState() {
+    super.initState();
+    _ensureGeneralThread();
+  }
+
+  // Silently creates a general chat thread on first visit so the
+  // customer can reach the team even without a placed order.
+  Future<void> _ensureGeneralThread() async {
+    final ref = FirebaseFirestore.instance
+        .collection('Messages')
+        .doc('chat_${widget.uid}');
+    final snap = await ref.get();
+    if (snap.exists) return;
+    final userDoc = await FirebaseFirestore.instance
+        .collection('User').doc(widget.uid).get();
+    final name = userDoc.data()?['full_name'] ?? 'Customer';
+    await ref.set({
+      'customer_uid':    widget.uid,
+      'customer_name':   name,
+      'last_message':    '',
+      'last_updated':    FieldValue.serverTimestamp(),
+      'unread_customer': 0,
+      'unread_employee': 0,
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -913,13 +975,12 @@ class _MessagesContent extends StatelessWidget {
             // Sort by last_updated client-side.
             stream: FirebaseFirestore.instance
                 .collection('Messages')
-                .where('customer_uid', isEqualTo: uid)
+                .where('customer_uid', isEqualTo: widget.uid)
                 .snapshots(),
             builder: (context, snap) {
               if (snap.hasError) {
                 return const Center(
-                  child: Text('Could not load messages.\nCheck your connection.',
-                      textAlign: TextAlign.center,
+                  child: Text('Could not load messages.',
                       style: TextStyle(color: Colors.white38, fontSize: 13)),
                 );
               }
@@ -928,7 +989,6 @@ class _MessagesContent extends StatelessWidget {
                 return const Center(
                     child: CircularProgressIndicator(color: Colors.white38));
               }
-              // Sort newest-first client-side
               final docs = List.from(snap.data?.docs ?? [])
                 ..sort((a, b) {
                   final at = (a.data() as Map)['last_updated'];
@@ -938,27 +998,23 @@ class _MessagesContent extends StatelessWidget {
                 });
               if (docs.isEmpty) {
                 return const Center(
-                  child: Text('No messages yet',
-                      style: TextStyle(color: Colors.white38, fontSize: 13)),
-                );
+                    child: CircularProgressIndicator(color: Colors.white38));
               }
               return ListView.separated(
                 itemCount: docs.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
-                  final d  = docs[i].data() as Map<String, dynamic>;
-                  final orderId      = d['order_id']?.toString() ?? '';
-                  final orderDisplay = d['order_display']?.toString() ?? orderId;
-                  final lastMsg      = d['last_message']?.toString() ?? '';
-                  // Safe cast: Firestore may store numeric fields as num/double
-                  final unread = ((d['unread_customer'] as num?) ?? 0).toInt();
+                  final d       = docs[i].data() as Map<String, dynamic>;
+                  final lastMsg = d['last_message']?.toString() ?? '';
+                  final unread  = ((d['unread_customer'] as num?) ?? 0).toInt();
                   return GestureDetector(
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => CustomerOrderChatScreen(
-                          orderId:      orderId,
-                          orderDisplay: orderDisplay,
+                        builder: (_) => ChatScreen(
+                          customerUid:  widget.uid,
+                          customerName: '',
+                          isEmployee:   false,
                         ),
                       ),
                     ),
@@ -968,25 +1024,30 @@ class _MessagesContent extends StatelessWidget {
                       child: Row(
                         children: [
                           Container(
-                            width: 40,
-                            height: 40,
+                            width: 44,
+                            height: 44,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: AppTheme.gold.withValues(alpha: 0.15),
+                              border: Border.all(
+                                  color: AppTheme.gold.withValues(alpha: 0.4)),
                             ),
-                            child: const Icon(Icons.chat_bubble_outline,
-                                color: AppTheme.gold, size: 18),
+                            child: const Icon(Icons.local_print_shop,
+                                color: AppTheme.gold, size: 20),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(orderDisplay,
-                                    style: const TextStyle(
+                                const Text('Imprenta Inc.',
+                                    style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w600,
                                         fontSize: 13)),
+                                const Text('Printing Services',
+                                    style: TextStyle(
+                                        color: AppTheme.gold, fontSize: 11)),
                                 if (lastMsg.isNotEmpty) ...[
                                   const SizedBox(height: 2),
                                   Text(lastMsg,
@@ -1266,22 +1327,203 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Feedback
+// Feedback — Order Reviews
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _FeedbackContent extends StatefulWidget {
+class _FeedbackContent extends StatelessWidget {
   final String uid, fullName;
   const _FeedbackContent({required this.uid, required this.fullName});
 
   @override
-  State<_FeedbackContent> createState() => _FeedbackContentState();
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Order Reviews',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        const Text('Rate your completed orders',
+            style: TextStyle(color: Colors.white54, fontSize: 13)),
+        const SizedBox(height: 16),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('Orders')
+                .where('customer_uid', isEqualTo: uid)
+                .where('status', isEqualTo: 'completed')
+                .snapshots(),
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting &&
+                  !snap.hasData) {
+                return const Center(
+                    child:
+                        CircularProgressIndicator(color: Colors.white38));
+              }
+              final docs = snap.data?.docs ?? [];
+              if (docs.isEmpty) {
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.rate_review_outlined,
+                          size: 48, color: Colors.white24),
+                      SizedBox(height: 12),
+                      Text('No completed orders yet',
+                          style: TextStyle(
+                              color: Colors.white38, fontSize: 13)),
+                      SizedBox(height: 4),
+                      Text(
+                          'Reviews will appear here once your orders are completed',
+                          style: TextStyle(
+                              color: Colors.white24, fontSize: 11),
+                          textAlign: TextAlign.center),
+                    ],
+                  ),
+                );
+              }
+              return ListView.separated(
+                itemCount: docs.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) {
+                  final d = docs[i].data() as Map<String, dynamic>;
+                  final orderId = d['order_id']?.toString() ?? docs[i].id;
+                  final products = List<Map>.from(d['products'] ?? []);
+                  final productName = products.isNotEmpty
+                      ? products.first['name']?.toString() ?? ''
+                      : '';
+                  return _ReviewOrderCard(
+                    orderId:     orderId,
+                    productName: productName,
+                    totalPrice:  d['total_price'],
+                    hasReview:   d['has_review'] == true,
+                    uid:         uid,
+                    fullName:    fullName,
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
 }
 
-class _FeedbackContentState extends State<_FeedbackContent> {
-  final _msgCtrl  = TextEditingController();
+class _ReviewOrderCard extends StatelessWidget {
+  final String orderId, productName, uid, fullName;
+  final dynamic totalPrice;
+  final bool hasReview;
+
+  const _ReviewOrderCard({
+    required this.orderId,
+    required this.productName,
+    required this.totalPrice,
+    required this.hasReview,
+    required this.uid,
+    required this.fullName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: AppTheme.glassCard(opacity: 0.12, radius: 12),
+      child: Row(
+        children: [
+          const Icon(Icons.receipt_long_outlined,
+              color: Colors.white54, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(orderId,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13)),
+                if (productName.isNotEmpty)
+                  Text(productName,
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 11)),
+                if (totalPrice != null)
+                  Text('₱$totalPrice',
+                      style: const TextStyle(
+                          color: AppTheme.gold,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (hasReview)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: Colors.green.withValues(alpha: 0.4)),
+              ),
+              child: const Text('Reviewed ✓',
+                  style: TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600)),
+            )
+          else
+            ElevatedButton(
+              onPressed: () => showDialog(
+                context: context,
+                builder: (_) => _ReviewDialog(
+                  orderId:     orderId,
+                  productName: productName,
+                  uid:         uid,
+                  fullName:    fullName,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.gold,
+                foregroundColor: Colors.black,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+                textStyle: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              child: const Text('Leave Review'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReviewDialog extends StatefulWidget {
+  final String orderId, productName, uid, fullName;
+  const _ReviewDialog({
+    required this.orderId,
+    required this.productName,
+    required this.uid,
+    required this.fullName,
+  });
+
+  @override
+  State<_ReviewDialog> createState() => _ReviewDialogState();
+}
+
+class _ReviewDialogState extends State<_ReviewDialog> {
   int  _rating    = 0;
+  final _msgCtrl  = TextEditingController();
   bool _submitting = false;
-  bool _submitted  = false;
 
   @override
   void dispose() {
@@ -1295,102 +1537,123 @@ class _FeedbackContentState extends State<_FeedbackContent> {
           const SnackBar(content: Text('Please select a rating.')));
       return;
     }
-    if (_msgCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please write your feedback.')));
-      return;
-    }
     setState(() => _submitting = true);
-    await FirebaseFirestore.instance.collection('Feedback').add({
+    final db = FirebaseFirestore.instance;
+    await db.collection('OrderReviews').add({
+      'order_id':      widget.orderId,
       'customer_uid':  widget.uid,
       'customer_name': widget.fullName,
+      'product_name':  widget.productName,
       'rating':        _rating,
       'message':       _msgCtrl.text.trim(),
+      'read':          false,
       'created_at':    FieldValue.serverTimestamp(),
     });
-    if (mounted) setState(() { _submitted = true; _submitting = false; });
+    await db
+        .collection('Orders')
+        .doc(widget.orderId)
+        .update({'has_review': true});
+    if (mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_submitted) {
-      return Center(
+    return Dialog(
+      backgroundColor: const Color(0xFF1a1a2e),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.check_circle_outline,
-                color: Colors.greenAccent, size: 56),
+            const Text('Leave a Review',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(widget.orderId,
+                style:
+                    const TextStyle(color: Colors.white54, fontSize: 12)),
+            if (widget.productName.isNotEmpty)
+              Text(widget.productName,
+                  style: const TextStyle(
+                      color: AppTheme.gold, fontSize: 12)),
             const SizedBox(height: 16),
-            const Text('Thank you for your feedback!',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('Rating',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            const Text('Your response has been submitted.',
-                style: TextStyle(color: Colors.white54, fontSize: 13)),
+            Row(
+              children: List.generate(5, (i) {
+                final star = i + 1;
+                return GestureDetector(
+                  onTap: () => setState(() => _rating = star),
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Icon(
+                      star <= _rating
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      color: star <= _rating
+                          ? AppTheme.gold
+                          : Colors.white30,
+                      size: 36,
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 16),
+            const Text('Your Review',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _msgCtrl,
+              maxLines: 3,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              decoration: AppTheme.inputDecoration(
+                  'How was your experience with this order?'),
+            ),
             const SizedBox(height: 20),
-            TextButton(
-              onPressed: () => setState(() { _submitted = false; _rating = 0; _msgCtrl.clear(); }),
-              child: const Text('Submit another',
-                  style: TextStyle(color: AppTheme.gold)),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel',
+                        style: TextStyle(color: Colors.white54)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _submitting ? null : _submit,
+                    style: AppTheme.primaryButton(),
+                    child: _submitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.black))
+                        : const Text('Submit',
+                            style:
+                                TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
-      );
-    }
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Submit Feedback',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          const Text('Help us improve our service',
-              style: TextStyle(color: Colors.white54, fontSize: 13)),
-          const SizedBox(height: 24),
-          const Text('Your Rating',
-              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 10),
-          Row(
-            children: List.generate(5, (i) {
-              final star = i + 1;
-              return GestureDetector(
-                onTap: () => setState(() => _rating = star),
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Icon(
-                    star <= _rating ? Icons.star : Icons.star_outline,
-                    color: star <= _rating ? AppTheme.gold : Colors.white30,
-                    size: 32,
-                  ),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 20),
-          const Text('Your Message',
-              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _msgCtrl,
-            maxLines: 5,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-            decoration: AppTheme.inputDecoration(
-                'Share your experience with us...'),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _submitting ? null : _submit,
-              style: AppTheme.primaryButton(),
-              child: _submitting
-                  ? const SizedBox(width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                  : const Text('Submit Feedback',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-            ),
-          ),
-        ],
       ),
     );
   }

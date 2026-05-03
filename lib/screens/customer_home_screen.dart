@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
+import 'customer_order_screen.dart';
 
 class CustomerHomeScreen extends StatelessWidget {
   final VoidCallback onViewProducts;
@@ -241,8 +242,9 @@ class _FeaturedSection extends StatelessWidget {
                   itemCount: docs.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 12),
                   itemBuilder: (_, i) {
-                    final d = docs[i].data() as Map<String, dynamic>;
-                    return _FeaturedCard(data: d);
+                    final d     = docs[i].data() as Map<String, dynamic>;
+                    final docId = docs[i].id;
+                    return _FeaturedCard(data: d, docId: docId);
                   },
                 ),
               );
@@ -256,7 +258,8 @@ class _FeaturedSection extends StatelessWidget {
 
 class _FeaturedCard extends StatelessWidget {
   final Map<String, dynamic> data;
-  const _FeaturedCard({required this.data});
+  final String docId;
+  const _FeaturedCard({required this.data, required this.docId});
 
   @override
   Widget build(BuildContext context) {
@@ -264,7 +267,16 @@ class _FeaturedCard extends StatelessWidget {
     final price    = data['price'];
     final imageUrl = data['image_url']?.toString() ?? '';
 
-    return Container(
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CustomerOrderScreen(
+            product: {'product_id': docId, ...data},
+          ),
+        ),
+      ),
+      child: Container(
       width: 140,
       decoration: AppTheme.glassCard(opacity: 0.18, radius: 16),
       clipBehavior: Clip.antiAlias,
@@ -303,6 +315,7 @@ class _FeaturedCard extends StatelessWidget {
           ),
         ],
       ),
+    ), // GestureDetector
     );
   }
 

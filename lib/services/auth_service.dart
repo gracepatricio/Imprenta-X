@@ -30,33 +30,46 @@ class AuthService {
 
   // ── Register ──────────────────────────────────────────────────────────────
 
-  Future<String?> register(
+  /// Creates a Firebase Auth account and sends a verification email.
+  /// The Firestore record is NOT created here — call [finalizeRegistration]
+  /// after the user clicks the verification link.
+  Future<({User? user, String? error})> createAccount(
       String email, String password, String fullName) async {
     try {
       final cred = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-      final uid        = cred.user!.uid;
+      await cred.user!.updateDisplayName(fullName);
+      await cred.user!.sendEmailVerification();
+      return (user: cred.user, error: null);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        final msg = await _handleExistingEmail(email);
+        return (user: null, error: msg);
+      }
+      return (user: null, error: e.message);
+    } catch (e) {
+      return (user: null, error: 'Registration failed: $e');
+    }
+  }
+
+  /// Creates the Firestore user record after email verification is confirmed.
+  Future<String?> finalizeRegistration(
+      String uid, String email, String fullName) async {
+    try {
       final customerId = await generateCustomerId();
       await _firestore.collection('User').doc(uid).set({
-        'user_id':      uid,
+        'email':        email,
+        'full_name':    fullName,
         'customer_id':  customerId,
         'employee_id':  null,
-        'full_name':    fullName,
-        'email':        email,
         'user_role':    'customer',
         'date_created': FieldValue.serverTimestamp(),
       });
-      await cred.user!.updateDisplayName(fullName);
       return 'success';
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        return await _handleExistingEmail(email);
-      }
-      return e.message;
     } catch (e) {
-      return 'Registration failed: $e';
+      return 'Failed to complete registration: $e';
     }
   }
 
@@ -147,11 +160,10 @@ class AuthService {
         firebaseUser?.email?.split('@')[0] ??
         'Customer';
     final data = {
-      'user_id':      uid,
+      'email':        email,
+      'full_name':    name,
       'customer_id':  customerId,
       'employee_id':  null,
-      'full_name':    name,
-      'email':        email,
       'user_role':    'customer',
       'is_deleted':   false,
       'date_created': FieldValue.serverTimestamp(),

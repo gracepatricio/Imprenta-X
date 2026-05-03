@@ -7,7 +7,9 @@ import 'app_navbar.dart';
 import 'customer_home_screen.dart';
 import 'customer_about_screen.dart';
 import 'customer_products_screen.dart';
+import 'customer_cart_screen.dart';
 import 'customer_account_screen.dart';
+import '../services/cart_manager.dart';
 
 class CustomerHomepage extends StatefulWidget {
   const CustomerHomepage({super.key});
@@ -17,7 +19,6 @@ class CustomerHomepage extends StatefulWidget {
 }
 
 class _CustomerHomepageState extends State<CustomerHomepage> {
-  static const _items = ['Home', 'About', 'Products', 'Account'];
   String _active = 'Home';
 
   StreamSubscription<DocumentSnapshot>? _deletionSub;
@@ -56,10 +57,14 @@ class _CustomerHomepageState extends State<CustomerHomepage> {
     super.dispose();
   }
 
-  Widget get _screen {
+  Widget _screen(int cartCount) {
     switch (_active) {
       case 'About':    return const CustomerAboutScreen();
       case 'Products': return const CustomerProductsScreen();
+      case 'Cart':
+        return CustomerCartScreen(
+          onOrderPlaced: () => setState(() => _active = 'Account'),
+        );
       case 'Account':  return const CustomerAccountScreen();
       default:
         return CustomerHomeScreen(
@@ -70,20 +75,31 @@ class _CustomerHomepageState extends State<CustomerHomepage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: AppTheme.backgroundDecoration,
-        child: Column(
-          children: [
-            AppNavBar(
-              items:      _items,
-              activeItem: _active,
-              onTap:      (item) => setState(() => _active = item),
+    return ValueListenableBuilder<int>(
+      valueListenable: CartManager.count,
+      builder: (context, cartCount, _) {
+        final cartLabel = cartCount > 0 ? 'Cart ($cartCount)' : 'Cart';
+        final items = ['Home', 'About', 'Products', cartLabel, 'Account'];
+        final activeItem = _active == 'Cart' ? cartLabel : _active;
+
+        return Scaffold(
+          body: Container(
+            decoration: AppTheme.backgroundDecoration,
+            child: Column(
+              children: [
+                AppNavBar(
+                  items:      items,
+                  activeItem: activeItem,
+                  onTap: (item) => setState(() {
+                    _active = item.startsWith('Cart') ? 'Cart' : item;
+                  }),
+                ),
+                Expanded(child: _screen(cartCount)),
+              ],
             ),
-            Expanded(child: _screen),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

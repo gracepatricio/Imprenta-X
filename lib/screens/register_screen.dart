@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../services/otp_service.dart';
 import 'app_theme.dart';
 import 'email_otp_screen.dart';
 
@@ -28,8 +27,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  // Validate form fields and send OTP, then open the OTP screen.
-  Future<void> _sendVerificationCode() async {
+  // Validates form, creates the Firebase Auth account, sends verification email.
+  Future<void> _createAccount() async {
     final fullName        = fullNameController.text.trim();
     final email           = emailController.text.trim();
     final password        = passwordController.text.trim();
@@ -49,75 +48,72 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     setState(() => isLoading = true);
-    String generatedCode;
-    try {
-      generatedCode = await OtpService().sendOtp(email);
-    } catch (e) {
-      setState(() => isLoading = false);
-      _snack('Failed to send verification code: $e');
-      return;
-    }
+    final result = await _authService.createAccount(email, password, fullName);
     if (!mounted) return;
     setState(() => isLoading = false);
 
-    // Navigate to OTP screen; on success, create the Firebase account.
+    if (result.error == 'account_reclaim_needed') {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1a1a2e),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+          ),
+          title: const Text(
+            'Account Recovery',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            'This email was previously registered and its account was '
+            'removed by an administrator.\n\n'
+            'We\'ve sent a password reset link to your email. '
+            'Click the link to set a new password, then sign in.',
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.gold,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+              ),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
+      return;
+    }
+
+    if (result.error != null) {
+      _snack(result.error!);
+      return;
+    }
+
+    final user = result.user!;
+
+    // Navigate to email verification screen; finalize Firestore record on confirm.
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => EmailOtpScreen(
-          email:        email,
-          expectedCode: generatedCode,
+        builder: (_) => EmailVerificationScreen(
+          email: email,
           onVerified: () async {
-            final result =
-                await _authService.register(email, password, fullName);
+            final err = await _authService.finalizeRegistration(
+                user.uid, email, fullName);
             if (!mounted) return;
-
-            if (result == 'success') {
+            if (err == 'success') {
               _snack('Account created successfully!');
               Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
-            } else if (result == 'account_reclaim_needed') {
-              // Firebase Auth account still exists (admin deleted only the
-              // Firestore record). Show recovery instructions then go to login.
-              await showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (ctx) => AlertDialog(
-                  backgroundColor: const Color(0xFF1a1a2e),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.12)),
-                  ),
-                  title: const Text(
-                    'Account Recovery',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                  content: const Text(
-                    'This email was previously registered and its account was '
-                    'removed by an administrator.\n\n'
-                    'We\'ve sent a password reset link to your email. '
-                    'Click the link to set a new password, then sign in.',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                  actions: [
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.gold,
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20)),
-                      ),
-                      child: const Text('OK'),
-                    ),
-                  ],
-                ),
-              );
-              if (!mounted) return;
-              Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
             } else {
-              throw Exception(result ?? 'Registration failed. Please try again.');
+              throw Exception(err ?? 'Registration failed. Please try again.');
             }
           },
         ),
@@ -248,7 +244,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             obscureText: obscureConfirm,
                             style: const TextStyle(color: Colors.white),
                             textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => _sendVerificationCode(),
+                            onSubmitted: (_) => _createAccount(),
                             decoration: AppTheme.inputDecoration(
                               'Confirm Password',
                               icon: Icons.lock_outline,
@@ -267,10 +263,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                           const SizedBox(height: 24),
 
-                          // Send OTP button
                           ElevatedButton(
-                            onPressed:
-                                isLoading ? null : _sendVerificationCode,
+                            onPressed: isLoading ? null : _createAccount,
                             style: AppTheme.primaryButton(),
                             child: isLoading
                                 ? const SizedBox(
@@ -281,7 +275,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                       color: Colors.black,
                                     ),
                                   )
-                                : const Text('Send Verification Code'),
+                                : const Text('Create Account'),
                           ),
 
                           const SizedBox(height: 20),

@@ -19,6 +19,9 @@ dependencies:
   mobile_scanner: ^6.0.0 # Added Dependency
   qr_flutter: ^4.1.0 # Added Dependency
   image_picker: ^1.1.2 # Added Dependency
+  file_picker: ^8.1.3 #Added Dependency
+  image: ^4.2.0 # Added Dependency
+  url_launcher: ^6.3.0 #Added Dependency
   intl: ^0.20.1 # Added Dependency
 
 dev_dependencies:

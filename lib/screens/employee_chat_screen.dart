@@ -3,25 +3,27 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
 
-class CustomerOrderChatScreen extends StatefulWidget {
+class EmployeeOrderChatScreen extends StatefulWidget {
+  final String threadId;
   final String orderId;
   final String orderDisplay;
 
-  const CustomerOrderChatScreen({
+  const EmployeeOrderChatScreen({
     super.key,
+    required this.threadId,
     required this.orderId,
     required this.orderDisplay,
   });
 
   @override
-  State<CustomerOrderChatScreen> createState() =>
-      _CustomerOrderChatScreenState();
+  State<EmployeeOrderChatScreen> createState() =>
+      _EmployeeOrderChatScreenState();
 }
 
-class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
-  final _msgCtrl  = TextEditingController();
-  final _scroll   = ScrollController();
-  bool _sending   = false;
+class _EmployeeOrderChatScreenState extends State<EmployeeOrderChatScreen> {
+  final _msgCtrl = TextEditingController();
+  final _scroll  = ScrollController();
+  bool _sending  = false;
 
   late final String _uid;
   late final DocumentReference _threadRef;
@@ -32,8 +34,7 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
     _uid       = FirebaseAuth.instance.currentUser?.uid ?? '';
     _threadRef = FirebaseFirestore.instance
         .collection('Messages')
-        .doc('${widget.orderId}_$_uid');
-    _ensureThread();
+        .doc(widget.threadId);
     _markRead();
   }
 
@@ -44,28 +45,10 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
     super.dispose();
   }
 
-  // Create the thread document if it doesn't exist yet.
-  Future<void> _ensureThread() async {
-    final snap = await _threadRef.get();
-    if (!snap.exists) {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('User').doc(_uid).get();
-      final name = userDoc.data()?['full_name'] ?? '';
-      await _threadRef.set({
-        'order_id':        widget.orderId,
-        'order_display':   widget.orderDisplay,
-        'customer_uid':    _uid,
-        'customer_name':   name,
-        'last_message':    '',
-        'last_updated':    FieldValue.serverTimestamp(),
-        'unread_customer': 0,
-        'unread_employee': 0,
-      });
-    }
-  }
-
   Future<void> _markRead() async {
-    await _threadRef.update({'unread_customer': 0});
+    try {
+      await _threadRef.update({'unread_employee': 0});
+    } catch (_) {}
   }
 
   Future<void> _send() async {
@@ -76,7 +59,7 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
 
     await _threadRef.collection('chat').add({
       'sender_uid':  _uid,
-      'sender_role': 'customer',
+      'sender_role': 'employee',
       'text':        text,
       'timestamp':   FieldValue.serverTimestamp(),
     });
@@ -84,12 +67,11 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
     await _threadRef.update({
       'last_message':    text,
       'last_updated':    FieldValue.serverTimestamp(),
-      'unread_employee': FieldValue.increment(1),
+      'unread_customer': FieldValue.increment(1),
     });
 
     if (mounted) setState(() => _sending = false);
 
-    // Scroll to bottom
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
         _scroll.animateTo(
@@ -111,7 +93,7 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // App bar
+              // Header
               Container(
                 padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
                 color: Colors.black.withValues(alpha: 0.2),
@@ -122,11 +104,22 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
                       onPressed: () => Navigator.pop(context),
                     ),
                     const SizedBox(width: 4),
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.gold.withValues(alpha: 0.15),
+                      ),
+                      child: const Icon(Icons.person_outline,
+                          color: AppTheme.gold, size: 18),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Order Message',
+                          const Text('Customer Message',
                               style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
@@ -143,7 +136,7 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
                 ),
               ),
 
-              // Chat messages
+              // Messages
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
                   stream: _threadRef
@@ -152,7 +145,6 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
                       .snapshots(),
                   builder: (context, snap) {
                     final docs = snap.data?.docs ?? [];
-
                     if (docs.isEmpty) {
                       return Center(
                         child: Column(
@@ -162,7 +154,7 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
                                 color: Colors.white24, size: 48),
                             const SizedBox(height: 12),
                             Text(
-                              'No messages yet.\nReference: ${widget.orderDisplay}',
+                              'No messages yet.\n${widget.orderDisplay}',
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                   color: Colors.white38, fontSize: 13),
@@ -171,7 +163,6 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
                         ),
                       );
                     }
-
                     return ListView.builder(
                       controller: _scroll,
                       padding: const EdgeInsets.all(16),
@@ -180,20 +171,17 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
                         final d    = docs[i].data() as Map<String, dynamic>;
                         final text = d['text']?.toString() ?? '';
                         final role = d['sender_role']?.toString() ?? '';
-                        final isMe = role == 'customer';
+                        final isMe = role == 'employee';
                         final ts   = d['timestamp'] as Timestamp?;
-                        final time = ts != null
-                            ? _fmt(ts.toDate())
-                            : '';
-                        return _Bubble(
-                            text: text, isMe: isMe, time: time);
+                        final time = ts != null ? _fmt(ts.toDate()) : '';
+                        return _Bubble(text: text, isMe: isMe, time: time);
                       },
                     );
                   },
                 ),
               ),
 
-              // Input bar
+              // Input
               Container(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                 color: Colors.black.withValues(alpha: 0.25),
@@ -202,12 +190,13 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
                     Expanded(
                       child: TextField(
                         controller: _msgCtrl,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 14),
                         maxLines: null,
                         textInputAction: TextInputAction.send,
                         onSubmitted: (_) => _send(),
                         decoration: InputDecoration(
-                          hintText: 'Type a message…',
+                          hintText: 'Reply to customer…',
                           hintStyle: const TextStyle(
                               color: Colors.white38, fontSize: 14),
                           filled: true,
@@ -222,11 +211,13 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(24),
                             borderSide: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.15)),
+                                color:
+                                    Colors.white.withValues(alpha: 0.15)),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(24),
-                            borderSide: const BorderSide(color: Colors.white38),
+                            borderSide:
+                                const BorderSide(color: Colors.white38),
                           ),
                         ),
                       ),
@@ -238,17 +229,15 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: _sending
-                              ? Colors.white12
-                              : AppTheme.gold,
+                          color:
+                              _sending ? Colors.white12 : AppTheme.gold,
                           shape: BoxShape.circle,
                         ),
                         child: _sending
                             ? const Padding(
                                 padding: EdgeInsets.all(12),
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.black),
+                                    strokeWidth: 2, color: Colors.black),
                               )
                             : const Icon(Icons.send,
                                 color: Colors.black, size: 18),
@@ -295,8 +284,8 @@ class _Bubble extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: Colors.white.withValues(alpha: 0.15),
               ),
-              child: const Icon(Icons.support_agent,
-                  color: Colors.white60, size: 16),
+              child: const Icon(Icons.person_outline,
+                  color: Colors.white60, size: 15),
             ),
             const SizedBox(width: 8),
           ],
@@ -305,7 +294,8 @@ class _Bubble extends StatelessWidget {
               maxWidth: MediaQuery.of(context).size.width * 0.65,
             ),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: isMe
                     ? AppTheme.gold.withValues(alpha: 0.25)
@@ -323,12 +313,15 @@ class _Bubble extends StatelessWidget {
                 ),
               ),
               child: Column(
-                crossAxisAlignment:
-                    isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                crossAxisAlignment: isMe
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
                 children: [
                   Text(text,
                       style: const TextStyle(
-                          color: Colors.white, fontSize: 13, height: 1.4)),
+                          color: Colors.white,
+                          fontSize: 13,
+                          height: 1.4)),
                   const SizedBox(height: 4),
                   Text(time,
                       style: TextStyle(

@@ -2,8 +2,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
-import '../services/otp_service.dart';
-import 'email_otp_screen.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -24,7 +22,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  Future<void> _sendCode() async {
+  Future<void> _sendResetLink() async {
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
       setState(() => _error = 'Please enter your email address.');
@@ -33,49 +31,35 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() { _isSending = true; _error = null; });
 
-    String generatedCode;
     try {
-      generatedCode = await OtpService().sendResetOtp(email);
-    } catch (e) {
+      final continueUrl = kIsWeb
+          ? Uri.base.origin + '/'
+          : 'https://imprenta-x-system.web.app/';
+
+      await FirebaseAuth.instance.sendPasswordResetEmail(
+        email: email,
+        actionCodeSettings: ActionCodeSettings(
+          url: continueUrl,
+          handleCodeInApp: true,
+        ),
+      );
+
+      if (mounted) setState(() { _isSending = false; _linkSent = true; });
+    } on FirebaseAuthException catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Could not send code. Check your email and try again.';
+          _error = e.message ?? 'Could not send reset link. Check your email and try again.';
           _isSending = false;
         });
       }
-      return;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'Could not send reset link. Check your email and try again.';
+          _isSending = false;
+        });
+      }
     }
-
-    if (!mounted) return;
-    setState(() => _isSending = false);
-
-    // Navigate to OTP screen.
-    // After OTP verified: Firebase sends the secure reset link — user clicks
-    // it and the app opens the in-app "Set New Password" screen.
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => EmailOtpScreen(
-          email:        email,
-          expectedCode: generatedCode,
-          onVerified: () async {
-            final continueUrl = kIsWeb
-                ? Uri.base.origin + '/'
-                : 'https://imprenta-x-system.web.app/';
-
-            await FirebaseAuth.instance.sendPasswordResetEmail(
-              email: email,
-              actionCodeSettings: ActionCodeSettings(
-                url: continueUrl,
-                handleCodeInApp: true,
-              ),
-            );
-
-            if (mounted) setState(() => _linkSent = true);
-          },
-        ),
-      ),
-    );
   }
 
   @override
@@ -131,10 +115,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     Text(
                       _linkSent
                           ? 'We sent a password reset link to\n${_emailCtrl.text.trim()}\n\nClick the link to set your new password.'
-                          : 'Enter your email and we\'ll send\na verification code to confirm it\'s you.',
+                          : 'Enter your email and we\'ll send\na password reset link.',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 13),
+                      style: const TextStyle(color: Colors.white54, fontSize: 13),
                     ),
                     const SizedBox(height: 28),
 
@@ -163,7 +146,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           style: const TextStyle(color: Colors.white),
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _sendCode(),
+          onSubmitted: (_) => _sendResetLink(),
           decoration: AppTheme.inputDecoration(
             'Email address',
             icon: Icons.email_outlined,
@@ -179,7 +162,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         const SizedBox(height: 20),
 
         ElevatedButton(
-          onPressed: _isSending ? null : _sendCode,
+          onPressed: _isSending ? null : _sendResetLink,
           style: AppTheme.primaryButton(),
           child: _isSending
               ? const SizedBox(
@@ -188,7 +171,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: Colors.black),
                 )
-              : const Text('Send Verification Code'),
+              : const Text('Send Reset Link'),
         ),
       ],
     );
@@ -220,8 +203,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             onPressed: () => setState(() => _linkSent = false),
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.white,
-              side: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.3)),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(30)),
               padding: const EdgeInsets.symmetric(vertical: 14),
