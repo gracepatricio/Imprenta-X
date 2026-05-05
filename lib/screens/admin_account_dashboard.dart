@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
 import 'app_navbar.dart';
-import 'user_role_access_screen.dart';
+import 'admin_manage_users_screen.dart';
 import 'admin_manage_account.dart';
 
 class AdminAccountDashboard extends StatefulWidget {
@@ -169,7 +169,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
           ),
           const SizedBox(height: 8),
           _sidebarButton(
-            "User Role & Access",
+            "Manage Users",
             "roles",
             Icons.admin_panel_settings_rounded,
           ),
@@ -281,7 +281,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
           },
         );
       case "roles":
-        return const UserRoleAccessScreenEmbedded();
+        return const ManageUsersScreen();
       default:
         return const SizedBox.shrink();
     }

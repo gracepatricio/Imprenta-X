@@ -9,29 +9,25 @@ import 'screens/reset_password_screen.dart';
 import 'screens/customer_homepage.dart';
 import 'screens/employee_homepage.dart';
 import 'screens/admin_homepage.dart';
+import 'screens/change_password_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // On web, Firebase redirects the user back here after they click the reset
-  // link, appending ?mode=resetPassword&oobCode=XXX to the URL.
   String? resetOobCode;
   if (kIsWeb) {
-    final uri  = Uri.base;
+    final uri = Uri.base;
     final mode = uri.queryParameters['mode'];
     final code = uri.queryParameters['oobCode'];
     if (mode == 'resetPassword' && code != null && code.isNotEmpty) {
       resetOobCode = code;
     }
   }
-
   runApp(MyApp(resetOobCode: resetOobCode));
 }
 
 class _SmoothPageTransitionsBuilder extends PageTransitionsBuilder {
   const _SmoothPageTransitionsBuilder();
-
   @override
   Widget buildTransitions<T>(
     PageRoute<T> route,
@@ -72,25 +68,31 @@ class MyApp extends StatelessWidget {
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
             TargetPlatform.android: _SmoothPageTransitionsBuilder(),
-            TargetPlatform.iOS:     _SmoothPageTransitionsBuilder(),
+            TargetPlatform.iOS: _SmoothPageTransitionsBuilder(),
             TargetPlatform.windows: _SmoothPageTransitionsBuilder(),
-            TargetPlatform.macOS:   _SmoothPageTransitionsBuilder(),
-            TargetPlatform.linux:   _SmoothPageTransitionsBuilder(),
+            TargetPlatform.macOS: _SmoothPageTransitionsBuilder(),
+            TargetPlatform.linux: _SmoothPageTransitionsBuilder(),
           },
         ),
-        splashFactory:  NoSplash.splashFactory,
+        splashFactory: NoSplash.splashFactory,
         highlightColor: Colors.transparent,
       ),
       initialRoute: resetOobCode != null ? '/reset-password' : '/',
       routes: {
-        '/':                (context) => LoginScreen(),
-        '/register':        (context) => RegisterScreen(),
+        '/': (context) => LoginScreen(),
+        '/register': (context) => RegisterScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
-        '/reset-password':  (context) =>
+        '/reset-password': (context) =>
             ResetPasswordScreen(oobCode: resetOobCode ?? ''),
-        '/customer':        (context) => const CustomerHomepage(),
-        '/employee':        (context) => EmployeeHomepage(),
-        '/admin':           (context) => AdminHomepage(),
+        '/customer': (context) => const CustomerHomepage(),
+        '/employee': (context) => EmployeeHomepage(),
+        '/admin': (context) => AdminHomepage(),
+        '/change-password': (context) {
+          final args =
+              ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>;
+          return ChangePasswordScreen(role: args['role'] as String);
+        },
       },
     );
   }

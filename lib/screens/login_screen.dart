@@ -9,39 +9,87 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
+  final _identifierController = TextEditingController();
+  final _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
-  bool isLoading = false;
-  bool obscurePassword = true;
 
-  void handleLogin() async {
-    setState(() => isLoading = true);
-    String? result = await _authService.login(
-      emailController.text.trim(),
-      passwordController.text.trim(),
-    );
-    setState(() => isLoading = false);
+  bool _isLoading = false;
+  bool _obscurePassword = true;
 
-    if (result == "customer") {
-      Navigator.pushReplacementNamed(context, '/customer');
-    } else if (result == "employee") {
-      Navigator.pushReplacementNamed(context, '/employee');
-    } else if (result == "admin") {
-      if (!kIsWeb) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Admin access is only available on the web."),
-          ),
-        );
-        return;
-      }
-      Navigator.pushReplacementNamed(context, '/admin');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result ?? "Login failed")),
-      );
+  @override
+  void dispose() {
+    _identifierController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleLogin() async {
+    final identifier = _identifierController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (identifier.isEmpty || password.isEmpty) {
+      _snack('Please enter your Email / ID and password.');
+      return;
     }
+
+    setState(() => _isLoading = true);
+
+    String? result;
+    try {
+      result = await _authService.login(identifier, password);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _snack('Login failed: $e');
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result == null) {
+      _snack('Login failed. Please try again.');
+      return;
+    }
+
+    // must_change_password signal: "must_change_password:<role>"
+    if (result.startsWith('must_change_password:')) {
+      final role = result.split(':').last;
+      Navigator.pushReplacementNamed(
+        context,
+        '/change-password',
+        arguments: {'role': role},
+      );
+      return;
+    }
+
+    switch (result) {
+      case 'customer':
+        Navigator.pushReplacementNamed(context, '/customer');
+        break;
+
+      case 'employee':
+        Navigator.pushReplacementNamed(context, '/employee');
+        break;
+
+      case 'admin':
+        if (!kIsWeb) {
+          _snack('Admin access is only available on the web.');
+          await _authService.signOut();
+          return;
+        }
+        Navigator.pushReplacementNamed(context, '/admin');
+        break;
+
+      default:
+        // Any other string is an error message from AuthService
+        _snack(result);
+    }
+  }
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
@@ -76,16 +124,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
                               const Icon(
-                            Icons.local_print_shop,
-                            color: Colors.white,
-                            size: 18,
-                          ),
+                                Icons.local_print_shop,
+                                color: Colors.white,
+                                size: 18,
+                              ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 14),
                     const Text(
-                      "IMPRENTA INC.",
+                      'IMPRENTA INC.',
                       style: TextStyle(
                         color: AppTheme.gold,
                         fontWeight: FontWeight.bold,
@@ -95,7 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      "Sign in to your account",
+                      'Sign in to your account',
                       style: TextStyle(color: Colors.white54, fontSize: 13),
                     ),
 
@@ -109,36 +157,42 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Email
+                          // Identifier:
+                          //   Customer  → email or CUS-xxx
+                          //   Employee  → email or EMP-xxx
+                          //   Admin     → email or Firebase UID
                           TextField(
-                            controller: emailController,
+                            controller: _identifierController,
                             style: const TextStyle(color: Colors.white),
                             keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
                             decoration: AppTheme.inputDecoration(
-                              "Email",
-                              icon: Icons.email_outlined,
+                              'Email or ID',
+                              icon: Icons.person_outline,
                             ),
                           ),
                           const SizedBox(height: 14),
 
                           // Password
                           TextField(
-                            controller: passwordController,
-                            obscureText: obscurePassword,
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
                             style: const TextStyle(color: Colors.white),
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _handleLogin(),
                             decoration: AppTheme.inputDecoration(
-                              "Password",
+                              'Password',
                               icon: Icons.lock_outline,
                               suffixIcon: IconButton(
                                 icon: Icon(
-                                  obscurePassword
+                                  _obscurePassword
                                       ? Icons.visibility_off
                                       : Icons.visibility,
                                   color: Colors.white54,
                                   size: 18,
                                 ),
                                 onPressed: () => setState(
-                                  () => obscurePassword = !obscurePassword,
+                                  () => _obscurePassword = !_obscurePassword,
                                 ),
                               ),
                             ),
@@ -149,13 +203,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             alignment: Alignment.centerRight,
                             child: TextButton(
                               onPressed: () => Navigator.pushNamed(
-                                  context, '/forgot-password'),
+                                context,
+                                '/forgot-password',
+                              ),
                               style: TextButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
-                                    vertical: 4, horizontal: 0),
+                                  vertical: 4,
+                                  horizontal: 0,
+                                ),
                                 minimumSize: Size.zero,
-                                tapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               child: const Text(
                                 'Forgot password?',
@@ -166,13 +223,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
+
                           const SizedBox(height: 16),
 
                           // Login button
                           ElevatedButton(
-                            onPressed: isLoading ? null : handleLogin,
+                            onPressed: _isLoading ? null : _handleLogin,
                             style: AppTheme.primaryButton(),
-                            child: isLoading
+                            child: _isLoading
                                 ? const SizedBox(
                                     height: 18,
                                     width: 18,
@@ -181,12 +239,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                       color: Colors.black,
                                     ),
                                   )
-                                : const Text("Sign In"),
+                                : const Text('Sign In'),
                           ),
 
                           const SizedBox(height: 20),
 
-                          // Register link
+                          // Register link (customers only)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -199,10 +257,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(width: 6),
                               GestureDetector(
-                                onTap: () => Navigator.pushNamed(
-                                    context, '/register'),
+                                onTap: () =>
+                                    Navigator.pushNamed(context, '/register'),
                                 child: const Text(
-                                  "Register",
+                                  'Register',
                                   style: TextStyle(
                                     color: AppTheme.gold,
                                     fontWeight: FontWeight.bold,
