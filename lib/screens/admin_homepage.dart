@@ -45,15 +45,15 @@ class _AdminHomepageState extends State<AdminHomepage> {
         .doc(user.uid)
         .snapshots()
         .listen((snap) async {
-          final deleted =
-              !snap.exists || (snap.data() as Map?)?['is_deleted'] == true;
-          if (deleted && mounted) {
-            await FirebaseAuth.instance.signOut();
-            if (mounted) {
-              Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
-            }
-          }
-        }, onError: (_) {});
+      final deleted =
+          !snap.exists || (snap.data() as Map?)?['is_deleted'] == true;
+      if (deleted && mounted) {
+        await FirebaseAuth.instance.signOut();
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+        }
+      }
+    }, onError: (_) {});
   }
 
   @override

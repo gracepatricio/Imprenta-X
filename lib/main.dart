@@ -30,12 +30,12 @@ class _SmoothPageTransitionsBuilder extends PageTransitionsBuilder {
   const _SmoothPageTransitionsBuilder();
   @override
   Widget buildTransitions<T>(
-    PageRoute<T> route,
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
+      PageRoute<T> route,
+      BuildContext context,
+      Animation<double> animation,
+      Animation<double> secondaryAnimation,
+      Widget child,
+      ) {
     final curved = CurvedAnimation(
       parent: animation,
       curve: Curves.easeOutCubic,
@@ -89,8 +89,8 @@ class MyApp extends StatelessWidget {
         '/admin': (context) => AdminHomepage(),
         '/change-password': (context) {
           final args =
-              ModalRoute.of(context)!.settings.arguments
-                  as Map<String, dynamic>;
+          ModalRoute.of(context)!.settings.arguments
+          as Map<String, dynamic>;
           return ChangePasswordScreen(role: args['role'] as String);
         },
       },

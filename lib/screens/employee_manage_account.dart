@@ -131,9 +131,9 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
       });
       return;
     }
-    if (newPw.length < 6) {
+    if (newPw.length < 8) {
       setState(() {
-        _pwError   = 'New password must be at least 6 characters.';
+        _pwError   = 'New password must be at least 8 characters.';
         _pwMessage = null;
       });
       return;
@@ -284,12 +284,12 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
                 ),
                 child: _savingInfo
                     ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.black54))
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.black54))
                     : const Text('Save',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    style: TextStyle(fontWeight: FontWeight.w600)),
               ),
             ),
           ),
@@ -370,12 +370,12 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
                 ),
                 child: _savingPassword
                     ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.black54))
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.black54))
                     : const Text('Save',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    style: TextStyle(fontWeight: FontWeight.w600)),
               ),
             ),
           ),
@@ -423,7 +423,7 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30)),
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               ),
               child: const Text('Choose a Photo',
                   style: TextStyle(fontSize: 13)),
@@ -478,7 +478,7 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
                 ? Colors.white.withOpacity(0.08)
                 : Colors.white.withOpacity(0.15),
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
@@ -523,7 +523,7 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
             filled: true,
             fillColor: Colors.white.withOpacity(0.15),
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             suffixIcon: IconButton(
               onPressed: onToggle,
               icon: Icon(visible ? Icons.visibility : Icons.visibility_off,

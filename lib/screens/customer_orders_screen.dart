@@ -134,8 +134,8 @@ class _OrderList extends StatelessWidget {
 
     Query query = FirebaseFirestore.instance
         .collection('Orders')
-        .where('user_id', isEqualTo: uid)
-        .orderBy('date_created', descending: true);
+        .where('customer_uid', isEqualTo: uid)
+        .orderBy('created_at', descending: true);
 
     if (status != null) {
       query = query.where('status', isEqualTo: status);
@@ -232,59 +232,190 @@ class _OrderCard extends StatelessWidget {
     final status = order['status']?.toString() ?? 'pending';
     final color = _statusColor(status);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: AppTheme.glassCard(opacity: 0.15, radius: 16),
-      child: Row(
-        children: [
-          // Status icon
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha:0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(_statusIcon(status), color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
+    return GestureDetector(
+        onTap: () => _showOrderDetail(context),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(14),
+          decoration: AppTheme.glassCard(opacity: 0.15, radius: 16),
+          child: Row(
+            children: [
+              // Status icon
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha:0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(_statusIcon(status), color: color, size: 20),
+              ),
+              const SizedBox(width: 12),
 
-          // Order info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              // Order info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      order['order_id']?.toString() ?? docId,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      (() {
+                        final prods = order['products'];
+                        if (prods is List && prods.isNotEmpty) {
+                          return prods
+                              .map((p) => p['name']?.toString() ?? '')
+                              .where((n) => n.isNotEmpty)
+                              .join(', ');
+                        }
+                        return order['product_name']?.toString() ?? 'Order';
+                      })(),
+                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Status badge + arrow
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _StatusBadge(status: status),
+                  const SizedBox(height: 4),
+                  Icon(Icons.chevron_right, color: Colors.white30, size: 18),
+                ],
+              ),
+            ],
+          ),
+        ));
+  }
+
+  void _showOrderDetail(BuildContext context) {
+    final products = (order['products'] as List?) ?? [];
+    final status = order['status']?.toString() ?? 'pending';
+    final ts = order['created_at'] as dynamic;
+    String dateStr = '—';
+    if (ts != null) {
+      try {
+        final d = (ts as dynamic).toDate() as DateTime;
+        dateStr = '${d.month}/${d.day}/${d.year}';
+      } catch (_) {}
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1a1a2e),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.55,
+        maxChildSize: 0.9,
+        builder: (_, ctrl) => ListView(
+          controller: ctrl,
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
               children: [
-                Text(
-                  order['order_id']?.toString() ?? docId,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
+                Expanded(
+                  child: Text(
+                    order['order_id']?.toString() ?? docId,
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
-                const SizedBox(height: 2),
+                _StatusBadge(status: status),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text('Placed $dateStr', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+            const SizedBox(height: 16),
+            const Text('Items', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            ...products.map((p) {
+              final name = p['name']?.toString() ?? 'Item';
+              final qty = p['qty']?.toString() ?? '1';
+              final price = (p['price'] as num?)?.toStringAsFixed(2) ?? '—';
+              final size = p['size_label']?.toString();
+              final mat = p['material']?.toString();
+              final notes = p['notes']?.toString() ?? '';
+              final fileCount = (p['file_urls'] as List?)?.length ?? 0;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13))),
+                        Text('₱$price', style: const TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold, fontSize: 13)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      [
+                        'Qty: $qty',
+                        if (size != null) size,
+                        if (mat != null) mat,
+                      ].join(' · '),
+                      style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    ),
+                    if (notes.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text('Note: $notes', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                    ],
+                    if (fileCount > 0) ...[
+                      const SizedBox(height: 4),
+                      Text('$fileCount file${fileCount != 1 ? 's' : ''} attached',
+                          style: const TextStyle(color: Color(0xFFFFD700), fontSize: 11)),
+                    ],
+                  ],
+                ),
+              );
+            }).toList(),
+            const Divider(color: Colors.white12, height: 24),
+            Row(
+              children: [
+                const Expanded(child: Text('Total', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15))),
                 Text(
-                  order['product_name']?.toString() ?? 'Order',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  '₱${(order['total_price'] as num?)?.toStringAsFixed(2) ?? '—'}',
+                  style: const TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold, fontSize: 18),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-
-          // Status badge + arrow
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _StatusBadge(status: status),
-              const SizedBox(height: 4),
-              Icon(Icons.chevron_right, color: Colors.white30, size: 18),
-            ],
-          ),
-        ],
+            const SizedBox(height: 4),
+            const Text('50% downpayment required on pickup',
+                style: TextStyle(color: Colors.white38, fontSize: 11)),
+          ],
+        ),
       ),
     );
   }

@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
 import 'chat_screen.dart';
+import '../services/auth_service.dart';
+import '../services/auth_service.dart';
 
 class EmployeeAccountScreen extends StatefulWidget {
   const EmployeeAccountScreen({super.key});
@@ -99,11 +103,11 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                 ],
                 const SizedBox(height: 20),
                 ..._menus.map((m) => _SidebarBtn(
-                      label:    m.$2,
-                      icon:     m.$3,
-                      isActive: selectedMenu == m.$1,
-                      onTap:    () => setState(() => selectedMenu = m.$1),
-                    )),
+                  label:    m.$2,
+                  icon:     m.$3,
+                  isActive: selectedMenu == m.$1,
+                  onTap:    () => setState(() => selectedMenu = m.$1),
+                )),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
@@ -340,8 +344,8 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
               }).toList();
               final totalUnread = unreadDocs.fold<int>(
                   0,
-                  (sum, d) =>
-                      sum +
+                      (sum, d) =>
+                  sum +
                       (((d.data() as Map)['unread_employee'] as num?) ?? 0)
                           .toInt());
 
@@ -399,7 +403,7 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                       final customerName = d['customer_name']?.toString() ?? 'Customer';
                       final lastMsg      = d['last_message']?.toString() ?? '';
                       final unread =
-                          ((d['unread_employee'] as num?) ?? 0).toInt();
+                      ((d['unread_employee'] as num?) ?? 0).toInt();
                       return GestureDetector(
                         onTap: () => Navigator.push(
                           context,
@@ -415,7 +419,7 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(14),
                           decoration:
-                              AppTheme.glassCard(opacity: 0.12, radius: 12),
+                          AppTheme.glassCard(opacity: 0.12, radius: 12),
                           child: Row(
                             children: [
                               Container(
@@ -424,7 +428,7 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color:
-                                      AppTheme.gold.withValues(alpha: 0.15),
+                                  AppTheme.gold.withValues(alpha: 0.15),
                                 ),
                                 child: const Icon(Icons.person_outline,
                                     color: AppTheme.gold, size: 18),
@@ -433,7 +437,7 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  CrossAxisAlignment.start,
                                   children: [
                                     Text(customerName,
                                         style: const TextStyle(
@@ -533,7 +537,7 @@ class _SidebarBtn extends StatelessWidget {
                 : Colors.transparent,
             foregroundColor: isActive ? AppTheme.gold : Colors.white70,
             padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10)),
           ),
@@ -609,7 +613,7 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
                       SizedBox(height: 12),
                       Text('No customer messages yet',
                           style:
-                              TextStyle(color: Colors.white38, fontSize: 13)),
+                          TextStyle(color: Colors.white38, fontSize: 13)),
                     ],
                   ),
                 );
@@ -659,8 +663,8 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
                               color: AppTheme.gold.withValues(alpha: 0.15),
                               border: isSelected
                                   ? Border.all(
-                                      color: AppTheme.gold.withValues(alpha: 0.6),
-                                      width: 1.5)
+                                  color: AppTheme.gold.withValues(alpha: 0.6),
+                                  width: 1.5)
                                   : null,
                             ),
                             child: const Icon(Icons.person_outline,
@@ -739,27 +743,27 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
             Expanded(
               child: _selectedUid == null
                   ? const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.chat_bubble_outline,
-                              size: 40, color: Colors.white24),
-                          SizedBox(height: 10),
-                          Text('Select a conversation',
-                              style: TextStyle(
-                                  color: Colors.white38, fontSize: 13)),
-                        ],
-                      ),
-                    )
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.chat_bubble_outline,
+                        size: 40, color: Colors.white24),
+                    SizedBox(height: 10),
+                    Text('Select a conversation',
+                        style: TextStyle(
+                            color: Colors.white38, fontSize: 13)),
+                  ],
+                ),
+              )
                   : ChatScreen(
-                      key: ValueKey(_selectedUid),
-                      customerUid:  _selectedUid!,
-                      customerName: _selectedName,
-                      isEmployee:   true,
-                      embedded:     true,
-                      onClose: () =>
-                          setState(() => _selectedUid = null),
-                    ),
+                key: ValueKey(_selectedUid),
+                customerUid:  _selectedUid!,
+                customerName: _selectedName,
+                isEmployee:   true,
+                embedded:     true,
+                onClose: () =>
+                    setState(() => _selectedUid = null),
+              ),
             ),
           ],
         );
@@ -793,6 +797,18 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
   bool _loading = true;
   String? _infoMsg, _infoErr, _pwMsg, _pwErr;
 
+  // ── Email change ──────────────────────────────────────────────────────────
+  final AuthService _authService = AuthService();
+  final _newEmailCtrl      = TextEditingController();
+  final _emailPasswordCtrl = TextEditingController();
+  bool _changingEmail      = false;
+  bool _emailSending       = false;
+  bool _emailSent          = false;
+  bool _showEmailPw        = false;
+  bool _usedMigrationPath  = false; // true = secondary-app migration, false = verifyBeforeUpdateEmail
+  String? _emailErr;
+  Timer? _emailPollTimer;
+
   @override
   void initState() {
     super.initState();
@@ -803,9 +819,12 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
   void dispose() {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
+    _newEmailCtrl.dispose();
+    _emailPasswordCtrl.dispose();
     _curPwCtrl.dispose();
     _newPwCtrl.dispose();
     _confPwCtrl.dispose();
+    _emailPollTimer?.cancel();
     super.dispose();
   }
 
@@ -906,10 +925,93 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
           const SizedBox(height: 12),
           _field(label: 'Full Name', ctrl: _nameCtrl),
           const SizedBox(height: 10),
-          _field(label: 'Email', ctrl: _emailCtrl, readOnly: true),
-          const SizedBox(height: 4),
-          const Text('Email cannot be changed.',
-              style: TextStyle(color: Colors.white38, fontSize: 11)),
+
+          // ── Email (changeable) ──────────────────────────────────────────
+          if (!_changingEmail) ...[
+            Row(
+              children: [
+                Expanded(child: _field(label: 'Email', ctrl: _emailCtrl, readOnly: true)),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => setState(() {
+                    _changingEmail = true;
+                    _emailSent = false;
+                    _emailErr = null;
+                    _newEmailCtrl.clear();
+                  }),
+                  icon: const Icon(Icons.edit_outlined, size: 14, color: AppTheme.gold),
+                  label: const Text('Change', style: TextStyle(color: AppTheme.gold, fontSize: 12)),
+                ),
+              ],
+            ),
+          ] else if (!_emailSent) ...[
+            TextField(
+              controller: _newEmailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: AppTheme.inputDecoration('New email address', icon: Icons.email_outlined),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _emailPasswordCtrl,
+              obscureText: !_showEmailPw,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: AppTheme.inputDecoration(
+                'Current password',
+                icon: Icons.lock_outline,
+                suffixIcon: IconButton(
+                  icon: Icon(_showEmailPw ? Icons.visibility : Icons.visibility_off,
+                      color: Colors.white54, size: 18),
+                  onPressed: () => setState(() => _showEmailPw = !_showEmailPw),
+                ),
+              ),
+            ),
+            if (_emailErr != null) ...[
+              const SizedBox(height: 6),
+              _banner(_emailErr!, true),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => setState(() {
+                    _changingEmail = false;
+                    _emailErr = null;
+                    _newEmailCtrl.clear();
+                    _emailPasswordCtrl.clear();
+                  }),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _emailSending ? null : _sendEmailVerification,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.gold,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  ),
+                  child: _emailSending
+                      ? const SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54))
+                      : const Text('Send Verification', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                ),
+              ],
+            ),
+          ] else ...[
+            _banner('Verification email sent to ${_newEmailCtrl.text.trim()}.\nClick the link in your inbox to confirm — this screen will update automatically.', false),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const SizedBox(width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.gold)),
+                const SizedBox(width: 10),
+                const Text('Waiting for verification…', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              ],
+            ),
+          ],
+          // ── End email section ───────────────────────────────────────────
           if (_infoMsg != null) ...[const SizedBox(height: 8), _banner(_infoMsg!, false)],
           if (_infoErr != null) ...[const SizedBox(height: 8), _banner(_infoErr!, true)],
           const SizedBox(height: 12),
@@ -928,12 +1030,12 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
               ),
               child: _savingInfo
                   ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.black54))
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.black54))
                   : const Text('Save Name',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  style: TextStyle(fontWeight: FontWeight.w600)),
             ),
           ),
           const SizedBox(height: 24),
@@ -974,17 +1076,93 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
               ),
               child: _savingPw
                   ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.black54))
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.black54))
                   : const Text('Change Password',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  style: TextStyle(fontWeight: FontWeight.w600)),
             ),
           ),
         ],
       ),
     );
+  }
+
+  // ── Email change methods ──────────────────────────────────────────────────
+
+  Future<void> _sendEmailVerification() async {
+    final newEmail  = _newEmailCtrl.text.trim();
+    final password  = _emailPasswordCtrl.text;
+    if (newEmail.isEmpty || !newEmail.contains('@')) {
+      setState(() => _emailErr = 'Enter a valid email address.');
+      return;
+    }
+    if (password.isEmpty) {
+      setState(() => _emailErr = 'Enter your current password to confirm.');
+      return;
+    }
+    setState(() { _emailSending = true; _emailErr = null; });
+
+    final result = await _authService.addEmail(
+      newEmail,
+      currentPassword: password,
+    );
+
+    if (!mounted) return;
+    if (result == 'migration_sent' || result == 'verification_sent') {
+      setState(() {
+        _emailSending       = false;
+        _emailSent          = true;
+        _usedMigrationPath  = result == 'migration_sent';
+      });
+      _startEmailPolling(newEmail);
+    } else {
+      setState(() { _emailSending = false; _emailErr = result ?? 'Failed to send verification.'; });
+    }
+  }
+
+  void _startEmailPolling(String newEmail) {
+    _emailPollTimer?.cancel();
+    _emailPollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (!mounted) { _emailPollTimer?.cancel(); return; }
+      try {
+        final currentUid = FirebaseAuth.instance.currentUser?.uid;
+        if (currentUid == null) return;
+
+        if (_usedMigrationPath) {
+          // Secondary-app migration path: poll PendingEmailVerification.
+          final migratedEmail =
+          await _authService.checkAndFinalizeMigration(currentUid);
+          if (migratedEmail != null) {
+            _emailPollTimer?.cancel();
+            if (mounted) setState(() {
+              _changingEmail       = false;
+              _emailSent           = false;
+              _emailCtrl.text      = migratedEmail;
+              _newEmailCtrl.clear();
+              _emailPasswordCtrl.clear();
+            });
+          }
+        } else {
+          // verifyBeforeUpdateEmail path: Firebase Auth updates user.email
+          // once the link is clicked.
+          await FirebaseAuth.instance.currentUser?.reload();
+          final user = FirebaseAuth.instance.currentUser;
+          if (user?.email == newEmail) {
+            _emailPollTimer?.cancel();
+            await _authService.finalizeEmailUpdate(newEmail);
+            if (mounted) setState(() {
+              _changingEmail       = false;
+              _emailSent           = false;
+              _emailCtrl.text      = newEmail;
+              _newEmailCtrl.clear();
+              _emailPasswordCtrl.clear();
+            });
+          }
+        }
+      } catch (_) {}
+    });
   }
 
   Widget _section(String title) => Row(children: [
@@ -996,13 +1174,13 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
     const SizedBox(width: 12),
     Expanded(
         child:
-            Divider(color: Colors.white.withValues(alpha: 0.2))),
+        Divider(color: Colors.white.withValues(alpha: 0.2))),
   ]);
 
   Widget _field(
-          {required String label,
-          required TextEditingController ctrl,
-          bool readOnly = false}) =>
+      {required String label,
+        required TextEditingController ctrl,
+        bool readOnly = false}) =>
       TextField(
         controller: ctrl,
         readOnly: readOnly,
@@ -1013,10 +1191,10 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
       );
 
   Widget _pwField(
-          {required String label,
-          required TextEditingController ctrl,
-          required bool show,
-          required VoidCallback toggle}) =>
+      {required String label,
+        required TextEditingController ctrl,
+        required bool show,
+        required VoidCallback toggle}) =>
       TextField(
         controller: ctrl,
         obscureText: !show,
@@ -1045,7 +1223,7 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
               ? Icons.error_outline
               : Icons.check_circle_outline,
           color:
-              isError ? Colors.redAccent : Colors.greenAccent,
+          isError ? Colors.redAccent : Colors.greenAccent,
           size: 15),
       const SizedBox(width: 8),
       Expanded(

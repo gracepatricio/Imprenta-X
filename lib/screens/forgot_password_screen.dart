@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -22,6 +23,57 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
+  /// Resolves the typed email to the Firebase Auth email for that account.
+  /// - Customers: auth email == real email, return as-is.
+  /// - Employees/admins: auth email is a placeholder. After verifying their
+  ///   email, AuthIndex.placeholder_email is updated to the real email.
+  ///   Returns that real email so sendPasswordResetEmail works.
+  ///   Returns null + sets [_error] if the account hasn't verified yet.
+  Future<String?> _resolveAuthEmail(String typedEmail) async {
+    final firestore = FirebaseFirestore.instance;
+
+    // Look up the Firestore User doc by the real email field.
+    final snap = await firestore
+        .collection('User')
+        .where('email', isEqualTo: typedEmail)
+        .limit(1)
+        .get();
+
+    if (snap.docs.isEmpty) {
+      // Not found as a stored email — treat as a direct Firebase Auth email
+      // (customer who registered normally).
+      return typedEmail;
+    }
+
+    final role = (snap.docs.first.data()['user_role'] as String? ?? '');
+    if (role != 'employee' && role != 'admin') {
+      // Customer — Firebase Auth email IS the real email.
+      return typedEmail;
+    }
+
+    // Employee/admin: check AuthIndex to see if the auth email has been
+    // migrated from the placeholder to the real email yet.
+    final uid = snap.docs.first.id;
+    final indexDoc = await firestore.collection('AuthIndex').doc(uid).get();
+    final authEmail = indexDoc.data()?['placeholder_email'] as String?;
+
+    if (authEmail == null || authEmail.endsWith('@imprenta.internal')) {
+      // Not yet verified — placeholder still in AuthIndex.
+      setState(() {
+        _error =
+        'Your email hasn\'t been verified yet.\n'
+            'Please check your inbox for the verification link '
+            'that was sent when you set your email, then try again.\n\n'
+            'Alternatively, log in with your Employee ID and change '
+            'your password from your account settings.';
+      });
+      return null;
+    }
+
+    // AuthIndex has been updated to the real email — use it.
+    return authEmail;
+  }
+
   Future<void> _sendResetLink() async {
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
@@ -32,12 +84,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() { _isSending = true; _error = null; });
 
     try {
+      final authEmail = await _resolveAuthEmail(email);
+      if (authEmail == null) {
+        // _error already set inside _resolveAuthEmail.
+        setState(() => _isSending = false);
+        return;
+      }
+
       final continueUrl = kIsWeb
           ? Uri.base.origin + '/'
           : 'https://imprenta-x-system.web.app/';
 
       await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: email,
+        email: authEmail,
         actionCodeSettings: ActionCodeSettings(
           url: continueUrl,
           handleCodeInApp: true,
@@ -166,11 +225,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           style: AppTheme.primaryButton(),
           child: _isSending
               ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.black),
-                )
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: Colors.black),
+          )
               : const Text('Send Reset Link'),
         ),
       ],

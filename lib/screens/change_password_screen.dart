@@ -51,8 +51,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     }
     if (newPw == current) {
       setState(
-        () => _error =
-            'New password must be different from your temporary password.',
+            () => _error =
+        'New password must be different from your temporary password.',
       );
       return;
     }
@@ -72,10 +72,17 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     setState(() => _isSaving = false);
 
     if (result == 'success') {
-      // Navigate to the optional Add Email screen
+      // Navigate to the optional Add Email screen, passing the new password
+      // so addEmail() can create the migrated Firebase Auth account with the
+      // same password the user just set.
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => AddEmailScreen(role: widget.role)),
+        MaterialPageRoute(
+          builder: (_) => AddEmailScreen(
+            role: widget.role,
+            newPassword: newPw,
+          ),
+        ),
       );
     } else {
       setState(() => _error = result ?? 'Failed to change password.');
@@ -199,7 +206,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                                     size: 18,
                                   ),
                                   onPressed: () => setState(
-                                    () => _showCurrent = !_showCurrent,
+                                        () => _showCurrent = !_showCurrent,
                                   ),
                                 ),
                               ),
@@ -273,13 +280,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                               style: AppTheme.primaryButton(),
                               child: _isSaving
                                   ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.black,
-                                      ),
-                                    )
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.black,
+                                ),
+                              )
                                   : const Text('Set New Password'),
                             ),
                           ],

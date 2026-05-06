@@ -9,8 +9,11 @@ import 'app_theme.dart';
 /// The user can skip and add their email later from their profile.
 class AddEmailScreen extends StatefulWidget {
   final String role;
+  /// The new password the employee just set — passed to addEmail so the
+  /// migrated Firebase Auth account uses the same password.
+  final String newPassword;
 
-  const AddEmailScreen({super.key, required this.role});
+  const AddEmailScreen({super.key, required this.role, required this.newPassword});
 
   @override
   State<AddEmailScreen> createState() => _AddEmailScreenState();
@@ -23,6 +26,7 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
   bool _isSending = false;
   bool _verificationSent = false;
   bool _isPolling = false;
+  bool _usedMigrationPath = false;
   String? _error;
   Timer? _pollTimer;
 
@@ -49,33 +53,50 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
       _error = null;
     });
 
-    final result = await _authService.addEmail(email);
+    final result = await _authService.addEmail(
+      email,
+      currentPassword: widget.newPassword,
+    );
 
     if (!mounted) return;
     setState(() => _isSending = false);
 
-    if (result == 'verification_sent') {
-      setState(() => _verificationSent = true);
-      _startPolling();
+    if (result == 'migration_sent' || result == 'verification_sent') {
+      setState(() {
+        _verificationSent  = true;
+        _usedMigrationPath = result == 'migration_sent';
+      });
+      _startPolling(email);
     } else {
       setState(() => _error = result ?? 'Failed to send verification.');
     }
   }
 
-  void _startPolling() {
+  void _startPolling(String email) {
     _pollTimer?.cancel();
-    _isPolling = true;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      if (!mounted) return;
+      if (!mounted) { _pollTimer?.cancel(); return; }
       try {
-        await FirebaseAuth.instance.currentUser?.reload();
-        final user = FirebaseAuth.instance.currentUser;
-        // Check if email was updated (verifyBeforeUpdateEmail updates on confirm)
-        final email = _emailCtrl.text.trim();
-        if (user?.email == email) {
-          _pollTimer?.cancel();
-          await _authService.finalizeEmailUpdate(email);
-          if (mounted) _navigateHome();
+        if (_usedMigrationPath) {
+          // Secondary-app migration path.
+          final currentUid = FirebaseAuth.instance.currentUser?.uid ?? uid;
+          final migratedEmail =
+          await _authService.checkAndFinalizeMigration(currentUid);
+          if (migratedEmail != null) {
+            _pollTimer?.cancel();
+            if (mounted) _navigateHome();
+          }
+        } else {
+          // verifyBeforeUpdateEmail path — Firebase Auth updates user.email.
+          await FirebaseAuth.instance.currentUser?.reload();
+          final user = FirebaseAuth.instance.currentUser;
+          if (user?.email == email) {
+            _pollTimer?.cancel();
+            await _authService.finalizeEmailUpdate(email);
+            if (mounted) _navigateHome();
+          }
         }
       } catch (_) {}
     });
@@ -222,13 +243,13 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
           style: AppTheme.primaryButton(),
           child: _isSending
               ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.black,
-                  ),
-                )
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.black,
+            ),
+          )
               : const Text('Send Verification Email'),
         ),
       ],
@@ -255,8 +276,8 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
         const SizedBox(height: 8),
         Text(
           'We sent a link to ${_emailCtrl.text.trim()}.\n'
-          'Click the link to confirm your email.\n\n'
-          'This screen will advance automatically.',
+              'Click the link to confirm your email.\n\n'
+              'This screen will advance automatically.',
           textAlign: TextAlign.center,
           style: const TextStyle(color: Colors.white54, fontSize: 12),
         ),
