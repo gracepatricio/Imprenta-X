@@ -12,3 +12,17 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Flutter temporary files
+/build/
+/.dart_tool/
+
+# DO NOT ignore the whole /windows/ folder.
+# Only ignore these specific generated parts:
+/windows/flutter/
+/windows/CMakeLists.txt.user
+
+# Keep these deleted for everyone
+/linux/
+/macos/
+/ios/

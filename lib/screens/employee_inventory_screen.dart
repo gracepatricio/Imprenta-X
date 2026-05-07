@@ -220,7 +220,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                   controller: qtyCtrl,
                   autofocus: true,
                   keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                   decoration: AppTheme.inputDecoration('e.g. 2 or 0.5',
                       icon: Icons.add_circle_outline),
@@ -257,27 +257,27 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
               onPressed: saving
                   ? null
                   : () async {
-                      final qty = double.tryParse(qtyCtrl.text.trim());
-                      if (qty == null || qty <= 0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Enter a valid quantity > 0'),
-                            backgroundColor: Colors.orange,
-                          ),
-                        );
-                        return;
-                      }
-                      setDlg(() => saving = true);
-                      await _commitReplenish(
-                          docId, material, qty, method, ctx);
-                    },
+                final qty = double.tryParse(qtyCtrl.text.trim());
+                if (qty == null || qty <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Enter a valid quantity > 0'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+                setDlg(() => saving = true);
+                await _commitReplenish(
+                    docId, material, qty, method, ctx);
+              },
               style: AppTheme.primaryButton(),
               child: saving
                   ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.black))
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.black))
                   : const Text('Confirm'),
             ),
           ],
@@ -287,12 +287,12 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
   }
 
   Future<void> _commitReplenish(
-    String docId,
-    Map<String, dynamic> material,
-    double qty,
-    String method,
-    BuildContext dialogCtx,
-  ) async {
+      String docId,
+      Map<String, dynamic> material,
+      double qty,
+      String method,
+      BuildContext dialogCtx,
+      ) async {
     final materialId = material['material_id']?.toString() ?? docId;
     final materialName = material['material_name']?.toString() ?? '';
     double previousStock = 0;
@@ -302,7 +302,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
     try {
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final ref =
-            FirebaseFirestore.instance.collection('RawMaterials').doc(docId);
+        FirebaseFirestore.instance.collection('RawMaterials').doc(docId);
         final snap = await tx.get(ref);
         previousStock = ((snap.data()?['current_stock'] as num?) ?? 0).toDouble();
         newStock = previousStock + qty;
@@ -315,7 +315,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
         });
 
         final logRef =
-            FirebaseFirestore.instance.collection('InventoryLogs').doc();
+        FirebaseFirestore.instance.collection('InventoryLogs').doc();
         tx.set(logRef, {
           'material_id': materialId,
           'material_name': materialName,
@@ -359,7 +359,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
         final data = doc.data();
         final bom = (data['bill_of_materials'] as List?) ?? [];
         final usesMaterial = bom.any((item) =>
-            (item as Map)['material_id']?.toString() == materialId);
+        (item as Map)['material_id']?.toString() == materialId);
         if (!usesMaterial) continue;
 
         bool available = true;
@@ -441,30 +441,32 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                   TextFormField(
                     controller: idCtrl,
                     style:
-                        const TextStyle(color: Colors.white, fontSize: 14),
+                    const TextStyle(color: Colors.white, fontSize: 14),
                     decoration: AppTheme.inputDecoration('Material ID',
                         icon: Icons.tag),
                     validator: (v) =>
-                        v?.trim().isEmpty == true ? 'Required' : null,
+                    v?.trim().isEmpty == true ? 'Required' : null,
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: nameCtrl,
                     style:
-                        const TextStyle(color: Colors.white, fontSize: 14),
+                    const TextStyle(color: Colors.white, fontSize: 14),
                     decoration: AppTheme.inputDecoration('Material Name',
                         icon: Icons.inventory_2_outlined),
                     validator: (v) =>
-                        v?.trim().isEmpty == true ? 'Required' : null,
+                    v?.trim().isEmpty == true ? 'Required' : null,
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: unitCtrl,
                     style:
-                        const TextStyle(color: Colors.white, fontSize: 14),
+                    const TextStyle(color: Colors.white, fontSize: 14),
                     decoration: AppTheme.inputDecoration(
                         'Unit (e.g. 1 roll, 4x8ft sheet)',
                         icon: Icons.straighten),
+                    validator: (v) =>
+                    v?.trim().isEmpty == true ? 'Required' : null,
                   ),
                   const SizedBox(height: 10),
                   Row(
@@ -473,12 +475,12 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                         child: TextFormField(
                           controller: restockCtrl,
                           keyboardType:
-                              const TextInputType.numberWithOptions(
-                                  decimal: true),
+                          const TextInputType.numberWithOptions(
+                              decimal: true),
                           style: const TextStyle(
                               color: Colors.white, fontSize: 14),
                           decoration:
-                              AppTheme.inputDecoration('Restock at'),
+                          AppTheme.inputDecoration('Restock at'),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -486,12 +488,12 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                         child: TextFormField(
                           controller: stockCtrl,
                           keyboardType:
-                              const TextInputType.numberWithOptions(
-                                  decimal: true),
+                          const TextInputType.numberWithOptions(
+                              decimal: true),
                           style: const TextStyle(
                               color: Colors.white, fontSize: 14),
                           decoration:
-                              AppTheme.inputDecoration('Initial stock'),
+                          AppTheme.inputDecoration('Initial stock'),
                         ),
                       ),
                     ],
@@ -510,46 +512,46 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
               onPressed: saving
                   ? null
                   : () async {
-                      if (!(formKey.currentState?.validate() ?? false))
-                        return;
-                      setDlg(() => saving = true);
-                      final messenger = ScaffoldMessenger.of(context);
-                      try {
-                        final id = idCtrl.text.trim();
-                        await FirebaseFirestore.instance
-                            .collection('RawMaterials')
-                            .doc(id)
-                            .set({
-                          'material_id': id,
-                          'material_name': nameCtrl.text.trim(),
-                          'unit_description': unitCtrl.text.trim(),
-                          'restock_level':
-                              double.tryParse(restockCtrl.text) ?? 5.0,
-                          'current_stock':
-                              double.tryParse(stockCtrl.text) ?? 0.0,
-                          'last_updated': null,
-                          'last_updated_by': '',
-                          'last_updated_by_uid': '',
-                        });
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        messenger.showSnackBar(SnackBar(
-                          content: Text('$id added to inventory'),
-                          backgroundColor: const Color(0xFF4CAF50),
-                        ));
-                      } catch (e) {
-                        messenger.showSnackBar(SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: Colors.red));
-                        setDlg(() => saving = false);
-                      }
-                    },
+                if (!(formKey.currentState?.validate() ?? false))
+                  return;
+                setDlg(() => saving = true);
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  final id = idCtrl.text.trim();
+                  await FirebaseFirestore.instance
+                      .collection('RawMaterials')
+                      .doc(id)
+                      .set({
+                    'material_id': id,
+                    'material_name': nameCtrl.text.trim(),
+                    'unit_description': unitCtrl.text.trim(),
+                    'restock_level':
+                    double.tryParse(restockCtrl.text) ?? 5.0,
+                    'current_stock':
+                    double.tryParse(stockCtrl.text) ?? 0.0,
+                    'last_updated': null,
+                    'last_updated_by': '',
+                    'last_updated_by_uid': '',
+                  });
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  messenger.showSnackBar(SnackBar(
+                    content: Text('$id added to inventory'),
+                    backgroundColor: const Color(0xFF4CAF50),
+                  ));
+                } catch (e) {
+                  messenger.showSnackBar(SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red));
+                  setDlg(() => saving = false);
+                }
+              },
               style: AppTheme.primaryButton(),
               child: saving
                   ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.black))
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.black))
                   : const Text('Add'),
             ),
           ],
@@ -609,7 +611,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                 SizedBox(height: 16),
                 Text('No inventory data',
                     style:
-                        TextStyle(color: Colors.white60, fontSize: 16, fontWeight: FontWeight.bold)),
+                    TextStyle(color: Colors.white60, fontSize: 16, fontWeight: FontWeight.bold)),
                 SizedBox(height: 8),
                 Text('Ask the admin to seed the initial materials',
                     style: TextStyle(color: Colors.white38, fontSize: 13)),
@@ -668,27 +670,27 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                       // Wide: full button; narrow: icon-only to prevent overflow
                       isWide
                           ? ElevatedButton.icon(
-                              onPressed: () => _showAddMaterialDialog(
-                                  context, materials),
-                              icon: const Icon(Icons.add, size: 15),
-                              label: const Text('Add Material',
-                                  style: TextStyle(fontSize: 13)),
-                              style: AppTheme.primaryButton(),
-                            )
+                        onPressed: () => _showAddMaterialDialog(
+                            context, materials),
+                        icon: const Icon(Icons.add, size: 15),
+                        label: const Text('Add Material',
+                            style: TextStyle(fontSize: 13)),
+                        style: AppTheme.primaryButton(),
+                      )
                           : ElevatedButton(
-                              onPressed: () => _showAddMaterialDialog(
-                                  context, materials),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.gold,
-                                foregroundColor: Colors.black,
-                                elevation: 0,
-                                minimumSize: const Size(40, 40),
-                                padding: EdgeInsets.zero,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20)),
-                              ),
-                              child: const Icon(Icons.add, size: 22),
-                            ),
+                        onPressed: () => _showAddMaterialDialog(
+                            context, materials),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.gold,
+                          foregroundColor: Colors.black,
+                          elevation: 0,
+                          minimumSize: const Size(40, 40),
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20)),
+                        ),
+                        child: const Icon(Icons.add, size: 22),
+                      ),
                     ],
                   ),
                 ),
@@ -724,7 +726,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                             onPressed: _openCameraScanner,
                             style: ElevatedButton.styleFrom(
                               backgroundColor:
-                                  Colors.white.withValues(alpha: 0.12),
+                              Colors.white.withValues(alpha: 0.12),
                               foregroundColor: Colors.white,
                               elevation: 0,
                               padding: const EdgeInsets.symmetric(
@@ -750,13 +752,13 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                         horizontal: isWide ? 24 : 16),
                     children: _statuses
                         .map((s) => _SummaryCard(
-                              status: s,
-                              count: counts[s] ?? 0,
-                              color: _statusColor(s),
-                              isActive: _statusFilter == s,
-                              onTap: () => setState(() => _statusFilter =
-                                  _statusFilter == s ? null : s),
-                            ))
+                      status: s,
+                      count: counts[s] ?? 0,
+                      color: _statusColor(s),
+                      isActive: _statusFilter == s,
+                      onTap: () => setState(() => _statusFilter =
+                      _statusFilter == s ? null : s),
+                    ))
                         .toList(),
                   ),
                 ),
@@ -776,12 +778,12 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                           onTap: () =>
                               setState(() => _statusFilter = null)),
                       ..._statuses.map((s) => _StatusChip(
-                            label: s,
-                            color: _statusColor(s),
-                            isActive: _statusFilter == s,
-                            onTap: () => setState(() => _statusFilter =
-                                _statusFilter == s ? null : s),
-                          )),
+                        label: s,
+                        color: _statusColor(s),
+                        isActive: _statusFilter == s,
+                        onTap: () => setState(() => _statusFilter =
+                        _statusFilter == s ? null : s),
+                      )),
                     ],
                   ),
                 ),
@@ -798,37 +800,37 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                 Expanded(
                   child: filtered.isEmpty
                       ? Center(
-                          child: Text(
-                            'No materials with status "$_statusFilter"',
-                            style: const TextStyle(
-                                color: Colors.white38, fontSize: 13),
-                          ),
-                        )
+                    child: Text(
+                      'No materials with status "$_statusFilter"',
+                      style: const TextStyle(
+                          color: Colors.white38, fontSize: 13),
+                    ),
+                  )
                       : ListView.builder(
-                          padding: EdgeInsets.fromLTRB(
-                              isWide ? 24 : 16, 0, isWide ? 24 : 16, 20),
-                          itemCount: filtered.length,
-                          itemBuilder: (_, i) {
-                            final m = filtered[i];
-                            return isWide
-                                ? _InventoryTableRow(
-                                    data: m,
-                                    statusColor: _statusColor(
-                                        m['_status'] as String),
-                                    onEdit: () => _showReplenishDialog(
-                                        m['doc_id'] as String, m,
-                                        method: 'manual'),
-                                  )
-                                : _InventoryCard(
-                                    data: m,
-                                    statusColor: _statusColor(
-                                        m['_status'] as String),
-                                    onEdit: () => _showReplenishDialog(
-                                        m['doc_id'] as String, m,
-                                        method: 'manual'),
-                                  );
-                          },
-                        ),
+                    padding: EdgeInsets.fromLTRB(
+                        isWide ? 24 : 16, 0, isWide ? 24 : 16, 20),
+                    itemCount: filtered.length,
+                    itemBuilder: (_, i) {
+                      final m = filtered[i];
+                      return isWide
+                          ? _InventoryTableRow(
+                        data: m,
+                        statusColor: _statusColor(
+                            m['_status'] as String),
+                        onEdit: () => _showReplenishDialog(
+                            m['doc_id'] as String, m,
+                            method: 'manual'),
+                      )
+                          : _InventoryCard(
+                        data: m,
+                        statusColor: _statusColor(
+                            m['_status'] as String),
+                        onEdit: () => _showReplenishDialog(
+                            m['doc_id'] as String, m,
+                            method: 'manual'),
+                      );
+                    },
+                  ),
                 ),
               ],
             );
@@ -898,7 +900,7 @@ class _QrScannerPageState extends State<_QrScannerPage> {
                       const SizedBox(height: 16),
                       Text(
                         error.errorCode ==
-                                MobileScannerErrorCode.permissionDenied
+                            MobileScannerErrorCode.permissionDenied
                             ? 'Camera permission denied.\nGo to Settings → Apps → Imprentax → Permissions.'
                             : 'Camera unavailable: ${error.errorDetails?.message ?? error.errorCode.name}',
                         textAlign: TextAlign.center,
@@ -964,10 +966,10 @@ class _SummaryCard extends StatelessWidget {
 
   const _SummaryCard(
       {required this.status,
-      required this.count,
-      required this.color,
-      required this.isActive,
-      required this.onTap});
+        required this.count,
+        required this.color,
+        required this.isActive,
+        required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1010,9 +1012,9 @@ class _StatusChip extends StatelessWidget {
 
   const _StatusChip(
       {required this.label,
-      required this.isActive,
-      this.color,
-      required this.onTap});
+        required this.isActive,
+        this.color,
+        required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1037,7 +1039,7 @@ class _StatusChip extends StatelessWidget {
                 color: isActive ? c : Colors.white60,
                 fontSize: 11,
                 fontWeight:
-                    isActive ? FontWeight.bold : FontWeight.normal)),
+                isActive ? FontWeight.bold : FontWeight.normal)),
       ),
     );
   }
@@ -1079,8 +1081,8 @@ class _InventoryTableRow extends StatelessWidget {
 
   const _InventoryTableRow(
       {required this.data,
-      required this.statusColor,
-      required this.onEdit});
+        required this.statusColor,
+        required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -1137,7 +1139,7 @@ class _InventoryTableRow extends StatelessWidget {
               width: 80,
               child: Text(fmt(restock),
                   style:
-                      const TextStyle(color: Colors.white54, fontSize: 12),
+                  const TextStyle(color: Colors.white54, fontSize: 12),
                   textAlign: TextAlign.center)),
           SizedBox(
             width: 96,
@@ -1152,7 +1154,7 @@ class _InventoryTableRow extends StatelessWidget {
               style: TextButton.styleFrom(
                 foregroundColor: AppTheme.gold,
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               ),
               child: const Text('Edit', style: TextStyle(fontSize: 12)),
             ),
@@ -1170,8 +1172,8 @@ class _InventoryCard extends StatelessWidget {
 
   const _InventoryCard(
       {required this.data,
-      required this.statusColor,
-      required this.onEdit});
+        required this.statusColor,
+        required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -1239,7 +1241,7 @@ class _InventoryCard extends StatelessWidget {
               foregroundColor: AppTheme.gold,
               elevation: 0,
               padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                   side: BorderSide(
@@ -1286,7 +1288,7 @@ class _StockInfo extends StatelessWidget {
       children: [
         Text(label,
             style:
-                const TextStyle(color: Colors.white38, fontSize: 10)),
+            const TextStyle(color: Colors.white38, fontSize: 10)),
         Text(value,
             style: const TextStyle(
                 color: AppTheme.gold,

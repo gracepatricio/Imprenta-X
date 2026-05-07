@@ -45,7 +45,7 @@ class _AdminProductManagementScreenState
                           fontWeight: FontWeight.bold)),
                   Text('Manage catalog, pricing, and availability',
                       style:
-                          TextStyle(color: Colors.white54, fontSize: 12)),
+                      TextStyle(color: Colors.white54, fontSize: 12)),
                 ],
               ),
             ),
@@ -70,11 +70,11 @@ class _AdminProductManagementScreenState
                   isActive: _categoryFilter == null,
                   onTap: () => setState(() => _categoryFilter = null)),
               ..._categories.map((c) => _Chip(
-                    label: c,
-                    isActive: _categoryFilter == c,
-                    onTap: () => setState(() =>
-                        _categoryFilter = _categoryFilter == c ? null : c),
-                  )),
+                label: c,
+                isActive: _categoryFilter == c,
+                onTap: () => setState(() =>
+                _categoryFilter = _categoryFilter == c ? null : c),
+              )),
             ],
           ),
         ),
@@ -85,17 +85,17 @@ class _AdminProductManagementScreenState
           child: StreamBuilder<QuerySnapshot>(
             stream: _categoryFilter != null
                 ? FirebaseFirestore.instance
-                    .collection('Products')
-                    .where('category', isEqualTo: _categoryFilter)
-                    .snapshots()
+                .collection('Products')
+                .where('category', isEqualTo: _categoryFilter)
+                .snapshots()
                 : FirebaseFirestore.instance
-                    .collection('Products')
-                    .snapshots(),
+                .collection('Products')
+                .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
                     child:
-                        CircularProgressIndicator(color: Colors.white));
+                    CircularProgressIndicator(color: Colors.white));
               }
               final docs = snapshot.data?.docs ?? [];
               if (docs.isEmpty) {
@@ -122,7 +122,7 @@ class _AdminProductManagementScreenState
                 itemCount: docs.length,
                 itemBuilder: (_, i) {
                   final data =
-                      docs[i].data() as Map<String, dynamic>;
+                  docs[i].data() as Map<String, dynamic>;
                   return _ProductTile(
                     data: data,
                     docId: docs[i].id,
@@ -208,9 +208,9 @@ class _ProductTile extends StatelessWidget {
 
   const _ProductTile(
       {required this.data,
-      required this.docId,
-      required this.onEdit,
-      required this.onDelete});
+        required this.docId,
+        required this.onEdit,
+        required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -244,13 +244,13 @@ class _ProductTile extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: imageUrl.isNotEmpty
                 ? Image.network(imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(
-                        Icons.image_outlined,
-                        color: Colors.white24,
-                        size: 22))
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(
+                    Icons.image_outlined,
+                    color: Colors.white24,
+                    size: 22))
                 : const Icon(Icons.image_outlined,
-                    color: Colors.white24, size: 22),
+                color: Colors.white24, size: 22),
           ),
           const SizedBox(width: 10),
 
@@ -295,7 +295,7 @@ class _ProductTile extends StatelessWidget {
                         border: Border.all(
                             color: isAvailable
                                 ? const Color(0xFF4CAF50)
-                                    .withValues(alpha: 0.5)
+                                .withValues(alpha: 0.5)
                                 : Colors.red.withValues(alpha: 0.5)),
                       ),
                       child: Text(
@@ -416,9 +416,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       setState(() {
         _allMaterials = snap.docs
             .map((d) => {
-                  'id': d.id,
-                  ...d.data(),
-                })
+          'id': d.id,
+          ...d.data(),
+        })
             .toList();
         _materialsLoaded = true;
       });
@@ -451,15 +451,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please select a category'),
-            backgroundColor: Colors.orange),
-      );
-      return;
-    }
-
     setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
@@ -587,16 +578,16 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                               clipBehavior: Clip.antiAlias,
                               child: _pickedImageBytes != null
                                   ? Image.memory(_pickedImageBytes!,
-                                      fit: BoxFit.cover)
+                                  fit: BoxFit.cover)
                                   : _imageUrl.isNotEmpty
-                                      ? Image.network(_imageUrl,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
-                                              const Icon(Icons.image_outlined,
-                                                  color: Colors.white24,
-                                                  size: 28))
-                                      : const Icon(Icons.add_photo_alternate,
-                                          color: Colors.white38, size: 32),
+                                  ? Image.network(_imageUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                  const Icon(Icons.image_outlined,
+                                      color: Colors.white24,
+                                      size: 28))
+                                  : const Icon(Icons.add_photo_alternate,
+                                  color: Colors.white38, size: 32),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -612,14 +603,14 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                     style: TextStyle(fontSize: 12)),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor:
-                                      Colors.white.withValues(alpha: 0.12),
+                                  Colors.white.withValues(alpha: 0.12),
                                   foregroundColor: Colors.white,
                                   elevation: 0,
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 14, vertical: 8),
                                   shape: RoundedRectangleBorder(
                                       borderRadius:
-                                          BorderRadius.circular(20)),
+                                      BorderRadius.circular(20)),
                                 ),
                               ),
                               if (_pickedImageBytes != null ||
@@ -651,9 +642,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                         style: const TextStyle(
                             color: Colors.white, fontSize: 14),
                         decoration:
-                            AppTheme.inputDecoration('e.g. Tarpaulin'),
+                        AppTheme.inputDecoration('e.g. Tarpaulin'),
                         validator: (v) =>
-                            v?.trim().isEmpty == true ? 'Required' : null,
+                        v?.trim().isEmpty == true ? 'Required' : null,
                       ),
                       const SizedBox(height: 12),
 
@@ -664,7 +655,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                         value: _selectedCategory,
                         items: widget.categories
                             .map((c) => DropdownMenuItem(
-                                value: c, child: Text(c)))
+                            value: c, child: Text(c)))
                             .toList(),
                         onChanged: (v) =>
                             setState(() => _selectedCategory = v),
@@ -672,7 +663,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                         style: const TextStyle(
                             color: Colors.white, fontSize: 14),
                         decoration:
-                            AppTheme.inputDecoration('Select category'),
+                        AppTheme.inputDecoration('Select category'),
+                        validator: (v) =>
+                        v == null ? 'Please select a category' : null,
                       ),
                       const SizedBox(height: 12),
 
@@ -685,7 +678,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                         style: const TextStyle(
                             color: Colors.white, fontSize: 14),
                         decoration:
-                            AppTheme.inputDecoration('Brief description'),
+                        AppTheme.inputDecoration('Brief description'),
                       ),
                       const SizedBox(height: 12),
 
@@ -696,20 +689,25 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           Expanded(
                             child: Column(
                               crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              CrossAxisAlignment.start,
                               children: [
                                 _sectionLabel('Price (₱)'),
                                 const SizedBox(height: 6),
                                 TextFormField(
                                   controller: _priceCtrl,
                                   keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                          decimal: true),
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
                                   style: const TextStyle(
                                       color: Colors.white, fontSize: 14),
                                   decoration: AppTheme.inputDecoration(
                                       'e.g. 25',
                                       icon: Icons.currency_exchange),
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty) return 'Required';
+                                    if (double.tryParse(v.trim()) == null) return 'Enter a valid number';
+                                    return null;
+                                  },
                                 ),
                               ],
                             ),
@@ -718,7 +716,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           Expanded(
                             child: Column(
                               crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              CrossAxisAlignment.start,
                               children: [
                                 _sectionLabel('Pricing Unit'),
                                 const SizedBox(height: 6),
@@ -728,6 +726,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                       color: Colors.white, fontSize: 14),
                                   decoration: AppTheme.inputDecoration(
                                       'per sqft / piece / fixed'),
+                                  validator: (v) =>
+                                  v?.trim().isEmpty == true ? 'Required' : null,
                                 ),
                               ],
                             ),
@@ -743,18 +743,18 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           Expanded(
                             child: Column(
                               crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              CrossAxisAlignment.start,
                               children: [
                                 _sectionLabel('Min. Quantity'),
                                 const SizedBox(height: 6),
                                 TextFormField(
                                   controller: _minQtyCtrl,
                                   keyboardType:
-                                      TextInputType.number,
+                                  TextInputType.number,
                                   style: const TextStyle(
                                       color: Colors.white, fontSize: 14),
                                   decoration:
-                                      AppTheme.inputDecoration('1'),
+                                  AppTheme.inputDecoration('1'),
                                 ),
                               ],
                             ),
@@ -763,7 +763,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           Expanded(
                             child: Column(
                               crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              CrossAxisAlignment.start,
                               children: [
                                 _sectionLabel('Unit of Measurement'),
                                 const SizedBox(height: 6),
@@ -772,8 +772,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                   style: const TextStyle(
                                       color: Colors.white, fontSize: 14),
                                   decoration:
-                                      AppTheme.inputDecoration(
-                                          'pcs / sqft / roll'),
+                                  AppTheme.inputDecoration(
+                                      'pcs / sqft / roll'),
                                 ),
                               ],
                             ),
@@ -792,7 +792,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
                               color:
-                                  Colors.white.withValues(alpha: 0.12)),
+                              Colors.white.withValues(alpha: 0.12)),
                         ),
                         child: Column(
                           children: [
@@ -801,7 +801,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    CrossAxisAlignment.start,
                                     children: [
                                       const Text('Manual override',
                                           style: TextStyle(
@@ -818,9 +818,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                 Switch(
                                   value: _availabilityOverride != null,
                                   onChanged: (v) => setState(() =>
-                                      _availabilityOverride = v
-                                          ? _isAvailable
-                                          : null),
+                                  _availabilityOverride = v
+                                      ? _isAvailable
+                                      : null),
                                   activeThumbColor: AppTheme.gold,
                                 ),
                               ],
@@ -838,9 +838,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                   ),
                                   Switch(
                                     value:
-                                        _availabilityOverride == true,
+                                    _availabilityOverride == true,
                                     onChanged: (v) => setState(() =>
-                                        _availabilityOverride = v),
+                                    _availabilityOverride = v),
                                     activeThumbColor: const Color(0xFF4CAF50),
                                   ),
                                 ],
@@ -958,14 +958,14 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                   color: Colors.white38, fontSize: 11)),
                         ),
                       ..._bom.asMap().entries.map((e) => _BomEditRow(
-                            key: ValueKey('bom_${e.key}'),
-                            item: e.value,
-                            allMaterials: _allMaterials,
-                            onChanged: (updated) =>
-                                setState(() => _bom[e.key] = updated),
-                            onRemove: () =>
-                                setState(() => _bom.removeAt(e.key)),
-                          )),
+                        key: ValueKey('bom_${e.key}'),
+                        item: e.value,
+                        allMaterials: _allMaterials,
+                        onChanged: (updated) =>
+                            setState(() => _bom[e.key] = updated),
+                        onRemove: () =>
+                            setState(() => _bom.removeAt(e.key)),
+                      )),
                       const SizedBox(height: 16),
 
                       // Bulk Pricing
@@ -1002,13 +1002,13 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           .asMap()
                           .entries
                           .map((e) => _BulkPricingRow(
-                                item: e.value,
-                                index: e.key,
-                                onChanged: (updated) => setState(
-                                    () => _bulkPricing[e.key] = updated),
-                                onRemove: () => setState(
-                                    () => _bulkPricing.removeAt(e.key)),
-                              )),
+                        item: e.value,
+                        index: e.key,
+                        onChanged: (updated) => setState(
+                                () => _bulkPricing[e.key] = updated),
+                        onRemove: () => setState(
+                                () => _bulkPricing.removeAt(e.key)),
+                      )),
                     ],
                   ),
                 ),
@@ -1023,7 +1023,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                 children: [
                   TextButton(
                     onPressed:
-                        _saving ? null : () => Navigator.pop(context),
+                    _saving ? null : () => Navigator.pop(context),
                     child: const Text('Cancel',
                         style: TextStyle(color: Colors.white54)),
                   ),
@@ -1033,13 +1033,13 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                     style: AppTheme.primaryButton(),
                     child: _saving
                         ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.black))
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.black))
                         : Text(widget.existing != null
-                            ? 'Save Changes'
-                            : 'Create Product'),
+                        ? 'Save Changes'
+                        : 'Create Product'),
                   ),
                 ],
               ),
@@ -1107,7 +1107,7 @@ class _BomEditRowState extends State<_BomEditRow> {
     // If stored ID not found in list, default to first material
     if (widget.allMaterials.isNotEmpty &&
         !widget.allMaterials.any((m) =>
-            (m['material_id'] ?? m['id'])?.toString() == _materialId)) {
+        (m['material_id'] ?? m['id'])?.toString() == _materialId)) {
       final first = widget.allMaterials.first;
       _materialId =
           (first['material_id'] ?? first['id'])?.toString() ?? '';
@@ -1140,7 +1140,7 @@ class _BomEditRowState extends State<_BomEditRow> {
             const Expanded(
                 child: Text('Loading materials…',
                     style:
-                        TextStyle(color: Colors.white38, fontSize: 12))),
+                    TextStyle(color: Colors.white38, fontSize: 12))),
             IconButton(
               icon: Icon(Icons.remove_circle_outline,
                   color: Colors.red.shade400, size: 16),
@@ -1153,7 +1153,7 @@ class _BomEditRowState extends State<_BomEditRow> {
     }
 
     final valueExists = widget.allMaterials.any((m) =>
-        (m['material_id'] ?? m['id'])?.toString() == _materialId);
+    (m['material_id'] ?? m['id'])?.toString() == _materialId);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1212,9 +1212,9 @@ class _BomEditRowState extends State<_BomEditRow> {
                     onChanged: (id) {
                       if (id == null) return;
                       final mat = widget.allMaterials.firstWhere(
-                          (m) =>
-                              (m['material_id'] ?? m['id'])
-                                  ?.toString() ==
+                              (m) =>
+                          (m['material_id'] ?? m['id'])
+                              ?.toString() ==
                               id);
                       setState(() {
                         _materialId = id;
@@ -1259,7 +1259,7 @@ class _BomEditRowState extends State<_BomEditRow> {
             onPressed: widget.onRemove,
             padding: const EdgeInsets.only(bottom: 2),
             constraints:
-                const BoxConstraints(minWidth: 36, minHeight: 40),
+            const BoxConstraints(minWidth: 36, minHeight: 40),
           ),
         ],
       ),
@@ -1277,9 +1277,9 @@ class _BulkPricingRow extends StatefulWidget {
 
   const _BulkPricingRow(
       {required this.item,
-      required this.index,
-      required this.onChanged,
-      required this.onRemove});
+        required this.index,
+        required this.onChanged,
+        required this.onRemove});
 
   @override
   State<_BulkPricingRow> createState() => _BulkPricingRowState();
