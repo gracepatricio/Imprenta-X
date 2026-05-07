@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // OTP codes — unauthenticated read/write for pre-login flows.
+    match /email_otps/{email} {
+      allow read, write: if true;
+    }
+
+    // Deletion flags — public read/write.
+    // Only stores {status: "deleted"/"reclaiming"} — no personal data.
+    // Public write is needed so unauthenticated registration can set 'reclaiming'.
+    match /email_index/{email} {
+      allow read, write: if true;
+    }
+
+    // Users — authenticated access only.
+    match /User/{userId} {
+      allow get: if request.auth != null &&
+                    (request.auth.uid == userId ||
+                     get(/databases/$(database)/documents/User/$(request.auth.uid)).data.user_role == 'admin');
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Counters — authenticated users only.
+    match /Counters/{counterId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Everything else requires authentication.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

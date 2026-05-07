@@ -1,0 +1,17 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Required for Flutter hot-reload and debugging -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <application>
+        <!--
+            Disable Impeller (Flutter's new renderer) for debug/emulator builds.
+            Impeller requires real OpenGL ES 3.1+ hardware; emulators use software
+            GL emulation which crashes with PopupMenuButton and other overlay widgets.
+            Production release builds (without this flag) will use Impeller normally.
+        -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
+    </application>
+</manifest>
