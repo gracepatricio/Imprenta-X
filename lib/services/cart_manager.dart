@@ -1,7 +1,6 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CartFile {
   final String name;
@@ -39,22 +38,17 @@ class CartItem {
   });
 
   bool get hasSizeInput => widthFt != null && heightFt != null;
-  String get sizeLabel  => hasSizeInput ? '${widthFt}ft × ${heightFt}ft' : '';
+  String get sizeLabel  => hasSizeInput ? '${widthFt}ft x ${heightFt}ft' : '';
 
   double get subtotal {
     if (hasSizeInput) return unitPrice * widthFt! * heightFt! * quantity;
     return unitPrice * quantity;
   }
 
-  // ── Turnaround ─────────────────────────────────────────────────────────────
-
-  // Returns turnaround in fractional days (0.5 = same day / half-day).
   double get estimatedDaysExact {
     final cat = category.toLowerCase();
     double d;
-
     if (cat.contains('calling card')) {
-      // Batch cards — very fast
       if (quantity <= 100) d = 0.5;
       else if (quantity <= 500) d = 1.0;
       else d = (quantity / 500).ceilToDouble().clamp(2.0, 7.0);
@@ -64,11 +58,10 @@ class CartItem {
       else d = (quantity / 200).ceilToDouble().clamp(2.0, 5.0);
     } else if (cat.contains('large format')) {
       final area = hasSizeInput ? widthFt! * heightFt! : 4.0;
-      if (area <= 6)       d = 0.5;   // e.g. 2×3 ft — same day
-      else if (area <= 15) d = 1.0;   // medium banner
-      else if (area <= 30) d = 1.5;   // large banner
-      else                 d = 2.0;   // very large / multiple panels
-      // Scale for quantity — each additional piece adds proportional time
+      if (area <= 6)       d = 0.5;
+      else if (area <= 15) d = 1.0;
+      else if (area <= 30) d = 1.5;
+      else                 d = 2.0;
       if (quantity > 1) d = (d * quantity).clamp(d, 14.0);
     } else if (cat.contains('invitation')) {
       if (quantity <= 50)  d = 1.0;
@@ -79,25 +72,20 @@ class CartItem {
     } else {
       d = 1.0;
     }
-
     return d.clamp(0.5, 21.0);
   }
 
-  // Integer days for Firestore / queue scheduling (minimum 1).
   int get estimatedDays => estimatedDaysExact.ceil().clamp(1, 21);
 
-  // Human-readable label, allows sub-day display.
   String get estimatedDaysLabel {
     final d = estimatedDaysExact;
     if (d <= 0.5) return 'Same day';
     if (d <  1.0) return '< 1 day';
     if (d == 1.0) return '~1 day';
-    if (d <= 1.5) return '~1–2 days';
+    if (d <= 1.5) return '~1-2 days';
     if (d <= 2.0) return '~2 days';
     return '~${d.ceil()} days';
   }
-
-  // ── JSON (no files — files can't be persisted in local storage) ───────────
 
   Map<String, dynamic> toJson() => {
     'productId':   productId,
@@ -124,45 +112,41 @@ class CartItem {
     widthFt:     j['widthFt']  != null ? (j['widthFt']  as num).toDouble() : null,
     heightFt:    j['heightFt'] != null ? (j['heightFt'] as num).toDouble() : null,
     material:    j['material'] as String?,
-    files:       [], // files are not persisted; user must re-attach
+    files:       [],
     notes:       j['notes'] as String,
   );
 }
 
 // ── CartManager ───────────────────────────────────────────────────────────────
+//
+// Uses Firestore (Carts/{uid}) instead of SharedPreferences.
+// Survives app reinstalls, cache clears, and device switches.
 
 class CartManager {
-  static const _kKey = 'imprenta_cart_v1';
-
   static final List<CartItem> _items = [];
   static final ValueNotifier<int> count = ValueNotifier(0);
-
-  // Cached after loadSaved() — avoids async getInstance() on every write.
-  // On Flutter web, SharedPreferences.setString() writes to window.localStorage
-  // synchronously once the instance is cached, so the write survives a page
-  // refresh even if the returned Future is never awaited.
-  static SharedPreferences? _prefs;
+  static String? _uid;
 
   static List<CartItem> get items => List.unmodifiable(_items);
 
   static void add(CartItem item) {
     _items.add(item);
     count.value = _items.length;
-    _persistNow();
+    _scheduleSave();
   }
 
   static void removeAt(int index) {
     if (index < 0 || index >= _items.length) return;
     _items.removeAt(index);
     count.value = _items.length;
-    _persistNow();
+    _scheduleSave();
   }
 
   static void updateAt(int index, CartItem item) {
     if (index < 0 || index >= _items.length) return;
     _items[index] = item;
     count.value = _items.length;
-    _persistNow();
+    _scheduleSave();
   }
 
   static void removeIndices(List<int> indices) {
@@ -171,47 +155,74 @@ class CartManager {
       if (i >= 0 && i < _items.length) _items.removeAt(i);
     }
     count.value = _items.length;
-    _persistNow();
+    _scheduleSave();
   }
 
   static void clear() {
     _items.clear();
     count.value = 0;
-    _persistNow();
+    _scheduleSave();
   }
 
-  // ── Persistence ───────────────────────────────────────────────────────────
-
-  static void _persistNow() {
-    final encoded = jsonEncode(_items.map((i) => i.toJson()).toList());
-    final p = _prefs;
-    if (p != null) {
-      // Fast path: cached instance → on web this writes to localStorage
-      // synchronously before the returned Future even resolves.
-      p.setString(_kKey, encoded);
-    } else {
-      // Prefs not ready yet (add called before loadSaved completed).
-      SharedPreferences.getInstance().then((prefs) {
-        _prefs = prefs;
-        prefs.setString(_kKey, encoded);
-      });
-    }
-  }
-
-  /// Call once at app startup (after Firebase init) to restore saved cart.
-  static Future<void> loadSaved() async {
+  /// Call after successful login to restore the user's cart from Firestore.
+  static Future<void> loadForUser(String uid) async {
+    _uid = uid;
+    _items.clear();
+    count.value = 0;
     try {
-      _prefs = await SharedPreferences.getInstance();
-      final raw = _prefs!.getString(_kKey);
-      if (raw == null || raw.isEmpty) return;
-      final list = (jsonDecode(raw) as List)
-          .map((e) => e as Map<String, dynamic>)
-          .toList();
-      _items.clear();
-      _items.addAll(list.map(CartItem.fromJson));
+      final doc = await FirebaseFirestore.instance
+          .collection('Carts')
+          .doc(uid)
+          .get();
+      if (!doc.exists) return;
+      final raw = doc.data()?['items'];
+      if (raw == null || raw is! List) return;
+      _items.addAll(
+        (raw as List)
+            .whereType<Map<String, dynamic>>()
+            .map(CartItem.fromJson),
+      );
       count.value = _items.length;
     } catch (e) {
-      debugPrint('CartManager.loadSaved: $e');
+      debugPrint('CartManager.loadForUser: $e');
     }
   }
+
+  /// Call on sign-out to wipe in-memory state.
+  static void unloadUser() {
+    _uid = null;
+    _items.clear();
+    count.value = 0;
+    _saveScheduled = false;
+  }
+
+  // ── Debounced Firestore write ──────────────────────────────────────────────
+
+  static bool _saveScheduled = false;
+
+  static void _scheduleSave() {
+    if (_uid == null) return;
+    if (_saveScheduled) return;
+    _saveScheduled = true;
+    Future.delayed(const Duration(milliseconds: 300), _flushSave);
+  }
+
+  static Future<void> _flushSave() async {
+    _saveScheduled = false;
+    final uid = _uid;
+    if (uid == null) return;
+    final payload = _items.map((i) => i.toJson()).toList();
+    try {
+      await FirebaseFirestore.instance
+          .collection('Carts')
+          .doc(uid)
+          .set({'items': payload});
+    } catch (e) {
+      debugPrint('CartManager._flushSave: $e');
+    }
+  }
+
+  // Kept so main.dart compiles without changes — does nothing now.
+  @Deprecated('Use loadForUser(uid) after login.')
+  static Future<void> loadSaved() async {}
 }

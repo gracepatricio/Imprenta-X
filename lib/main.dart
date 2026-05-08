@@ -15,7 +15,11 @@ import 'screens/change_password_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await CartManager.loadSaved();
+
+  // Initialize SharedPreferences cache only — do NOT load any cart yet.
+  // The cart is loaded per-user inside AuthService.login() after the user
+  // successfully authenticates, so we never mix up carts between accounts.
+
   String? resetOobCode;
   if (kIsWeb) {
     final uri = Uri.base;
