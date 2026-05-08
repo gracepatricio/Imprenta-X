@@ -5,7 +5,15 @@ import 'app_theme.dart';
 
 class CustomerOrderScreen extends StatefulWidget {
   final Map<String, dynamic> product;
-  const CustomerOrderScreen({super.key, required this.product});
+  final CartItem? initialItem; // non-null when editing an existing cart item
+  final int?      editIndex;   // index in CartManager.items to replace
+
+  const CustomerOrderScreen({
+    super.key,
+    required this.product,
+    this.initialItem,
+    this.editIndex,
+  });
 
   @override
   State<CustomerOrderScreen> createState() => _CustomerOrderScreenState();
@@ -77,11 +85,82 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
 
+  // ── Turnaround computation ────────────────────────────────────────────────────
+
+  double get _turnaroundExact {
+    final cat = _category.toLowerCase();
+    double d;
+
+    if (cat.contains('calling card')) {
+      if (_quantity <= 100) d = 0.5;
+      else if (_quantity <= 500) d = 1.0;
+      else d = (_quantity / 500).ceilToDouble().clamp(2.0, 7.0);
+    } else if (cat.contains('sticker') || cat.contains('photo')) {
+      if (_quantity <= 50)  d = 0.5;
+      else if (_quantity <= 200) d = 1.0;
+      else d = (_quantity / 200).ceilToDouble().clamp(2.0, 5.0);
+    } else if (cat.contains('large format')) {
+      final area = _needsSizeInput ? _widthFt * _heightFt : 4.0;
+      if (area <= 6)       d = 0.5;
+      else if (area <= 15) d = 1.0;
+      else if (area <= 30) d = 1.5;
+      else                 d = 2.0;
+      if (_quantity > 1) d = (d * _quantity).clamp(d, 14.0);
+    } else if (cat.contains('invitation')) {
+      d = _quantity <= 50 ? 1.0 : (_quantity <= 200 ? 2.0 : 3.0);
+    } else if (cat.contains('menu') || cat.contains('board')) {
+      d = _quantity.toDouble().clamp(1.0, 3.0);
+    } else {
+      d = 1.0;
+    }
+
+    return d.clamp(0.5, 21.0);
+  }
+
+  String get _turnaroundLabel {
+    final d = _turnaroundExact;
+    if (d <= 0.5) return 'Same day';
+    if (d <  1.0) return '< 1 day';
+    if (d == 1.0) return '~1 day';
+    if (d <= 1.5) return '~1–2 days';
+    if (d <= 2.0) return '~2 days';
+    return '~${d.ceil()} days';
+  }
+
   @override
   void initState() {
     super.initState();
-    _quantity = _minQty;
-    if (_materialList.isNotEmpty) _material = _materialList.first;
+
+    final edit = widget.initialItem;
+    if (edit != null) {
+      // Pre-populate from existing cart item
+      _quantity = edit.quantity;
+      _material = edit.material;
+      _notesCtrl.text = edit.notes;
+      _files.addAll(edit.files);
+
+      if (edit.widthFt != null) {
+        _widthFt = edit.widthFt!;
+        _widthCtrl.text = edit.widthFt!.toStringAsFixed(
+            edit.widthFt! % 1 == 0 ? 0 : 1);
+      }
+      if (edit.heightFt != null) {
+        _heightFt = edit.heightFt!;
+        _heightCtrl.text = edit.heightFt!.toStringAsFixed(
+            edit.heightFt! % 1 == 0 ? 0 : 1);
+      }
+      // Match size preset
+      if (edit.widthFt != null && edit.heightFt != null) {
+        final match = _presetDims.entries.firstWhere(
+          (e) => e.value.$1 == edit.widthFt && e.value.$2 == edit.heightFt,
+          orElse: () => const MapEntry('Custom', (0.0, 0.0)),
+        );
+        _sizePreset = match.key;
+      }
+    } else {
+      _quantity = _minQty;
+      if (_materialList.isNotEmpty) _material = _materialList.first;
+    }
   }
 
   @override
@@ -127,10 +206,25 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     } catch (_) {}
   }
 
-  // ── Add to cart ───────────────────────────────────────────────────────────────
+  // ── Add / Update cart ────────────────────────────────────────────────────────
+
+  // For Large Format Printing, enforce minimum 2×3 ft (either orientation).
+  bool get _sizeIsValid {
+    if (!_needsSizeInput) return true;
+    if (!_category.toLowerCase().contains('large format')) return true;
+    // Valid if one side ≥ 3 and the other ≥ 2
+    return ((_widthFt >= 3 && _heightFt >= 2) ||
+            (_widthFt >= 2 && _heightFt >= 3));
+  }
 
   void _addToCart() {
-    // Validate required fields
+    if (_needsSizeInput && !_sizeIsValid) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Minimum tarpaulin size is 2×3 ft (or 3×2 ft).'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
     if (_materialList.isNotEmpty && _material == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Please select a material / finish.'),
@@ -145,7 +239,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
       ));
       return;
     }
-    CartManager.add(CartItem(
+    final item = CartItem(
       productId:   widget.product['product_id']?.toString() ?? '',
       productName: _productName,
       category:    _category,
@@ -158,11 +252,19 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
       material:    _material,
       files:       List.from(_files),
       notes:       _notesCtrl.text.trim(),
-    ));
+    );
+
+    final isEdit = widget.editIndex != null;
+    if (isEdit) {
+      CartManager.updateAt(widget.editIndex!, item);
+    } else {
+      CartManager.add(item);
+    }
+
     final messenger = ScaffoldMessenger.of(context);
     Navigator.pop(context);
     messenger.showSnackBar(SnackBar(
-      content: Text('$_productName added to cart!'),
+      content: Text(isEdit ? '$_productName updated in cart!' : '$_productName added to cart!'),
       backgroundColor: Colors.green.shade700,
       duration: const Duration(seconds: 2),
     ));
@@ -367,6 +469,21 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
               })),
             ],
           ),
+          if (_needsSizeInput &&
+              _category.toLowerCase().contains('large format') &&
+              !_sizeIsValid) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.info_outline, color: Colors.orangeAccent, size: 13),
+                const SizedBox(width: 6),
+                const Text(
+                  'Minimum size is 2×3 ft',
+                  style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
         ],
 
@@ -524,7 +641,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
         _sumRow('Qty', '$_quantity'),
         if (_material != null) _sumRow('Material', _material!),
         _sumRow('Shipping', 'Pick-Up'),
-        _sumRow('Turnaround', '2-3 days'),
+        _sumRow('Turnaround', _turnaroundLabel),
         const Divider(color: Colors.white12, height: 16),
         Row(
           children: [
@@ -576,10 +693,14 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     width: double.infinity,
     child: ElevatedButton.icon(
       onPressed: _addToCart,
-      icon: const Icon(Icons.shopping_cart_outlined, size: 18),
-      label: const Text('Add to Cart',
-          style:
-          TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      icon: Icon(
+        widget.editIndex != null ? Icons.check_rounded : Icons.shopping_cart_outlined,
+        size: 18,
+      ),
+      label: Text(
+        widget.editIndex != null ? 'Update Cart Item' : 'Add to Cart',
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+      ),
       style: AppTheme.primaryButton(),
     ),
   );

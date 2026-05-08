@@ -171,10 +171,12 @@ class _EmployeeOrderChatScreenState extends State<EmployeeOrderChatScreen> {
                         final d    = docs[i].data() as Map<String, dynamic>;
                         final text = d['text']?.toString() ?? '';
                         final role = d['sender_role']?.toString() ?? '';
-                        final isMe = role == 'employee';
                         final ts   = d['timestamp'] as Timestamp?;
                         final time = ts != null ? _fmt(ts.toDate()) : '';
-                        return _Bubble(text: text, isMe: isMe, time: time);
+                        if (role == 'system') {
+                          return _SystemBubble(text: text, time: time);
+                        }
+                        return _Bubble(text: text, isMe: role == 'employee', time: time);
                       },
                     );
                   },
@@ -258,6 +260,47 @@ class _EmployeeOrderChatScreenState extends State<EmployeeOrderChatScreen> {
     final m = dt.minute.toString().padLeft(2, '0');
     return '$h:$m';
   }
+}
+
+// ── System notification bubble ────────────────────────────────────────────────
+
+class _SystemBubble extends StatelessWidget {
+  final String text, time;
+  const _SystemBubble({required this.text, required this.time});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 320),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.gold.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.gold.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.info_outline, color: AppTheme.gold, size: 13),
+                const SizedBox(width: 5),
+                const Text('System', style: TextStyle(color: AppTheme.gold, fontSize: 11, fontWeight: FontWeight.w600)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(text,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            const SizedBox(height: 4),
+            Text(time, style: const TextStyle(color: Colors.white30, fontSize: 10)),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 // ── Chat bubble ───────────────────────────────────────────────────────────────

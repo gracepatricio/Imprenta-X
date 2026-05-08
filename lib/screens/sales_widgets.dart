@@ -4,26 +4,53 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
 
-class SalesRecordTable extends StatelessWidget {
+// ── Sales Record Table ────────────────────────────────────────────────────────
+
+class SalesRecordTable extends StatefulWidget {
   const SalesRecordTable({super.key});
 
-  String _formatDate(Timestamp? ts) {
+  @override
+  State<SalesRecordTable> createState() => _SalesRecordTableState();
+}
+
+class _SalesRecordTableState extends State<SalesRecordTable> {
+  String _typeFilter = 'all'; // all | downpayment | balance | cash
+
+  String _fmt(Timestamp? ts) {
     if (ts == null) return '—';
     final d = ts.toDate().toLocal();
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.day.toString().padLeft(2, '0')}, ${d.year}';
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return '${mo[d.month-1]} ${d.day.toString().padLeft(2,'0')}, ${d.year}';
   }
 
-  String _formatAmount(num? amount) {
-    if (amount == null) return '—';
-    return 'P${amount.toStringAsFixed(2)}';
+  String _typeLabel(String? t) {
+    switch (t) {
+      case 'downpayment': return 'Downpayment';
+      case 'balance':     return 'Balance';
+      case 'cash':        return 'Cash';
+      default:            return t ?? '—';
+    }
   }
 
-  String _truncate(String value) =>
-      value.length > 8 ? '${value.substring(0, 8)}…' : value;
+  Color _typeColor(String? t) {
+    switch (t) {
+      case 'downpayment': return Colors.blueAccent;
+      case 'balance':     return AppTheme.gold;
+      case 'cash':        return Colors.green;
+      default:            return Colors.white54;
+    }
+  }
+
+  String _methodLabel(String? m) {
+    switch (m) {
+      case 'gcash':   return 'GCash';
+      case 'card':    return 'Card';
+      case 'maya':    return 'Maya';
+      case 'cash':    return 'Cash';
+      case 'online':  return 'Online';
+      default:        return m ?? '—';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,165 +62,227 @@ class SalesRecordTable extends StatelessWidget {
       stream: query.snapshots(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.white38),
-          );
+          return const Center(child: CircularProgressIndicator(color: Colors.white38));
         }
         if (snap.hasError) {
           return Center(
-            child: Text(
-              'Error: ${snap.error}',
-              style: const TextStyle(color: Colors.redAccent),
-            ),
+            child: Text('Error: ${snap.error}',
+                style: const TextStyle(color: Colors.redAccent)),
           );
         }
 
-        final docs = snap.data?.docs ?? [];
+        final allDocs = snap.data?.docs ?? [];
+        final docs = _typeFilter == 'all'
+            ? allDocs
+            : allDocs.where((d) =>
+                (d.data() as Map)['payment_type']?.toString() == _typeFilter).toList();
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      width: 1,
-                    ),
+        // Summary row
+        final totalCollected = allDocs.fold<double>(
+            0, (s, d) => s + ((d.data() as Map)['sale_amount'] as num? ?? 0).toDouble());
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Summary banner
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Row(
+                children: [
+                  _SummaryChip(
+                    label: 'Total Collected',
+                    value: '₱${totalCollected.toStringAsFixed(2)}',
+                    color: AppTheme.gold,
                   ),
-                ),
-                child: const Row(
+                  const SizedBox(width: 10),
+                  _SummaryChip(
+                    label: 'Records',
+                    value: '${allDocs.length}',
+                    color: Colors.white70,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Filter chips
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
                   children: [
-                    Expanded(flex: 2, child: _HeaderCell('Sales ID')),
-                    Expanded(flex: 2, child: _HeaderCell('Order ID')),
-                    Expanded(flex: 2, child: _HeaderCell('Payment ID')),
-                    Expanded(flex: 2, child: _HeaderCell('Sale Date')),
-                    Expanded(flex: 2, child: _HeaderCell('Sale Amount')),
+                    _FilterChip('All', 'all', _typeFilter,
+                        (v) => setState(() => _typeFilter = v)),
+                    _FilterChip('Downpayment', 'downpayment', _typeFilter,
+                        (v) => setState(() => _typeFilter = v)),
+                    _FilterChip('Balance', 'balance', _typeFilter,
+                        (v) => setState(() => _typeFilter = v)),
+                    _FilterChip('Cash', 'cash', _typeFilter,
+                        (v) => setState(() => _typeFilter = v)),
                   ],
                 ),
               ),
+            ),
 
-              if (docs.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Icon(Icons.receipt_long_outlined,
-                            size: 40, color: Colors.white24),
-                        SizedBox(height: 12),
-                        Text(
-                          'No sales records found.',
-                          style: TextStyle(
-                              color: Colors.white38, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
+            // Table header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                  top:    BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+              ),
+              child: const Row(
+                children: [
+                  Expanded(flex: 3, child: _H('Order')),
+                  Expanded(flex: 3, child: _H('Customer')),
+                  Expanded(flex: 2, child: _H('Type')),
+                  Expanded(flex: 2, child: _H('Method')),
+                  Expanded(flex: 2, child: _H('Amount')),
+                  Expanded(flex: 3, child: _H('Date')),
+                ],
+              ),
+            ),
 
-              else
-                ...docs.map((doc) {
-                  final d = doc.data() as Map<String, dynamic>;
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.07),
-                          width: 1,
-                        ),
+            // Rows
+            Expanded(
+              child: docs.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.receipt_long_outlined, size: 40, color: Colors.white24),
+                          SizedBox(height: 12),
+                          Text('No sales records yet',
+                              style: TextStyle(color: Colors.white38, fontSize: 13)),
+                        ],
                       ),
+                    )
+                  : ListView.separated(
+                      padding: EdgeInsets.zero,
+                      itemCount: docs.length,
+                      separatorBuilder: (_, __) =>
+                          Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+                      itemBuilder: (_, i) {
+                        final d       = docs[i].data() as Map<String, dynamic>;
+                        final type    = d['payment_type']?.toString();
+                        final method  = d['payment_method']?.toString();
+                        final amount  = (d['sale_amount'] as num?)?.toDouble() ?? 0;
+                        final orderId = d['order_id']?.toString() ?? '—';
+                        final custName = d['customer_name']?.toString() ?? '—';
+                        final date    = _fmt(d['sale_date'] as Timestamp?);
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                          child: Row(
+                            children: [
+                              Expanded(flex: 3, child: Text(
+                                orderId.length > 10 ? orderId.substring(0, 10) : orderId,
+                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                              )),
+                              Expanded(flex: 3, child: Text(
+                                custName.length > 12 ? '${custName.substring(0, 10)}…' : custName,
+                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              )),
+                              Expanded(flex: 2, child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: _typeColor(type).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(_typeLabel(type),
+                                    style: TextStyle(color: _typeColor(type), fontSize: 10,
+                                        fontWeight: FontWeight.w600)),
+                              )),
+                              Expanded(flex: 2, child: Text(_methodLabel(method),
+                                  style: const TextStyle(color: Colors.white54, fontSize: 11))),
+                              Expanded(flex: 2, child: Text('₱${amount.toStringAsFixed(2)}',
+                                  style: const TextStyle(color: AppTheme.gold, fontSize: 13,
+                                      fontWeight: FontWeight.w600))),
+                              Expanded(flex: 3, child: Text(date,
+                                  style: const TextStyle(color: Colors.white54, fontSize: 11))),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            _truncate(doc.id),
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 12),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            _truncate(
-                                (d['order_id'] ?? '—').toString()),
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 13),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            _truncate(
-                                (d['payment_id'] ?? '—').toString()),
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 13),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            _formatDate(d['sale_date'] as Timestamp?),
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 13),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            _formatAmount(d['sale_amount'] as num?),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-            ],
-          ),
+            ),
+          ],
         );
       },
     );
   }
 }
 
-class _HeaderCell extends StatelessWidget {
-  final String text;
-  const _HeaderCell(this.text);
+class _SummaryChip extends StatelessWidget {
+  final String label, value;
+  final Color color;
+  const _SummaryChip({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: color.withValues(alpha: 0.25)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 10)),
+        Text(value,  style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold)),
+      ],
+    ),
+  );
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label, value, active;
+  final ValueChanged<String> onTap;
+  const _FilterChip(this.label, this.value, this.active, this.onTap);
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w600,
-        fontSize: 13,
+    final sel = value == active;
+    return GestureDetector(
+      onTap: () => onTap(value),
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: sel ? AppTheme.gold.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: sel ? AppTheme.gold.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                color: sel ? AppTheme.gold : Colors.white54,
+                fontSize: 11,
+                fontWeight: sel ? FontWeight.bold : FontWeight.normal)),
       ),
     );
   }
 }
 
+class _H extends StatelessWidget {
+  final String text;
+  const _H(this.text);
+
+  @override
+  Widget build(BuildContext context) => Text(text,
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12));
+}
+
+// ── Sales Report ──────────────────────────────────────────────────────────────
+
 class SalesReportView extends StatelessWidget {
   const SalesReportView({super.key});
 
   static String _shortMonth(int m) {
-    const names = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
+    const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return names[m - 1];
   }
 
@@ -202,46 +291,46 @@ class SalesReportView extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('Sales_Records')
+          .orderBy('sale_date', descending: false)
           .snapshots(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.white38),
-          );
+          return const Center(child: CircularProgressIndicator(color: Colors.white38));
         }
         if (snap.hasError) {
-          return Center(
-            child: Text(
-              'Error: ${snap.error}',
-              style: const TextStyle(color: Colors.redAccent),
-            ),
-          );
+          return Center(child: Text('Error: ${snap.error}',
+              style: const TextStyle(color: Colors.redAccent)));
         }
 
         final docs = snap.data?.docs ?? [];
 
-        double totalSales = 0;
-        final totalOrders = docs.length;
+        double totalRevenue    = 0;
+        double downpaymentTotal = 0;
+        double balanceTotal     = 0;
+        final  orderIds         = <String>{};
 
         final now = DateTime.now();
         final monthBuckets = List.generate(6, (i) {
           final m = DateTime(now.year, now.month - (5 - i));
-          return _MonthBucket(
-              month: m, label: _shortMonth(m.month), total: 0);
+          return _MonthBucket(month: m, label: _shortMonth(m.month), total: 0);
         });
 
         for (final doc in docs) {
-          final d = doc.data() as Map<String, dynamic>;
-          final amount =
-              (d['sale_amount'] as num?)?.toDouble() ?? 0;
-          totalSales += amount;
+          final d      = doc.data() as Map<String, dynamic>;
+          final amount = (d['sale_amount'] as num?)?.toDouble() ?? 0;
+          final type   = d['payment_type']?.toString() ?? '';
+          final ordId  = d['order_id']?.toString() ?? '';
+
+          totalRevenue += amount;
+          if (type == 'downpayment') downpaymentTotal += amount;
+          if (type == 'balance' || type == 'cash') balanceTotal += amount;
+          if (ordId.isNotEmpty) orderIds.add(ordId);
 
           final ts = d['sale_date'] as Timestamp?;
           if (ts != null) {
             final dt = ts.toDate();
             for (final b in monthBuckets) {
-              if (b.month.year == dt.year &&
-                  b.month.month == dt.month) {
+              if (b.month.year == dt.year && b.month.month == dt.month) {
                 b.total += amount;
                 break;
               }
@@ -254,41 +343,57 @@ class SalesReportView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Sales Report',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+              const Text('Sales Report',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+
+              // Stats grid
+              LayoutBuilder(builder: (_, constraints) {
+                final narrow = constraints.maxWidth < 400;
+                return Wrap(
+                  spacing: 10, runSpacing: 10,
+                  children: [
+                    _ReportCard('Total Revenue', '₱${totalRevenue.toStringAsFixed(2)}', AppTheme.gold, narrow),
+                    _ReportCard('Orders', '${orderIds.length}', Colors.blueAccent, narrow),
+                    _ReportCard('Downpayments', '₱${downpaymentTotal.toStringAsFixed(2)}', Colors.blue, narrow),
+                    _ReportCard('Balance Collected', '₱${balanceTotal.toStringAsFixed(2)}', Colors.green, narrow),
+                  ],
+                );
+              }),
+              const SizedBox(height: 24),
+
+              // Chart
+              const Row(
+                children: [
+                  Icon(Icons.bar_chart_rounded, color: Colors.blueAccent, size: 14),
+                  SizedBox(width: 6),
+                  Text('MONTHLY REVENUE',
+                      style: TextStyle(color: Colors.white54, fontSize: 11,
+                          fontWeight: FontWeight.w600, letterSpacing: 1)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 160,
+                child: CustomPaint(
+                  painter: _ChartPainter(buckets: monthBuckets),
+                  child: Container(),
                 ),
               ),
-              const SizedBox(height: 20),
-              LayoutBuilder(
-                builder: (ctx, constraints) {
-                  final isWide = constraints.maxWidth >= 520;
-                  final chart = _LineChart(buckets: monthBuckets);
-                  final stats = _StatsColumn(
-                    totalSales: totalSales,
-                    totalOrders: totalOrders,
-                  );
-                  if (isWide) {
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 3, child: chart),
-                        const SizedBox(width: 20),
-                        stats,
-                      ],
-                    );
-                  }
-                  return Column(
-                    children: [
-                      chart,
-                      const SizedBox(height: 20),
-                      stats,
-                    ],
-                  );
-                },
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: monthBuckets
+                    .map((b) => Column(
+                          children: [
+                            Text(b.label,
+                                style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                            if (b.total > 0)
+                              Text('₱${b.total.toStringAsFixed(0)}',
+                                  style: const TextStyle(color: AppTheme.gold, fontSize: 9)),
+                          ],
+                        ))
+                    .toList(),
               ),
             ],
           ),
@@ -298,63 +403,37 @@ class SalesReportView extends StatelessWidget {
   }
 }
 
+class _ReportCard extends StatelessWidget {
+  final String label, value;
+  final Color color;
+  final bool narrow;
+  const _ReportCard(this.label, this.value, this.color, this.narrow);
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: narrow ? double.infinity : 160,
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: color.withValues(alpha: 0.2)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 11)),
+        const SizedBox(height: 4),
+        Text(value, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
+      ],
+    ),
+  );
+}
+
 class _MonthBucket {
   final DateTime month;
   final String label;
   double total;
-  _MonthBucket(
-      {required this.month, required this.label, required this.total});
-}
-
-class _LineChart extends StatelessWidget {
-  final List<_MonthBucket> buckets;
-  const _LineChart({required this.buckets});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              width: 10,
-              height: 10,
-              decoration: const BoxDecoration(
-                  shape: BoxShape.circle, color: Colors.blueAccent),
-            ),
-            const SizedBox(width: 6),
-            const Text(
-              'SALES',
-              style: TextStyle(
-                color: Colors.white54,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 160,
-          child: CustomPaint(
-            painter: _ChartPainter(buckets: buckets),
-            child: Container(),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: buckets
-              .map((b) => Text(b.label,
-                  style: const TextStyle(
-                      color: Colors.white38, fontSize: 10)))
-              .toList(),
-        ),
-      ],
-    );
-  }
+  _MonthBucket({required this.month, required this.label, required this.total});
 }
 
 class _ChartPainter extends CustomPainter {
@@ -364,10 +443,9 @@ class _ChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (buckets.isEmpty) return;
-    final maxVal =
-        buckets.map((b) => b.total).reduce((a, b) => a > b ? a : b);
+    final maxVal = buckets.map((b) => b.total).reduce((a, b) => a > b ? a : b);
     final effectiveMax = maxVal == 0 ? 1.0 : maxVal;
-    final n = buckets.length;
+    final n     = buckets.length;
     final stepX = size.width / (n - 1).clamp(1, n);
 
     final gridPaint = Paint()
@@ -375,60 +453,37 @@ class _ChartPainter extends CustomPainter {
       ..strokeWidth = 1;
     for (int i = 0; i <= 3; i++) {
       final y = size.height * i / 3;
-      canvas.drawLine(
-          Offset(0, y), Offset(size.width, y), gridPaint);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    // Points
-    final points = List.generate(n, (i) {
-      final x = i * stepX;
-      final y = size.height -
-          (buckets[i].total / effectiveMax) * size.height * 0.85;
-      return Offset(x, y);
-    });
+    final points = List.generate(n, (i) => Offset(
+      i * stepX,
+      size.height - (buckets[i].total / effectiveMax) * size.height * 0.85,
+    ));
 
     final fillPath = Path()..moveTo(points.first.dx, size.height);
-    for (final p in points) {
-      fillPath.lineTo(p.dx, p.dy);
-    }
+    for (final p in points) { fillPath.lineTo(p.dx, p.dy); }
     fillPath.lineTo(points.last.dx, size.height);
     fillPath.close();
-    canvas.drawPath(
-      fillPath,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.blueAccent.withValues(alpha: 0.3),
-            Colors.blueAccent.withValues(alpha: 0.0),
-          ],
-        ).createShader(
-            Rect.fromLTWH(0, 0, size.width, size.height)),
-    );
+    canvas.drawPath(fillPath, Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [Colors.blueAccent.withValues(alpha: 0.3), Colors.blueAccent.withValues(alpha: 0.0)],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)));
 
-    // Smooth line
-    final linePaint = Paint()
-      ..color = Colors.blueAccent
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final linePath = Path()
-      ..moveTo(points.first.dx, points.first.dy);
+    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
     for (int i = 1; i < points.length; i++) {
       final prev = points[i - 1];
       final curr = points[i];
-      final cp1 = Offset((prev.dx + curr.dx) / 2, prev.dy);
-      final cp2 = Offset((prev.dx + curr.dx) / 2, curr.dy);
-      linePath.cubicTo(
-          cp1.dx, cp1.dy, cp2.dx, cp2.dy, curr.dx, curr.dy);
+      linePath.cubicTo((prev.dx + curr.dx) / 2, prev.dy,
+          (prev.dx + curr.dx) / 2, curr.dy, curr.dx, curr.dy);
     }
-    canvas.drawPath(linePath, linePaint);
+    canvas.drawPath(linePath, Paint()
+      ..color = Colors.blueAccent
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke);
 
-    // Dots
-    final dotBg = Paint()..color = const Color(0xFF1a1a2e);
+    final dotBg   = Paint()..color = const Color(0xFF1a1a2e);
     final dotFill = Paint()..color = Colors.blueAccent;
     for (final p in points) {
       canvas.drawCircle(p, 5, dotBg);
@@ -438,70 +493,4 @@ class _ChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ChartPainter old) => old.buckets != buckets;
-}
-
-class _StatsColumn extends StatelessWidget {
-  final double totalSales;
-  final int totalOrders;
-
-  const _StatsColumn({
-    required this.totalSales,
-    required this.totalOrders,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _StatCard(
-          label: 'Total Sales',
-          value: 'P${totalSales.toStringAsFixed(2)}',
-        ),
-        const SizedBox(height: 12),
-        _StatCard(
-          label: 'Total Orders',
-          value: totalOrders.toString(),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  const _StatCard({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: Colors.white.withValues(alpha: 0.1), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: const TextStyle(
-                color: Colors.white54,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              )),
-          const SizedBox(height: 6),
-          Text(value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              )),
-        ],
-      ),
-    );
-  }
 }

@@ -5,7 +5,11 @@
       "Bash(flutter analyze *)",
       "Bash(flutter build *)",
       "Bash(powershell -Command \"Get-Content 'lib/screens/admin_homepage.dart' | Select-Object -First 179 | Set-Content 'lib/screens/admin_homepage.dart'\")",
-      "Bash(dir /s /b)"
+      "Bash(dir /s /b)",
+      "Bash(findstr \"error:\")",
+      "Bash(findstr /i \"error:\")",
+      "Bash(Select-String \"error\")",
+      "Bash(firebase deploy *)"
     ]
   }
 }

@@ -17,6 +17,10 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
   final _scanCtrl = TextEditingController();
   final _scanFocus = FocusNode();
 
+  // Timing trackers for physical-scanner detection
+  DateTime? _scanFirstKey;
+  DateTime? _scanLastKey;
+
   String? _statusFilter;
   String _employeeName = '';
   String _employeeUid = '';
@@ -76,6 +80,30 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
       default:
         return const Color(0xFFF44336);
     }
+  }
+
+  // Physical scanners type all characters in < 50 ms each.
+  // Humans cannot type that fast, so we use this to distinguish methods.
+  bool _isPhysicalScanner(String code) {
+    if (_scanFirstKey == null || _scanLastKey == null || code.length < 2) {
+      return false;
+    }
+    final elapsed = _scanLastKey!.difference(_scanFirstKey!).inMilliseconds;
+    final msPerChar = elapsed / code.length;
+    return msPerChar < 50;
+  }
+
+  void _onScanFieldChanged(String value) {
+    final now = DateTime.now();
+    if (value.length == 1) _scanFirstKey = now; // reset on new word
+    _scanLastKey = now;
+  }
+
+  void _onScanFieldSubmitted(String rawCode) {
+    final fromPhysicalScanner = _isPhysicalScanner(rawCode.trim());
+    _scanFirstKey = null;
+    _scanLastKey  = null;
+    _handleScan(rawCode, fromCamera: fromPhysicalScanner);
   }
 
   // Called when user submits text in scan field or camera detects code
@@ -707,7 +735,8 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                           focusNode: _scanFocus,
                           style: const TextStyle(
                               color: Colors.white, fontSize: 14),
-                          onSubmitted: _handleScan,
+                          onChanged:   _onScanFieldChanged,
+                          onSubmitted: _onScanFieldSubmitted,
                           decoration: AppTheme.inputDecoration(
                             kIsWeb
                                 ? 'Physical scanner or type ID (e.g. RM-001) + Enter'

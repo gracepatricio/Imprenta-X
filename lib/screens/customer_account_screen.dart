@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'app_theme.dart';
 import 'chat_screen.dart';
+import 'customer_orders_screen.dart';
+import 'invoice_screen.dart';
+import 'payment_webview_screen.dart';
+import '../services/paymongo_service.dart';
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
@@ -14,10 +19,11 @@ class CustomerAccountScreen extends StatefulWidget {
 }
 
 class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
-  String _menu     = 'dashboard';
-  String fullName  = '';
-  String email     = '';
-  String customerId = '';
+  String _menu        = 'dashboard';
+  String _ordersFilter = 'pending'; // pre-selected when navigating from dashboard
+  String fullName     = '';
+  String email        = '';
+  String customerId   = '';
 
   static const _menus = [
     ('dashboard', 'Dashboard',      Icons.dashboard_outlined),
@@ -56,11 +62,16 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
     }
   }
 
+  void _goToOrders(String filter) => setState(() {
+    _ordersFilter = filter;
+    _menu = 'orders';
+  });
+
   Widget _content() {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     switch (_menu) {
       case 'orders':
-        return _OrdersContent(uid: uid);
+        return _OrdersContent(uid: uid, initialFilter: _ordersFilter);
       case 'messages':
         return _MessagesContent(uid: uid);
       case 'manage':
@@ -72,8 +83,9 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
       default:
         return _DashboardContent(
           uid: uid,
-          onViewOrders:   () => setState(() => _menu = 'orders'),
-          onViewMessages: () => setState(() => _menu = 'messages'),
+          onViewOrders:         () => _goToOrders('pending'),
+          onViewMessages:       () => setState(() => _menu = 'messages'),
+          onViewOrdersFiltered: _goToOrders,
         );
     }
   }
@@ -351,10 +363,12 @@ class _DashboardContent extends StatelessWidget {
   final String uid;
   final VoidCallback onViewOrders;
   final VoidCallback onViewMessages;
+  final void Function(String filter) onViewOrdersFiltered;
   const _DashboardContent({
     required this.uid,
     required this.onViewOrders,
     required this.onViewMessages,
+    required this.onViewOrdersFiltered,
   });
 
   @override
@@ -371,7 +385,7 @@ class _DashboardContent extends StatelessWidget {
                     fontSize: isNarrow ? 17 : 20,
                     fontWeight: FontWeight.bold)),
             SizedBox(height: isNarrow ? 12 : 16),
-            _OrderStatsRow(uid: uid),
+            _OrderStatsRow(uid: uid, onFilter: onViewOrdersFiltered),
             SizedBox(height: isNarrow ? 16 : 24),
             _UnreadMessagesPreview(uid: uid, onViewAll: onViewMessages),
           ],
@@ -383,7 +397,8 @@ class _DashboardContent extends StatelessWidget {
 
 class _OrderStatsRow extends StatelessWidget {
   final String uid;
-  const _OrderStatsRow({required this.uid});
+  final void Function(String filter) onFilter;
+  const _OrderStatsRow({required this.uid, required this.onFilter});
 
   @override
   Widget build(BuildContext context) {
@@ -398,9 +413,9 @@ class _OrderStatsRow extends StatelessWidget {
         if (!snapshot.hasError) {
           for (final d in docs) {
             final s = (d.data() as Map)['status']?.toString() ?? '';
-            if (s == 'pending')          pending++;
-            if (s == 'in_production')    active++;
-            if (s == 'ready_for_pickup') ready++;
+            if (s == 'pending')       pending++;
+            if (s == 'in_production') active++;
+            if (s == 'ready')         ready++;
           }
         }
         return LayoutBuilder(builder: (context, constraints) {
@@ -409,11 +424,17 @@ class _OrderStatsRow extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: _StatCard('Pending\nOrders', pending, Icons.sync,                Colors.red,    compact: compact)),
+                Expanded(child: _StatCard('Pending\nOrders', pending, Icons.sync,
+                    Colors.red, compact: compact,
+                    onTap: () => onFilter('pending'))),
                 SizedBox(width: compact ? 4 : 8),
-                Expanded(child: _StatCard('Active\nOrders',  active,  Icons.inventory_2_outlined, Colors.orange, compact: compact)),
+                Expanded(child: _StatCard('Active\nOrders', active, Icons.inventory_2_outlined,
+                    Colors.orange, compact: compact,
+                    onTap: () => onFilter('in_production'))),
                 SizedBox(width: compact ? 4 : 8),
-                Expanded(child: _StatCard('Ready for\nPickup', ready, Icons.check_circle,       Colors.green,  compact: compact)),
+                Expanded(child: _StatCard('Ready for\nPickup', ready, Icons.check_circle,
+                    Colors.green, compact: compact,
+                    onTap: () => onFilter('ready'))),
               ],
             ),
           );
@@ -429,11 +450,15 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final bool compact;
-  const _StatCard(this.label, this.count, this.icon, this.color, {this.compact = false});
+  final VoidCallback? onTap;
+  const _StatCard(this.label, this.count, this.icon, this.color,
+      {this.compact = false, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       padding: EdgeInsets.all(compact ? 10 : 16),
       decoration: AppTheme.glassCard(opacity: 0.12, radius: 16),
       child: Column(
@@ -450,9 +475,14 @@ class _StatCard extends StatelessWidget {
           SizedBox(height: compact ? 2 : 4),
           Text(label,
               style: TextStyle(color: Colors.white60, fontSize: compact ? 10 : 12)),
+          if (onTap != null) ...[
+            const SizedBox(height: 6),
+            Icon(Icons.arrow_forward_ios_rounded,
+                size: 10, color: Colors.white.withValues(alpha: 0.3)),
+          ],
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -638,21 +668,22 @@ class _UnreadMessageCard extends StatelessWidget {
 
 class _OrdersContent extends StatefulWidget {
   final String uid;
-  const _OrdersContent({required this.uid});
+  final String initialFilter;
+  const _OrdersContent({required this.uid, this.initialFilter = 'pending'});
 
   @override
   State<_OrdersContent> createState() => _OrdersContentState();
 }
 
 class _OrdersContentState extends State<_OrdersContent> {
-  String _filter = 'pending';
+  late String _filter = widget.initialFilter;
 
   static const _filters = [
-    ('pending',          'Pending'),
-    ('in_production',    'Active'),
-    ('ready_for_pickup', 'Ready'),
-    ('cancelled',        'Cancelled'),
-    ('completed',        'History'),
+    ('pending',       'Pending'),
+    ('in_production', 'Active'),
+    ('ready',         'Ready'),      // was 'ready_for_pickup' — fixed
+    ('cancelled',     'Cancelled'),
+    ('completed',     'History'),
   ];
 
   @override
@@ -771,113 +802,702 @@ class _OrderCard extends StatelessWidget {
   const _OrderCard(
       {required this.orderId, required this.data, required this.showMessage});
 
+  double get _total     => (data['total_price']       as num?)?.toDouble() ?? 0;
+  double get _paid      => (data['amount_paid']        as num?)?.toDouble() ?? 0;
+  double get _remaining => (data['remaining_balance']  as num?)?.toDouble() ?? (_total - _paid);
+
+  void _showDetail(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1a1a2e),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (_) => _AccountOrderDetailSheet(
+        docId:       orderId,
+        data:        data,
+        showMessage: showMessage,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final status   = data['status']?.toString() ?? '';
     final products = List<Map>.from(data['products'] ?? []);
-    final total    = data['total_price'];
+    final remaining = _remaining;
+    final total     = _total;
+    final paid      = _paid;
+    final pct       = total > 0 ? (paid / total).clamp(0.0, 1.0) : 0.0;
+    final fullyPaid = remaining < 0.01;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: AppTheme.glassCard(opacity: 0.13, radius: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Order # + status badge
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(orderId,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13)),
-              ),
-              const SizedBox(width: 6),
-              _StatusBadge(status: status),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Products list
-          ...products.map((p) {
-            final name = p['name']?.toString() ?? '';
-            final qty  = p['qty'] ?? p['quantity'] ?? 0;
-            final pr   = p['price'];
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Row(
-                children: [
-                  const Icon(Icons.fiber_manual_record,
-                      size: 5, color: Colors.white38),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text('$name × $qty',
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 12),
-                        overflow: TextOverflow.ellipsis),
-                  ),
-                  if (pr != null) ...[
+    return GestureDetector(
+      onTap: () => _showDetail(context),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: AppTheme.glassCard(opacity: 0.13, radius: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Order # + status badge
+            Row(
+              children: [
+                Expanded(
+                  child: Text(orderId,
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+                const SizedBox(width: 6),
+                _StatusBadge(status: status),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Products list
+            ...products.map((p) {
+              final name = p['name']?.toString() ?? '';
+              final qty  = p['qty'] ?? p['quantity'] ?? 0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Row(
+                  children: [
+                    const Icon(Icons.fiber_manual_record, size: 5, color: Colors.white38),
                     const SizedBox(width: 6),
-                    Text('₱$pr',
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 11)),
+                    Expanded(
+                      child: Text('$name × $qty',
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                          overflow: TextOverflow.ellipsis),
+                    ),
                   ],
+                ),
+              );
+            }),
+            const Divider(color: Colors.white12, height: 14),
+
+            // Balance row
+            Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Total: ₱${total.toStringAsFixed(2)}',
+                        style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 13)),
+                    if (total > 0 && paid > 0) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        fullyPaid
+                            ? 'Fully paid'
+                            : 'Remaining: ₱${remaining.toStringAsFixed(2)}',
+                        style: TextStyle(
+                            color: fullyPaid ? Colors.green : Colors.orange,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ],
+                ),
+                const Spacer(),
+                Row(
+                  children: [
+                    if (showMessage)
+                      TextButton.icon(
+                        onPressed: () {
+                          final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+                          Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              customerUid:  uid,
+                              customerName: '',
+                              isEmployee:   false,
+                              orderContext: {
+                                'order_id':    orderId,
+                                'products':    products,
+                                'total_price': data['total_price'],
+                              },
+                            ),
+                          ));
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppTheme.gold,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        icon: const Icon(Icons.chat_bubble_outline, size: 13),
+                        label: const Text('Message', style: TextStyle(fontSize: 12)),
+                      ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.chevron_right, color: Colors.white.withValues(alpha: 0.3), size: 18),
+                  ],
+                ),
+              ],
+            ),
+
+            // Progress bar — only when payment tracking is active
+            if (total > 0 && paid > 0) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  value: pct,
+                  backgroundColor: Colors.white.withValues(alpha: 0.1),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      fullyPaid ? Colors.green : AppTheme.gold),
+                  minHeight: 4,
+                ),
+              ),
+            ],
+
+            // Tap hint
+            const SizedBox(height: 6),
+            Text('Tap to view details & payment QR',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.25), fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Account order detail sheet (full detail + QR + pay) ──────────────────────
+
+class _AccountOrderDetailSheet extends StatefulWidget {
+  final String docId;
+  final Map<String, dynamic> data;
+  final bool showMessage;
+  const _AccountOrderDetailSheet({
+    required this.docId,
+    required this.data,
+    required this.showMessage,
+  });
+
+  @override
+  State<_AccountOrderDetailSheet> createState() => _AccountOrderDetailSheetState();
+}
+
+class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
+  bool _payingNow = false;
+
+  String get _status    => widget.data['status']?.toString() ?? '';
+  double get _total     => (widget.data['total_price']      as num?)?.toDouble() ?? 0;
+  double get _paid      => (widget.data['amount_paid']      as num?)?.toDouble() ?? 0;
+  double get _remaining => (widget.data['remaining_balance'] as num?)?.toDouble()
+      ?? (_total - _paid);
+
+  String _fmtDate(dynamic ts) {
+    if (ts == null) return '—';
+    try {
+      final d = (ts as dynamic).toDate() as DateTime;
+      return '${d.month}/${d.day}/${d.year}';
+    } catch (_) { return '—'; }
+  }
+
+  Future<void> _payNow() async {
+    final orderId  = widget.data['order_id']?.toString() ?? widget.docId;
+    final minAmt   = _status == 'awaiting_payment' ? (_total * 0.5 * 100).round() / 100 : 1.0;
+    final maxAmt   = _status == 'awaiting_payment' ? _total : _remaining;
+
+    final chosen = await _showAmountSheet(minAmt, maxAmt);
+    if (chosen == null || !mounted) return;
+
+    setState(() => _payingNow = true);
+    try {
+      // Check for reusable balance link
+      String? useUrl, useLinkId;
+      if (_status != 'awaiting_payment') {
+        final existUrl    = widget.data['balance_checkout_url'] as String?;
+        final existLinkId = widget.data['balance_link_id']      as String?;
+        if (existUrl != null && existLinkId != null) {
+          try {
+            final s = await PayMongoService.getLinkStatus(existLinkId);
+            if (s == 'unpaid') { useUrl = existUrl; useLinkId = existLinkId; }
+          } catch (_) {}
+        }
+      }
+
+      final String checkoutUrl, linkId;
+      if (useUrl != null) {
+        checkoutUrl = useUrl; linkId = useLinkId!;
+      } else {
+        final isInitial = _status == 'awaiting_payment';
+        final link = await PayMongoService.createLink(
+          amount:      chosen,
+          description: isInitial
+              ? 'Downpayment $orderId (Imprenta X)'
+              : 'Balance Payment $orderId (Imprenta X)',
+        );
+        await FirebaseFirestore.instance.collection('PayMongoLinks').doc(link.id).set({
+          'order_id':        orderId,
+          'purpose':         isInitial ? 'downpayment' : 'balance',
+          'expected_amount': chosen,
+          'processed':       false,
+          'created_at':      FieldValue.serverTimestamp(),
+        });
+        if (!isInitial) {
+          await FirebaseFirestore.instance.collection('Orders').doc(orderId).update({
+            'balance_link_id':      link.id,
+            'balance_checkout_url': link.checkoutUrl,
+            'balance_link_amount':  chosen,
+          });
+        }
+        checkoutUrl = link.checkoutUrl; linkId = link.id;
+      }
+
+      if (!mounted) return;
+      final paid = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => PaymentWebViewScreen(
+          checkoutUrl: checkoutUrl,
+          linkId:      linkId,
+          orderId:     orderId,
+          payAmount:   chosen,
+        ),
+      ));
+
+      if (paid == true && mounted) {
+        Navigator.pop(context); // close sheet
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Payment confirmed for $orderId!'),
+          backgroundColor: Colors.green.shade700,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red.shade700));
+      }
+    } finally {
+      if (mounted) setState(() => _payingNow = false);
+    }
+  }
+
+  Future<double?> _showAmountSheet(double minAmt, double maxAmt) {
+    final ctrl = TextEditingController(text: maxAmt.toStringAsFixed(2));
+    return showModalBottomSheet<double>(
+      context: context,
+      backgroundColor: const Color(0xFF1a1a2e),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          final chosen = (double.tryParse(ctrl.text) ?? maxAmt).clamp(minAmt, maxAmt);
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+                left: 20, right: 20, top: 12,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Center(child: Container(width: 40, height: 4,
+                    decoration: BoxDecoration(color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 14),
+                  const Align(alignment: Alignment.centerLeft,
+                    child: Text('Enter Payment Amount',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.gold.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.gold.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.info_outline, color: AppTheme.gold, size: 14),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(
+                        _status == 'awaiting_payment'
+                            ? 'Minimum: ₱${minAmt.toStringAsFixed(2)} (50% downpayment)'
+                            : 'Outstanding balance: ₱${maxAmt.toStringAsFixed(2)}',
+                        style: const TextStyle(color: AppTheme.gold, fontSize: 12),
+                      )),
+                    ]),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                    ),
+                    child: Row(children: [
+                      Padding(padding: const EdgeInsets.only(left: 14),
+                        child: Text('₱', style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.6), fontSize: 20))),
+                      Expanded(child: TextField(
+                        controller: ctrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          hintText: '0.00',
+                          hintStyle: TextStyle(color: Colors.white24, fontSize: 20),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                        ),
+                        onChanged: (_) => setSheet(() {}),
+                      )),
+                    ]),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: chosen < minAmt - 0.009 ? null : () => Navigator.pop(ctx, chosen),
+                      icon: const Icon(Icons.payment_rounded),
+                      label: Text('Pay ₱${chosen.toStringAsFixed(2)} via PayMongo',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis),
+                      style: AppTheme.primaryButton(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                 ],
               ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final products    = (widget.data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final turnaround  = widget.data['turnaround_days'] as int?;
+    final invoiceId   = widget.data['invoice_id']?.toString();
+    final remaining   = _remaining;
+    final fullyPaid   = remaining < 0.01;
+    final showPayBtn  = _status == 'awaiting_payment' ||
+        (remaining > 0.009 && ['pending','in_production','ready'].contains(_status));
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.65,
+      maxChildSize: 0.95,
+      builder: (_, ctrl) => ListView(
+        controller: ctrl,
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+        children: [
+          Center(child: Container(width: 40, height: 4,
+            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 16),
+
+          // Header
+          Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(widget.data['order_id']?.toString() ?? widget.docId,
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('Placed ${_fmtDate(widget.data['created_at'])}',
+                  style: const TextStyle(color: Colors.white38, fontSize: 12)),
+            ])),
+            _StatusBadge(status: _status),
+          ]),
+
+          if (turnaround != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.gold.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.gold.withValues(alpha: 0.25)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.schedule_rounded, color: AppTheme.gold, size: 14),
+                const SizedBox(width: 8),
+                Text('Est. turnaround: ~$turnaround day${turnaround == 1 ? '' : 's'}',
+                    style: const TextStyle(color: AppTheme.gold, fontSize: 12, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          ],
+
+          const SizedBox(height: 16),
+
+          // Products
+          const Text('Items', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          ...products.map((p) {
+            final name  = p['name']?.toString() ?? '—';
+            final qty   = p['qty']?.toString() ?? '1';
+            final price = (p['price'] as num?)?.toStringAsFixed(2) ?? '—';
+            final size  = p['size_label']?.toString();
+            final mat   = p['material']?.toString();
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              ),
+              child: Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                  Text(['Qty: $qty', if (size != null) size, if (mat != null) mat].join(' · '),
+                      style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                ])),
+                Text('₱$price', style: const TextStyle(
+                    color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 13)),
+              ]),
             );
           }),
-          const Divider(color: Colors.white12, height: 14),
-          // Total + message button
-          Row(
-            children: [
-              const Text('Total: ',
-                  style: TextStyle(color: Colors.white54, fontSize: 12)),
-              Expanded(
-                child: Text(
-                  total != null ? '₱$total' : '—',
-                  style: const TextStyle(
-                      color: AppTheme.gold,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13),
+
+          const Divider(color: Colors.white12, height: 24),
+
+          // Balance
+          _BalRow('Order Total', _total, Colors.white),
+          const SizedBox(height: 6),
+          _BalRow('Paid',       _paid,  Colors.green),
+          const SizedBox(height: 6),
+          _BalRow(
+            fullyPaid ? 'Fully Paid' : 'Balance Due on Pickup',
+            fullyPaid ? 0 : remaining,
+            fullyPaid ? Colors.green : AppTheme.gold,
+            large: true,
+          ),
+          if (!fullyPaid) ...[
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: _total > 0 ? (_paid / _total).clamp(0, 1) : 0,
+                backgroundColor: Colors.white.withValues(alpha: 0.1),
+                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.gold),
+                minHeight: 5,
+              ),
+            ),
+          ],
+
+          // QR Code
+          if (remaining > 0.009 || _status == 'awaiting_payment') ...[
+            const SizedBox(height: 20),
+            _AccountQrSection(
+              docId:    widget.docId,
+              order:    widget.data,
+              status:   _status,
+              remaining: remaining,
+            ),
+          ],
+
+          // Pay button
+          if (showPayBtn) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _payingNow ? null : _payNow,
+                icon: _payingNow
+                    ? const SizedBox(width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    : const Icon(Icons.payment_rounded),
+                label: Text(
+                  _status == 'awaiting_payment'
+                      ? 'Pay via PayMongo (min 50%)'
+                      : 'Pay Remaining ₱${remaining.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
+                style: AppTheme.primaryButton(),
               ),
-              if (showMessage)
-                TextButton.icon(
-                  onPressed: () {
-                    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          customerUid:  uid,
-                          customerName: '',
-                          isEmployee:   false,
-                          orderContext: {
-                            'order_id':    orderId,
-                            'products':    products,
-                            'total_price': total,
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.gold,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  icon: const Icon(Icons.chat_bubble_outline, size: 13),
-                  label: const Text('Message',
-                      style: TextStyle(fontSize: 12)),
+            ),
+          ],
+
+          // Invoice button
+          if (invoiceId != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => InvoiceScreen(invoiceId: invoiceId)));
+                },
+                icon: const Icon(Icons.receipt_long_rounded, color: AppTheme.gold),
+                label: const Text('View Invoice',
+                    style: TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: AppTheme.gold.withValues(alpha: 0.5)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-            ],
-          ),
+              ),
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _BalRow extends StatelessWidget {
+  final String label;
+  final double value;
+  final Color color;
+  final bool large;
+  const _BalRow(this.label, this.value, this.color, {this.large = false});
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Expanded(child: Text(label, style: TextStyle(
+        color: Colors.white70, fontSize: large ? 14 : 13,
+        fontWeight: large ? FontWeight.w600 : FontWeight.normal))),
+    Text(value < 0.01 ? 'Settled' : '₱${value.toStringAsFixed(2)}',
+        style: TextStyle(color: color,
+            fontSize: large ? 18 : 13,
+            fontWeight: large ? FontWeight.bold : FontWeight.w500)),
+  ]);
+}
+
+// ── QR code section (account screen version) ─────────────────────────────────
+
+class _AccountQrSection extends StatefulWidget {
+  final String docId;
+  final Map<String, dynamic> order;
+  final String status;
+  final double remaining;
+  const _AccountQrSection({
+    required this.docId, required this.order,
+    required this.status, required this.remaining,
+  });
+
+  @override
+  State<_AccountQrSection> createState() => _AccountQrSectionState();
+}
+
+class _AccountQrSectionState extends State<_AccountQrSection> {
+  String? _localUrl;
+  bool    _generating = false;
+
+  String? get _url =>
+      _localUrl ??
+      (widget.status == 'awaiting_payment'
+          ? widget.order['paymongo_checkout_url'] as String?
+          : widget.order['balance_checkout_url']  as String?);
+
+  Future<void> _generate() async {
+    setState(() => _generating = true);
+    try {
+      final orderId = widget.order['order_id']?.toString() ?? widget.docId;
+      final link = await PayMongoService.createLink(
+        amount:      widget.remaining,
+        description: 'Balance Payment $orderId (Imprenta X)',
+      );
+      await Future.wait([
+        FirebaseFirestore.instance.collection('PayMongoLinks').doc(link.id).set({
+          'order_id':        orderId,
+          'purpose':         'balance',
+          'expected_amount': widget.remaining,
+          'processed':       false,
+          'created_at':      FieldValue.serverTimestamp(),
+        }),
+        FirebaseFirestore.instance.collection('Orders').doc(orderId).update({
+          'balance_link_id':      link.id,
+          'balance_checkout_url': link.checkoutUrl,
+          'balance_link_amount':  widget.remaining,
+        }),
+      ]);
+      if (mounted) setState(() => _localUrl = link.checkoutUrl);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red.shade700));
+      }
+    } finally {
+      if (mounted) setState(() => _generating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url    = _url;
+    final amount = (widget.order['balance_link_amount'] as num?)?.toDouble() ?? widget.remaining;
+
+    if (url == null && widget.status != 'awaiting_payment') {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: Column(children: [
+          const Row(children: [
+            Icon(Icons.qr_code_2_rounded, color: Colors.white38, size: 16),
+            SizedBox(width: 8),
+            Expanded(child: Text(
+              'Generate a QR code so you or anyone can scan and pay the remaining balance.',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            )),
+          ]),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _generating ? null : _generate,
+              icon: _generating
+                  ? const SizedBox(width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.gold))
+                  : const Icon(Icons.qr_code_2_rounded, color: AppTheme.gold, size: 16),
+              label: Text(_generating ? 'Generating…' : 'Generate Payment QR',
+                  style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold)),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: AppTheme.gold.withValues(alpha: 0.4)),
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+        ]),
+      );
+    }
+
+    if (url == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.gold.withValues(alpha: 0.25)),
+      ),
+      child: Column(children: [
+        Row(children: [
+          const Icon(Icons.qr_code_2_rounded, color: AppTheme.gold, size: 16),
+          const SizedBox(width: 8),
+          Text(
+            widget.status == 'awaiting_payment'
+                ? 'SCAN TO PAY DOWNPAYMENT'
+                : 'SCAN TO PAY REMAINING BALANCE',
+            style: const TextStyle(color: AppTheme.gold, fontSize: 11,
+                fontWeight: FontWeight.bold, letterSpacing: 0.8),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+            child: QrImageView(
+              data: url,
+              size: 180,
+              eyeStyle:        const QrEyeStyle(eyeShape: QrEyeShape.square, color: Color(0xFF0f0f23)),
+              dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Color(0xFF0f0f23)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text('₱${amount.toStringAsFixed(2)}',
+            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 3),
+        const Text('Opens PayMongo → GCash / Maya / Card',
+            style: TextStyle(color: Colors.white38, fontSize: 11)),
+        const SizedBox(height: 2),
+        const Text('This QR is unique to this order and safe to share.',
+            style: TextStyle(color: Colors.white24, fontSize: 10)),
+      ]),
     );
   }
 }

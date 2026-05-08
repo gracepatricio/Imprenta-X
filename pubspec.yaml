@@ -23,6 +23,10 @@ dependencies:
   image: ^4.2.0 # Added Dependency
   url_launcher: ^6.3.0 #Added Dependency
   intl: ^0.20.1 # Added Dependency
+  webview_flutter: ^4.0.0
+  pdf: ^3.11.0
+  printing: ^5.13.0
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:

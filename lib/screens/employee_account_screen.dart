@@ -9,7 +9,9 @@ import '../services/auth_service.dart';
 import '../services/auth_service.dart';
 
 class EmployeeAccountScreen extends StatefulWidget {
-  const EmployeeAccountScreen({super.key});
+  // tab: 0 = Job Queue Pending, 1 = Job Queue Active, 2 = Ready for Pickup
+  final void Function(int tab)? onNavigateToLogs;
+  const EmployeeAccountScreen({super.key, this.onNavigateToLogs});
 
   @override
   State<EmployeeAccountScreen> createState() => _EmployeeAccountScreenState();
@@ -307,9 +309,9 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
               int pending = 0, active = 0, ready = 0;
               for (final d in snap.data?.docs ?? []) {
                 final s = (d.data() as Map)['status']?.toString() ?? '';
-                if (s == 'pending')          pending++;
-                if (s == 'in_production')    active++;
-                if (s == 'ready_for_pickup') ready++;
+                if (s == 'pending')       pending++;
+                if (s == 'in_production') active++;
+                if (s == 'ready')         ready++;
               }
               return LayoutBuilder(builder: (ctx, constraints) {
                 final compact = constraints.maxWidth < 380;
@@ -317,11 +319,17 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(child: _statCard('Pending\nOrders', pending, Icons.sync,                Colors.red,    compact: compact)),
+                      Expanded(child: _statCard('Pending\nOrders', pending, Icons.sync,
+                          Colors.red, compact: compact,
+                          onTap: () => widget.onNavigateToLogs?.call(0))),
                       SizedBox(width: compact ? 4 : 8),
-                      Expanded(child: _statCard('Active\nOrders',  active,  Icons.inventory_2_outlined, Colors.orange, compact: compact)),
+                      Expanded(child: _statCard('Active\nOrders', active, Icons.inventory_2_outlined,
+                          Colors.orange, compact: compact,
+                          onTap: () => widget.onNavigateToLogs?.call(1))),
                       SizedBox(width: compact ? 4 : 8),
-                      Expanded(child: _statCard('Ready for\nPickup', ready, Icons.check_circle,       Colors.green,  compact: compact)),
+                      Expanded(child: _statCard('Ready for\nPickup', ready, Icons.check_circle,
+                          Colors.green, compact: compact,
+                          onTap: () => widget.onNavigateToLogs?.call(2))),
                     ],
                   ),
                 );
@@ -484,25 +492,34 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
     );
   }
 
-  Widget _statCard(String label, int count, IconData icon, Color color, {bool compact = false}) {
-    return Container(
-      padding: EdgeInsets.all(compact ? 10 : 16),
-      decoration: AppTheme.glassCard(opacity: 0.12, radius: 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: compact ? 20 : 28),
-          SizedBox(height: compact ? 6 : 10),
-          Text('$count',
-              style: TextStyle(
-                  color: color,
-                  fontSize: compact ? 20 : 26,
-                  fontWeight: FontWeight.bold)),
-          SizedBox(height: compact ? 2 : 4),
-          Text(label,
-              style: TextStyle(color: Colors.white60, fontSize: compact ? 10 : 12)),
-        ],
+  Widget _statCard(String label, int count, IconData icon, Color color,
+      {bool compact = false, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.all(compact ? 10 : 16),
+        decoration: AppTheme.glassCard(opacity: 0.12, radius: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: compact ? 20 : 28),
+            SizedBox(height: compact ? 6 : 10),
+            Text('$count',
+                style: TextStyle(
+                    color: color,
+                    fontSize: compact ? 20 : 26,
+                    fontWeight: FontWeight.bold)),
+            SizedBox(height: compact ? 2 : 4),
+            Text(label,
+                style: TextStyle(color: Colors.white60, fontSize: compact ? 10 : 12)),
+            if (onTap != null) ...[
+              const SizedBox(height: 4),
+              Icon(Icons.arrow_forward_ios_rounded,
+                  size: 10, color: Colors.white.withValues(alpha: 0.3)),
+            ],
+          ],
+        ),
       ),
     );
   }

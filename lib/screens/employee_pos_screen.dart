@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
+import 'invoice_screen.dart';
 
 class EmployeePosScreen extends StatefulWidget {
   const EmployeePosScreen({super.key});
@@ -143,7 +144,7 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
       // Fetch all unpaid/active statuses in a single whereIn query
       final snap = await _db
           .collection('Orders')
-          .where('user_id', isEqualTo: uid)
+          .where('customer_uid', isEqualTo: uid)
           .where('status', whereIn: ['pending', 'in_production', 'ready'])
           .get()
           .catchError((_) => null);
@@ -153,9 +154,9 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
       if (snap != null) {
         for (final d in snap.docs) {
           final data      = d.data();
-          final total     = (data['total_amount'] as num?)?.toDouble() ?? 0.0;
-          final paid      = (data['paid_amount']  as num?)?.toDouble() ?? 0.0;
-          final remaining = total - paid;
+          final total     = (data['total_price']   as num?)?.toDouble() ?? 0.0;
+          final paid      = (data['amount_paid']   as num?)?.toDouble() ?? 0.0;
+          final remaining = (data['remaining_balance'] as num?)?.toDouble() ?? (total - paid);
           orders.add({
             'orderId':     d.id,
             ...data,
@@ -168,8 +169,8 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
 
       // Sort by date descending client-side (whereIn can't combine with orderBy)
       orders.sort((a, b) {
-        final ta = a['date_created'];
-        final tb = b['date_created'];
+        final ta = a['created_at'];
+        final tb = b['created_at'];
         if (ta == null || tb == null) return 0;
         return (tb as Timestamp).compareTo(ta as Timestamp);
       });
@@ -199,10 +200,44 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
       builder: (_) => _PaymentSheet(
         order: order,
         onPaymentRecorded: (orderId, newPaid, wasFullyPaid) async {
-          // Update Firestore
+          final orderSnap = await _db.collection('Orders').doc(orderId).get();
+          final total     = (orderSnap.data()?['total_price'] as num?)?.toDouble() ?? 0;
+          final remaining = total - newPaid;
+
+          // Update order
           await _db.collection('Orders').doc(orderId).update({
-            'paid_amount': newPaid,
+            'amount_paid':       newPaid,
+            'remaining_balance': remaining.clamp(0, double.infinity),
+            'payment_status':    wasFullyPaid ? 'paid' : 'partial',
             if (wasFullyPaid) 'status': 'completed',
+          });
+
+          final cashPaid = newPaid - ((orderSnap.data()?['amount_paid'] as num?)?.toDouble() ?? 0);
+          final orderTotal = total;
+          final custName   = orderSnap.data()?['customer_name']?.toString() ?? '';
+
+          // Log payment record
+          await _db.collection('Payments').add({
+            'order_id':            orderId,
+            'amount':              cashPaid,
+            'payment_type':        wasFullyPaid ? 'full' : 'partial',
+            'payment_method':      'cash',
+            'transaction_reference': 'cash_onsite',
+            'payment_date':        FieldValue.serverTimestamp(),
+            'status':              'paid',
+            'paid_by':             'employee',
+          });
+
+          // Sales record for cash payment
+          await _db.collection('Sales_Records').add({
+            'order_id':             orderId,
+            'customer_name':        custName,
+            'payment_type':         'cash',
+            'payment_method':       'cash',
+            'transaction_reference': 'cash_onsite',
+            'sale_amount':          cashPaid,
+            'order_total':          orderTotal,
+            'sale_date':            FieldValue.serverTimestamp(),
           });
           // Refresh orders list
           if (_selectedCustomer != null) {
@@ -680,14 +715,39 @@ class _OrderCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
 
-            // ── Tap hint ──
+            // ── Tap hint + invoice ──
             Row(
-              mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                Builder(builder: (ctx) => GestureDetector(
+                  onTap: () async {
+                    final rawId = order['order_id']?.toString()
+                        ?? (order['orderId'] as String? ?? '');
+                    final orderSnap = await FirebaseFirestore.instance
+                        .collection('Orders').doc(rawId).get();
+                    final invId = orderSnap.data()?['invoice_id']?.toString();
+                    if (invId != null && ctx.mounted) {
+                      Navigator.of(ctx).push(MaterialPageRoute(
+                        builder: (_) => InvoiceScreen(invoiceId: invId),
+                      ));
+                    } else if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('No invoice for this order')),
+                      );
+                    }
+                  },
+                  child: Row(
+                    children: [
+                      Icon(Icons.receipt_long_outlined,
+                          color: Colors.white.withValues(alpha: 0.4), size: 14),
+                      const SizedBox(width: 4),
+                      Text('Invoice',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
+                    ],
+                  ),
+                )),
+                const Spacer(),
                 Text('Tap to collect payment',
-                    style: TextStyle(
-                        color: AppTheme.gold.withValues(alpha: 0.7),
-                        fontSize: 11)),
+                    style: TextStyle(color: AppTheme.gold.withValues(alpha: 0.7), fontSize: 11)),
                 const SizedBox(width: 4),
                 Icon(Icons.arrow_forward_ios_rounded,
                     color: AppTheme.gold.withValues(alpha: 0.7), size: 10),

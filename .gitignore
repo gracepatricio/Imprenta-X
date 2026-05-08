@@ -43,11 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-<<<<<<< HEAD
-=======
 
-# Firebase — contains API keys, do not commit
+# Firebase config — these files contain API keys, never commit them
 android/app/google-services.json
-ios/GoogleService-Info.plist
-lib/firebase_options.dart
->>>>>>> 85a414a349fd564905b2f5bd917de04d7d741138
+ios/Runner/GoogleService-Info.plist
+
+# Cloud Functions — secret keys and dependencies
+functions/.env
+functions/node_modules/
+
+# Claude Code local settings
+.claude/
