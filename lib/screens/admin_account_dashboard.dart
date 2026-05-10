@@ -214,7 +214,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
             padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
             decoration: BoxDecoration(
               color: isActive
-                  ? AppTheme.gold.withValues(alpha: 0.15)
+                  ? const Color(0xFFFFE9AD).withValues(alpha: 0.15)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
@@ -255,7 +255,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.20),
+        color: Colors.white.withValues(alpha: 0.30),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
         boxShadow: [
