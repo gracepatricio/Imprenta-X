@@ -339,6 +339,126 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
 
           const SizedBox(height: 24),
 
+          // ── Products needing replenishment ─────────────────────────────────
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('RawMaterials')
+                .snapshots(),
+            builder: (context, snap) {
+              final allMats = snap.data?.docs ?? [];
+              final lowMats = allMats.where((d) {
+                final data    = d.data() as Map<String, dynamic>;
+                final current = (data['current_stock'] as num?)?.toDouble() ?? 0;
+                final restock = (data['restock_level']  as num?)?.toDouble() ?? 0;
+                return current <= restock;
+              }).toList();
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text('Needs Replenishment',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 8),
+                      if (lowMats.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.orange,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text('${lowMats.length}',
+                              style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (snap.connectionState == ConnectionState.waiting && !snap.hasData)
+                    const Center(child: CircularProgressIndicator(color: Colors.white38))
+                  else if (lowMats.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: AppTheme.glassCard(opacity: 0.1),
+                      child: const Row(children: [
+                        Icon(Icons.check_circle_outline, color: Colors.greenAccent, size: 16),
+                        SizedBox(width: 8),
+                        Text('All materials are adequately stocked',
+                            style: TextStyle(color: Colors.white54, fontSize: 13)),
+                      ]),
+                    )
+                  else
+                    ...lowMats.map((doc) {
+                      final d       = doc.data() as Map<String, dynamic>;
+                      final name    = d['material_name']?.toString() ?? doc.id;
+                      final unit    = d['unit_description']?.toString() ?? '';
+                      final current = (d['current_stock'] as num?)?.toDouble() ?? 0;
+                      final restock = (d['restock_level']  as num?)?.toDouble() ?? 0;
+                      final isCritical = current <= restock * 0.5;
+                      final statusColor = isCritical ? Colors.redAccent : Colors.orange;
+                      final pct = restock > 0 ? (current / restock).clamp(0.0, 1.0) : 0.0;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: AppTheme.glassCard(opacity: 0.12, radius: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              Icon(Icons.warning_amber_rounded, color: statusColor, size: 14),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(name,
+                                    style: const TextStyle(
+                                        color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                                ),
+                                child: Text(isCritical ? 'Critical' : 'Low Stock',
+                                    style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w600)),
+                              ),
+                            ]),
+                            const SizedBox(height: 6),
+                            Row(children: [
+                              Text('${current % 1 == 0 ? current.toInt() : current} / ${restock % 1 == 0 ? restock.toInt() : restock}${unit.isNotEmpty ? ' $unit' : ''}',
+                                  style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w500)),
+                              const Spacer(),
+                              Text('restock target', style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 10)),
+                            ]),
+                            const SizedBox(height: 5),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(3),
+                              child: LinearProgressIndicator(
+                                value: pct,
+                                backgroundColor: Colors.white.withValues(alpha: 0.08),
+                                valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                                minHeight: 4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(height: 24),
+
           // ── Unread messages ────────────────────────────────────────────────
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance

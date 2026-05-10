@@ -186,9 +186,9 @@ class _JobQueuePlaceholderState extends State<_JobQueuePlaceholder>
   void initState() {
     super.initState();
     _tabs = TabController(
-      length:       3,
+      length:       4,
       vsync:        this,
-      initialIndex: widget.initialTab.clamp(0, 2),
+      initialIndex: widget.initialTab.clamp(0, 3),
     );
     _tabs.addListener(() => setState(() {}));
   }
@@ -204,7 +204,7 @@ class _JobQueuePlaceholderState extends State<_JobQueuePlaceholder>
     return Column(
       children: [
         _UnderlineTabBar(
-          tabs: const ['Pending', 'Active', 'Ready for Pickup'],
+          tabs: const ['Pending', 'Active', 'Ready for Pickup', 'Order History'],
           active: _tabs.index,
           onTap: (i) => _tabs.animateTo(i),
         ),
@@ -216,6 +216,7 @@ class _JobQueuePlaceholderState extends State<_JobQueuePlaceholder>
               _QueueList(jobStatus: 'pending'),
               _QueueList(jobStatus: 'active'),
               _ReadyForPickupList(),
+              _OrderHistoryList(),
             ],
           ),
         ),
@@ -374,7 +375,7 @@ class _ReadyOrderCard extends StatelessWidget {
     try {
       final d = (ts as Timestamp).toDate().toLocal();
       const m = ['Jan','Feb','Mar','Apr','May','Jun',
-                 'Jul','Aug','Sep','Oct','Nov','Dec'];
+        'Jul','Aug','Sep','Oct','Nov','Dec'];
       return '${m[d.month-1]} ${d.day}';
     } catch (_) { return '—'; }
   }
@@ -576,7 +577,7 @@ class _QueueCard extends StatelessWidget {
     try {
       final d = (ts as Timestamp).toDate().toLocal();
       const m = ['Jan','Feb','Mar','Apr','May','Jun',
-                 'Jul','Aug','Sep','Oct','Nov','Dec'];
+        'Jul','Aug','Sep','Oct','Nov','Dec'];
       return '${m[d.month-1]} ${d.day}, ${d.year} ${d.hour.toString().padLeft(2,'0')}:${d.minute.toString().padLeft(2,'0')}';
     } catch (_) { return '—'; }
   }
@@ -830,6 +831,332 @@ class _QueueCard extends StatelessWidget {
                 )),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+// ── Order History list ────────────────────────────────────────────────────────
+
+// ── Order History list ────────────────────────────────────────────────────────
+
+class _OrderHistoryList extends StatefulWidget {
+  const _OrderHistoryList();
+
+  @override
+  State<_OrderHistoryList> createState() => _OrderHistoryListState();
+}
+
+class _OrderHistoryListState extends State<_OrderHistoryList> {
+  String _statusFilter = 'all'; // 'all' | 'completed' | 'cancelled'
+  String _search = '';
+
+  static const _statusOpts = [
+    ('all',       'All'),
+    ('completed', 'Completed'),
+    ('cancelled', 'Cancelled'),
+  ];
+
+  Stream<List<QueryDocumentSnapshot>> _stream() {
+    Query q = FirebaseFirestore.instance.collection('Orders');
+    if (_statusFilter != 'all') {
+      q = q.where('status', isEqualTo: _statusFilter);
+    } else {
+      // whereIn: completed or cancelled
+      q = q.where('status', whereIn: ['completed', 'cancelled']);
+    }
+    return q.snapshots().map((snap) {
+      final docs = [...snap.docs]
+        ..sort((a, b) {
+          final ta = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          final tb = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          if (ta == null && tb == null) return 0;
+          if (ta == null) return 1;
+          if (tb == null) return -1;
+          return tb.compareTo(ta);
+        });
+      return docs;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Filter row ────────────────────────────────────────────────
+        Row(
+          children: [
+            ..._statusOpts.map((opt) {
+              final active = _statusFilter == opt.$1;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: () => setState(() => _statusFilter = opt.$1),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: active
+                          ? AppTheme.gold.withValues(alpha: 0.2)
+                          : Colors.white.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: active
+                            ? AppTheme.gold.withValues(alpha: 0.5)
+                            : Colors.white.withValues(alpha: 0.12),
+                      ),
+                    ),
+                    child: Text(opt.$2,
+                        style: TextStyle(
+                          color: active ? AppTheme.gold : Colors.white70,
+                          fontSize: 12,
+                          fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                        )),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+        const SizedBox(height: 10),
+        // ── Search field ──────────────────────────────────────────────
+        TextField(
+          onChanged: (v) => setState(() => _search = v.trim().toLowerCase()),
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          decoration: InputDecoration(
+            hintText: 'Search by order ID or customer…',
+            hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+            prefixIcon: const Icon(Icons.search, color: Colors.white38, size: 18),
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.06),
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppTheme.gold.withValues(alpha: 0.5)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // ── List ──────────────────────────────────────────────────────
+        Expanded(
+          child: StreamBuilder<List<QueryDocumentSnapshot>>(
+            stream: _stream(),
+            builder: (ctx, snap) {
+              if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+                return const Center(child: CircularProgressIndicator(color: AppTheme.gold));
+              }
+              if (snap.hasError) {
+                return Center(child: Text('Error: ${snap.error}',
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 12)));
+              }
+
+              var docs = snap.data ?? [];
+              if (_search.isNotEmpty) {
+                docs = docs.where((d) {
+                  final data = d.data() as Map<String, dynamic>;
+                  final id   = (data['order_id']?.toString() ?? d.id).toLowerCase();
+                  final name = (data['customer_name']?.toString() ?? '').toLowerCase();
+                  return id.contains(_search) || name.contains(_search);
+                }).toList();
+              }
+
+              if (docs.isEmpty) {
+                return const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.history, size: 52, color: Colors.white24),
+                      SizedBox(height: 14),
+                      Text('No orders found',
+                          style: TextStyle(color: Colors.white54, fontSize: 14)),
+                    ],
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.only(bottom: 16),
+                itemCount: docs.length,
+                itemBuilder: (_, i) {
+                  final doc  = docs[i];
+                  final data = doc.data() as Map<String, dynamic>;
+                  return _HistoryOrderCard(orderId: doc.id, data: data);
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HistoryOrderCard extends StatelessWidget {
+  final String orderId;
+  final Map<String, dynamic> data;
+  const _HistoryOrderCard({required this.orderId, required this.data});
+
+  String _fmtDate(dynamic ts) {
+    if (ts == null) return '—';
+    try {
+      final d = (ts as Timestamp).toDate().toLocal();
+      const m = ['Jan','Feb','Mar','Apr','May','Jun',
+        'Jul','Aug','Sep','Oct','Nov','Dec'];
+      return '${m[d.month-1]} ${d.day}, ${d.year}';
+    } catch (_) { return '—'; }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orderLabel = data['order_id']?.toString() ?? orderId;
+    final customer   = data['customer_name']?.toString() ?? '—';
+    final status     = data['status']?.toString() ?? 'completed';
+    final total      = (data['total_price']       as num?)?.toDouble() ?? 0;
+    final paid       = (data['amount_paid']        as num?)?.toDouble() ?? 0;
+    final remaining  = (data['remaining_balance']  as num?)?.toDouble() ?? (total - paid);
+    final fullyPaid  = remaining < 0.01;
+    final pct        = total > 0 ? (paid / total).clamp(0.0, 1.0) : 1.0;
+    final products   = (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final turnaround = data['turnaround_days'] as int?;
+    final dateStr    = _fmtDate(data['created_at']);
+    final invoiceId  = data['invoice_id']?.toString();
+    final isCancelled = status == 'cancelled';
+
+    final statusColor = isCancelled ? Colors.redAccent : Colors.white54;
+    final statusLabel = isCancelled ? 'Cancelled' : 'Completed';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: AppTheme.glassCard(opacity: 0.13, radius: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Top row ────────────────────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(orderLabel,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14)),
+                      Text('$customer · $dateStr',
+                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(statusLabel,
+                      style: TextStyle(
+                          color: statusColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // ── Products ───────────────────────────────────────────────
+            if (products.isNotEmpty) ...[
+              Text(
+                products.map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}').join(', '),
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 6),
+            ],
+
+            // ── Turnaround ─────────────────────────────────────────────
+            if (turnaround != null) ...[
+              Row(children: [
+                Icon(Icons.schedule, size: 12, color: Colors.white.withValues(alpha: 0.4)),
+                const SizedBox(width: 4),
+                Text('$turnaround day${turnaround == 1 ? '' : 's'} turnaround',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
+              ]),
+              const SizedBox(height: 8),
+            ],
+
+            // ── Balance row ────────────────────────────────────────────
+            if (!isCancelled) ...[
+              Row(
+                children: [
+                  _Chip('Total', '₱${total.toStringAsFixed(2)}', Colors.white70),
+                  const SizedBox(width: 10),
+                  _Chip('Paid', '₱${paid.toStringAsFixed(2)}', Colors.green),
+                  const SizedBox(width: 10),
+                  _Chip(
+                    fullyPaid ? 'Fully Paid' : 'Balance Due',
+                    fullyPaid ? '—' : '₱${remaining.toStringAsFixed(2)}',
+                    fullyPaid ? Colors.green : AppTheme.gold,
+                    bold: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // ── Progress bar ───────────────────────────────────────
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: pct,
+                  backgroundColor: Colors.white.withValues(alpha: 0.1),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      fullyPaid ? Colors.green : AppTheme.gold),
+                  minHeight: 5,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ] else
+              const SizedBox(height: 4),
+
+            // ── Invoice button ─────────────────────────────────────────
+            Builder(builder: (ctx) => OutlinedButton.icon(
+              onPressed: () async {
+                String? invId = invoiceId;
+                if (invId == null) {
+                  final orderSnap = await FirebaseFirestore.instance
+                      .collection('Orders').doc(orderId).get();
+                  invId = orderSnap.data()?['invoice_id']?.toString();
+                }
+                if (invId != null && ctx.mounted) {
+                  Navigator.of(ctx).push(MaterialPageRoute(
+                    builder: (_) => InvoiceScreen(invoiceId: invId!),
+                  ));
+                } else if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('No invoice for this order')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.receipt_long_rounded, size: 16, color: AppTheme.gold),
+              label: const Text('View Invoice',
+                  style: TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 12)),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: AppTheme.gold.withValues(alpha: 0.5)),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            )),
           ],
         ),
       ),
