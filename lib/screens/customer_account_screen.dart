@@ -149,11 +149,11 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                 ],
                 const SizedBox(height: 20),
                 ..._menus.map((m) => _SidebarBtn(
-                      label:    m.$2,
-                      icon:     m.$3,
-                      isActive: _menu == m.$1,
-                      onTap:    () => setState(() => _menu = m.$1),
-                    )),
+                  label:    m.$2,
+                  icon:     m.$3,
+                  isActive: _menu == m.$1,
+                  onTap:    () => setState(() => _menu = m.$1),
+                )),
                 const Spacer(),
                 SizedBox(
                   width: double.infinity,
@@ -277,7 +277,7 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                               m.$2,
                               style: TextStyle(
                                 color:
-                                    active ? AppTheme.gold : Colors.white70,
+                                active ? AppTheme.gold : Colors.white70,
                                 fontSize: 12,
                                 fontWeight: active
                                     ? FontWeight.bold
@@ -321,9 +321,9 @@ class _SidebarBtn extends StatelessWidget {
   final VoidCallback onTap;
   const _SidebarBtn(
       {required this.label,
-      required this.icon,
-      required this.isActive,
-      required this.onTap});
+        required this.icon,
+        required this.isActive,
+        required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -341,7 +341,7 @@ class _SidebarBtn extends StatelessWidget {
             elevation: 0,
             alignment: Alignment.centerLeft,
             padding:
-                const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+            const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(30)),
           ),
@@ -457,32 +457,32 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-      padding: EdgeInsets.all(compact ? 10 : 16),
-      decoration: AppTheme.glassCard(opacity: 0.12, radius: 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: compact ? 20 : 28),
-          SizedBox(height: compact ? 6 : 10),
-          Text('$count',
-              style: TextStyle(
-                  color: color,
-                  fontSize: compact ? 20 : 26,
-                  fontWeight: FontWeight.bold)),
-          SizedBox(height: compact ? 2 : 4),
-          Text(label,
-              style: TextStyle(color: Colors.white60, fontSize: compact ? 10 : 12)),
-          if (onTap != null) ...[
-            const SizedBox(height: 6),
-            Icon(Icons.arrow_forward_ios_rounded,
-                size: 10, color: Colors.white.withValues(alpha: 0.3)),
-          ],
-        ],
-      ),
-    ));
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.all(compact ? 10 : 16),
+          decoration: AppTheme.glassCard(opacity: 0.12, radius: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: color, size: compact ? 20 : 28),
+              SizedBox(height: compact ? 6 : 10),
+              Text('$count',
+                  style: TextStyle(
+                      color: color,
+                      fontSize: compact ? 20 : 26,
+                      fontWeight: FontWeight.bold)),
+              SizedBox(height: compact ? 2 : 4),
+              Text(label,
+                  style: TextStyle(color: Colors.white60, fontSize: compact ? 10 : 12)),
+              if (onTap != null) ...[
+                const SizedBox(height: 6),
+                Icon(Icons.arrow_forward_ios_rounded,
+                    size: 10, color: Colors.white.withValues(alpha: 0.3)),
+              ],
+            ],
+          ),
+        ));
   }
 }
 
@@ -506,8 +506,8 @@ class _UnreadMessagesPreview extends StatelessWidget {
         }).toList();
         final totalUnread = docs.fold<int>(
             0,
-            (sum, d) =>
-                sum +
+                (sum, d) =>
+            sum +
                 (((d.data() as Map)['unread_customer'] as num?) ?? 0)
                     .toInt());
 
@@ -553,7 +553,7 @@ class _UnreadMessagesPreview extends StatelessWidget {
                 child: const Center(
                   child: Text('No unread messages',
                       style:
-                          TextStyle(color: Colors.white38, fontSize: 13)),
+                      TextStyle(color: Colors.white38, fontSize: 13)),
                 ),
               )
             else
@@ -594,10 +594,10 @@ class _UnreadMessageCard extends StatelessWidget {
   final VoidCallback onTap;
   const _UnreadMessageCard(
       {required this.orderId,
-      required this.orderDisplay,
-      required this.lastMsg,
-      required this.unread,
-      required this.onTap});
+        required this.orderDisplay,
+        required this.lastMsg,
+        required this.unread,
+        required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -620,7 +620,7 @@ class _UnreadMessageCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(lastMsg,
                       style:
-                          const TextStyle(color: Colors.white54, fontSize: 12),
+                      const TextStyle(color: Colors.white54, fontSize: 12),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                 ],
@@ -646,7 +646,7 @@ class _UnreadMessageCard extends StatelessWidget {
               foregroundColor: Colors.black,
               elevation: 0,
               padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               shape: RoundedRectangleBorder(
@@ -654,7 +654,7 @@ class _UnreadMessageCard extends StatelessWidget {
             ),
             child: const Text('View',
                 style:
-                    TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -746,7 +746,7 @@ class _OrdersContentState extends State<_OrdersContent> {
                   !snap.hasData) {
                 return const Center(
                     child:
-                        CircularProgressIndicator(color: Colors.white38));
+                    CircularProgressIndicator(color: Colors.white38));
               }
               if (snap.hasError) {
                 return Center(
@@ -1090,12 +1090,12 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Center(child: Container(width: 40, height: 4,
-                    decoration: BoxDecoration(color: Colors.white24,
-                        borderRadius: BorderRadius.circular(2)))),
+                      decoration: BoxDecoration(color: Colors.white24,
+                          borderRadius: BorderRadius.circular(2)))),
                   const SizedBox(height: 14),
                   const Align(alignment: Alignment.centerLeft,
-                    child: Text('Enter Payment Amount',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))),
+                      child: Text('Enter Payment Amount',
+                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))),
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1124,8 +1124,8 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
                     ),
                     child: Row(children: [
                       Padding(padding: const EdgeInsets.only(left: 14),
-                        child: Text('₱', style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6), fontSize: 20))),
+                          child: Text('₱', style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6), fontSize: 20))),
                       Expanded(child: TextField(
                         controller: ctrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1181,7 +1181,7 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         children: [
           Center(child: Container(width: 40, height: 4,
-            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
           const SizedBox(height: 16),
 
           // Header
@@ -1290,7 +1290,7 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
                 onPressed: _payingNow ? null : _payNow,
                 icon: _payingNow
                     ? const SizedBox(width: 16, height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                     : const Icon(Icons.payment_rounded),
                 label: Text(
                   _status == 'awaiting_payment'
@@ -1373,9 +1373,9 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
 
   String? get _url =>
       _localUrl ??
-      (widget.status == 'awaiting_payment'
-          ? widget.order['paymongo_checkout_url'] as String?
-          : widget.order['balance_checkout_url']  as String?);
+          (widget.status == 'awaiting_payment'
+              ? widget.order['paymongo_checkout_url'] as String?
+              : widget.order['balance_checkout_url']  as String?);
 
   Future<void> _generate() async {
     setState(() => _generating = true);
@@ -1439,7 +1439,7 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
               onPressed: _generating ? null : _generate,
               icon: _generating
                   ? const SizedBox(width: 14, height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.gold))
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.gold))
                   : const Icon(Icons.qr_code_2_rounded, color: AppTheme.gold, size: 16),
               label: Text(_generating ? 'Generating…' : 'Generate Payment QR',
                   style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold)),
@@ -1733,9 +1733,12 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
   final _confPwCtrl  = TextEditingController();
 
   bool _showCur = false, _showNew = false, _showConf = false;
-  bool _savingInfo = false, _savingPw = false;
+  bool _savingInfo = false, _savingPw = false, _savingEmail = false;
   bool _loading = true;
-  String? _infoMsg, _infoErr, _pwMsg, _pwErr;
+  String? _infoMsg, _infoErr, _pwMsg, _pwErr, _emailMsg, _emailErr;
+
+  final _emailPwCtrl = TextEditingController();
+  bool _showEmailPw = false;
 
   @override
   void initState() {
@@ -1747,6 +1750,7 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
   void dispose() {
     _nameCtrl.dispose(); _emailCtrl.dispose();
     _curPwCtrl.dispose(); _newPwCtrl.dispose(); _confPwCtrl.dispose();
+    _emailPwCtrl.dispose();
     super.dispose();
   }
 
@@ -1785,6 +1789,51 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
       if (mounted) setState(() { _infoMsg = 'Name updated.'; _savingInfo = false; });
     } catch (e) {
       if (mounted) setState(() { _infoErr = 'Failed: $e'; _savingInfo = false; });
+    }
+  }
+
+  Future<void> _changeEmail() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final newEmail = _emailCtrl.text.trim();
+    final pw       = _emailPwCtrl.text.trim();
+    if (newEmail.isEmpty) {
+      setState(() { _emailErr = 'Email cannot be empty.'; _emailMsg = null; }); return;
+    }
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(newEmail)) {
+      setState(() { _emailErr = 'Enter a valid email address.'; _emailMsg = null; }); return;
+    }
+    if (pw.isEmpty) {
+      setState(() { _emailErr = 'Enter your current password to confirm.'; _emailMsg = null; }); return;
+    }
+    if (newEmail == user.email) {
+      setState(() { _emailErr = 'That is already your current email.'; _emailMsg = null; }); return;
+    }
+    setState(() { _savingEmail = true; _emailErr = null; _emailMsg = null; });
+    try {
+      final cred = EmailAuthProvider.credential(email: user.email!, password: pw);
+      await user.reauthenticateWithCredential(cred);
+      await user.verifyBeforeUpdateEmail(newEmail);
+      await FirebaseFirestore.instance
+          .collection('User')
+          .doc(user.uid)
+          .update({'email': newEmail});
+      if (mounted) {
+        setState(() {
+          _emailMsg = 'Verification email sent to $newEmail. Please verify to complete the change.';
+          _savingEmail = false;
+          _emailPwCtrl.clear();
+        });
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) setState(() {
+        _emailErr = e.code == 'wrong-password'
+            ? 'Current password is incorrect.'
+            : (e.message ?? 'Failed to update email.');
+        _savingEmail = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() { _emailErr = 'Failed: $e'; _savingEmail = false; });
     }
   }
 
@@ -1841,27 +1890,48 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
           const SizedBox(height: 12),
           _field(label: 'Full Name', ctrl: _nameCtrl),
           const SizedBox(height: 10),
-          _field(label: 'Email', ctrl: _emailCtrl, readOnly: true),
+          _field(label: 'Email', ctrl: _emailCtrl),
+          const SizedBox(height: 10),
+          _pwField(label: 'Current Password (to confirm email change)',
+              ctrl: _emailPwCtrl, show: _showEmailPw,
+              toggle: () => setState(() => _showEmailPw = !_showEmailPw)),
           const SizedBox(height: 4),
-          const Text('Email cannot be changed.',
+          const Text('A verification link will be sent to your new email.',
               style: TextStyle(color: Colors.white38, fontSize: 11)),
+          if (_emailMsg != null) ...[const SizedBox(height: 8), _banner(_emailMsg!, false)],
+          if (_emailErr != null) ...[const SizedBox(height: 8), _banner(_emailErr!, true)],
           if (_infoMsg != null) ...[const SizedBox(height: 8), _banner(_infoMsg!, false)],
           if (_infoErr != null) ...[const SizedBox(height: 8), _banner(_infoErr!, true)],
           const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton(
-              onPressed: _savingInfo ? null : _saveName,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.gold, foregroundColor: Colors.black, elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              ElevatedButton(
+                onPressed: _savingEmail ? null : _changeEmail,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueGrey.shade700, foregroundColor: Colors.white, elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                ),
+                child: _savingEmail
+                    ? const SizedBox(width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54))
+                    : const Text('Change Email', style: TextStyle(fontWeight: FontWeight.w600)),
               ),
-              child: _savingInfo
-                  ? const SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54))
-                  : const Text('Save Name', style: TextStyle(fontWeight: FontWeight.w600)),
-            ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _savingInfo ? null : _saveName,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.gold, foregroundColor: Colors.black, elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                ),
+                child: _savingInfo
+                    ? const SizedBox(width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54))
+                    : const Text('Save Name', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
           _section('Change Password'),
@@ -1888,7 +1958,7 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
               ),
               child: _savingPw
                   ? const SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54))
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54))
                   : const Text('Change Password', style: TextStyle(fontWeight: FontWeight.w600)),
             ),
           ),
@@ -1904,27 +1974,27 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
   ]);
 
   Widget _field({required String label, required TextEditingController ctrl, bool readOnly = false}) =>
-    TextField(
-      controller: ctrl,
-      readOnly: readOnly,
-      style: TextStyle(color: readOnly ? Colors.white54 : Colors.white, fontSize: 14),
-      decoration: AppTheme.inputDecoration(label),
-    );
+      TextField(
+        controller: ctrl,
+        readOnly: readOnly,
+        style: TextStyle(color: readOnly ? Colors.white54 : Colors.white, fontSize: 14),
+        decoration: AppTheme.inputDecoration(label),
+      );
 
   Widget _pwField({required String label, required TextEditingController ctrl,
-      required bool show, required VoidCallback toggle}) =>
-    TextField(
-      controller: ctrl,
-      obscureText: !show,
-      style: const TextStyle(color: Colors.white, fontSize: 14),
-      decoration: AppTheme.inputDecoration(label,
-          icon: Icons.lock_outline,
-          suffixIcon: IconButton(
-            icon: Icon(show ? Icons.visibility : Icons.visibility_off,
-                color: Colors.white54, size: 18),
-            onPressed: toggle,
-          )),
-    );
+    required bool show, required VoidCallback toggle}) =>
+      TextField(
+        controller: ctrl,
+        obscureText: !show,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: AppTheme.inputDecoration(label,
+            icon: Icons.lock_outline,
+            suffixIcon: IconButton(
+              icon: Icon(show ? Icons.visibility : Icons.visibility_off,
+                  color: Colors.white54, size: 18),
+              onPressed: toggle,
+            )),
+      );
 
   Widget _banner(String msg, bool isError) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1980,7 +2050,7 @@ class _FeedbackContent extends StatelessWidget {
                   !snap.hasData) {
                 return const Center(
                     child:
-                        CircularProgressIndicator(color: Colors.white38));
+                    CircularProgressIndicator(color: Colors.white38));
               }
               final docs = snap.data?.docs ?? [];
               if (docs.isEmpty) {
@@ -2198,7 +2268,7 @@ class _ReviewDialogState extends State<_ReviewDialog> {
             const SizedBox(height: 4),
             Text(widget.orderId,
                 style:
-                    const TextStyle(color: Colors.white54, fontSize: 12)),
+                const TextStyle(color: Colors.white54, fontSize: 12)),
             if (widget.productName.isNotEmpty)
               Text(widget.productName,
                   style: const TextStyle(
@@ -2261,13 +2331,13 @@ class _ReviewDialogState extends State<_ReviewDialog> {
                     style: AppTheme.primaryButton(),
                     child: _submitting
                         ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.black))
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.black))
                         : const Text('Submit',
-                            style:
-                                TextStyle(fontWeight: FontWeight.bold)),
+                        style:
+                        TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
