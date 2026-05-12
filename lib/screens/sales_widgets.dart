@@ -75,7 +75,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
         final docs = _typeFilter == 'all'
             ? allDocs
             : allDocs.where((d) =>
-                (d.data() as Map)['payment_type']?.toString() == _typeFilter).toList();
+        (d.data() as Map)['payment_type']?.toString() == _typeFilter).toList();
 
         // Summary row
         final totalCollected = allDocs.fold<double>(
@@ -113,13 +113,13 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                 child: Row(
                   children: [
                     _FilterChip('All', 'all', _typeFilter,
-                        (v) => setState(() => _typeFilter = v)),
+                            (v) => setState(() => _typeFilter = v)),
                     _FilterChip('Downpayment', 'downpayment', _typeFilter,
-                        (v) => setState(() => _typeFilter = v)),
+                            (v) => setState(() => _typeFilter = v)),
                     _FilterChip('Balance', 'balance', _typeFilter,
-                        (v) => setState(() => _typeFilter = v)),
+                            (v) => setState(() => _typeFilter = v)),
                     _FilterChip('Cash', 'cash', _typeFilter,
-                        (v) => setState(() => _typeFilter = v)),
+                            (v) => setState(() => _typeFilter = v)),
                   ],
                 ),
               ),
@@ -150,63 +150,63 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
             Expanded(
               child: docs.isEmpty
                   ? const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.receipt_long_outlined, size: 40, color: Colors.white24),
-                          SizedBox(height: 12),
-                          Text('No sales records yet',
-                              style: TextStyle(color: Colors.white38, fontSize: 13)),
-                        ],
-                      ),
-                    )
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.receipt_long_outlined, size: 40, color: Colors.white24),
+                    SizedBox(height: 12),
+                    Text('No sales records yet',
+                        style: TextStyle(color: Colors.white38, fontSize: 13)),
+                  ],
+                ),
+              )
                   : ListView.separated(
-                      padding: EdgeInsets.zero,
-                      itemCount: docs.length,
-                      separatorBuilder: (_, __) =>
-                          Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
-                      itemBuilder: (_, i) {
-                        final d       = docs[i].data() as Map<String, dynamic>;
-                        final type    = d['payment_type']?.toString();
-                        final method  = d['payment_method']?.toString();
-                        final amount  = (d['sale_amount'] as num?)?.toDouble() ?? 0;
-                        final orderId = d['order_id']?.toString() ?? '—';
-                        final custName = d['customer_name']?.toString() ?? '—';
-                        final date    = _fmt(d['sale_date'] as Timestamp?);
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
-                          child: Row(
-                            children: [
-                              Expanded(flex: 3, child: Text(
-                                orderId.length > 10 ? orderId.substring(0, 10) : orderId,
-                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-                              )),
-                              Expanded(flex: 3, child: Text(
-                                custName.length > 12 ? '${custName.substring(0, 10)}…' : custName,
-                                style: const TextStyle(color: Colors.white70, fontSize: 12),
-                              )),
-                              Expanded(flex: 2, child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: _typeColor(type).withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(_typeLabel(type),
-                                    style: TextStyle(color: _typeColor(type), fontSize: 10,
-                                        fontWeight: FontWeight.w600)),
-                              )),
-                              Expanded(flex: 2, child: Text(_methodLabel(method),
-                                  style: const TextStyle(color: Colors.white54, fontSize: 11))),
-                              Expanded(flex: 2, child: Text('₱${amount.toStringAsFixed(2)}',
-                                  style: const TextStyle(color: AppTheme.gold, fontSize: 13,
-                                      fontWeight: FontWeight.w600))),
-                              Expanded(flex: 3, child: Text(date,
-                                  style: const TextStyle(color: Colors.white54, fontSize: 11))),
-                            ],
+                padding: EdgeInsets.zero,
+                itemCount: docs.length,
+                separatorBuilder: (_, __) =>
+                    Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+                itemBuilder: (_, i) {
+                  final d       = docs[i].data() as Map<String, dynamic>;
+                  final type    = d['payment_type']?.toString();
+                  final method  = d['payment_method']?.toString();
+                  final amount  = (d['sale_amount'] as num?)?.toDouble() ?? 0;
+                  final orderId = d['order_id']?.toString() ?? '—';
+                  final custName = d['customer_name']?.toString() ?? '—';
+                  final date    = _fmt(d['sale_date'] as Timestamp?);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                    child: Row(
+                      children: [
+                        Expanded(flex: 3, child: Text(
+                          orderId.length > 10 ? orderId.substring(0, 10) : orderId,
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                        )),
+                        Expanded(flex: 3, child: Text(
+                          custName.length > 12 ? '${custName.substring(0, 10)}…' : custName,
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        )),
+                        Expanded(flex: 2, child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _typeColor(type).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                        );
-                      },
+                          child: Text(_typeLabel(type),
+                              style: TextStyle(color: _typeColor(type), fontSize: 10,
+                                  fontWeight: FontWeight.w600)),
+                        )),
+                        Expanded(flex: 2, child: Text(_methodLabel(method),
+                            style: const TextStyle(color: Colors.white54, fontSize: 11))),
+                        Expanded(flex: 2, child: Text('₱${amount.toStringAsFixed(2)}',
+                            style: const TextStyle(color: AppTheme.gold, fontSize: 13,
+                                fontWeight: FontWeight.w600))),
+                        Expanded(flex: 3, child: Text(date,
+                            style: const TextStyle(color: Colors.white54, fontSize: 11))),
+                      ],
                     ),
+                  );
+                },
+              ),
             ),
           ],
         );
@@ -278,12 +278,38 @@ class _H extends StatelessWidget {
 
 // ── Sales Report ──────────────────────────────────────────────────────────────
 
-class SalesReportView extends StatelessWidget {
+class SalesReportView extends StatefulWidget {
   const SalesReportView({super.key});
+
+  @override
+  State<SalesReportView> createState() => _SalesReportViewState();
+}
+
+class _SalesReportViewState extends State<SalesReportView> {
+  // 0 = Today, 1 = This Week, 2 = Monthly (default — original behaviour)
+  int _period = 2;
+
+  static const _periodLabels = ['Today', 'This Week', 'Monthly'];
 
   static String _shortMonth(int m) {
     const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return names[m - 1];
+  }
+
+  /// Returns true if [dt] falls within the selected period.
+  bool _inPeriod(DateTime dt) {
+    final now   = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    switch (_period) {
+      case 0: // Today
+        return dt.isAfter(today) || dt.isAtSameMomentAs(today);
+      case 1: // This week (Mon–Sun)
+        final weekStart = today.subtract(Duration(days: today.weekday - 1));
+        return dt.isAfter(weekStart.subtract(const Duration(seconds: 1)));
+      case 2: // Monthly — no filter, use all docs
+      default:
+        return true;
+    }
   }
 
   @override
@@ -302,7 +328,15 @@ class SalesReportView extends StatelessWidget {
               style: const TextStyle(color: Colors.redAccent)));
         }
 
-        final docs = snap.data?.docs ?? [];
+        final allDocs = snap.data?.docs ?? [];
+
+        // Filter docs by selected period
+        final docs = allDocs.where((doc) {
+          final d  = doc.data() as Map<String, dynamic>;
+          final ts = d['sale_date'] as Timestamp?;
+          if (ts == null) return _period == 2; // monthly keeps null-date records
+          return _inPeriod(ts.toDate().toLocal());
+        }).toList();
 
         double totalRevenue    = 0;
         double downpaymentTotal = 0;
@@ -345,9 +379,43 @@ class SalesReportView extends StatelessWidget {
             children: [
               const Text('Sales Report',
                   style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+
+              // ── Period filter chips ───────────────────────────────────────
+              SizedBox(
+                height: 32,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: List.generate(_periodLabels.length, (i) {
+                    final isActive = i == _period;
+                    return GestureDetector(
+                      onTap: () => setState(() => _period = i),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        margin: EdgeInsets.only(right: i < _periodLabels.length - 1 ? 8 : 0),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? AppTheme.gold
+                              : Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        child: Text(
+                          _periodLabels[i],
+                          style: TextStyle(
+                            color: isActive ? Colors.black : Colors.white70,
+                            fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
               const SizedBox(height: 16),
 
-              // Stats grid
+              // Stats grid — unchanged
               LayoutBuilder(builder: (_, constraints) {
                 final narrow = constraints.maxWidth < 400;
                 return Wrap(
@@ -362,7 +430,7 @@ class SalesReportView extends StatelessWidget {
               }),
               const SizedBox(height: 24),
 
-              // Chart
+              // Chart — unchanged
               const Row(
                 children: [
                   Icon(Icons.bar_chart_rounded, color: Colors.blueAccent, size: 14),
@@ -385,14 +453,14 @@ class SalesReportView extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: monthBuckets
                     .map((b) => Column(
-                          children: [
-                            Text(b.label,
-                                style: const TextStyle(color: Colors.white38, fontSize: 10)),
-                            if (b.total > 0)
-                              Text('₱${b.total.toStringAsFixed(0)}',
-                                  style: const TextStyle(color: AppTheme.gold, fontSize: 9)),
-                          ],
-                        ))
+                  children: [
+                    Text(b.label,
+                        style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                    if (b.total > 0)
+                      Text('₱${b.total.toStringAsFixed(0)}',
+                          style: const TextStyle(color: AppTheme.gold, fontSize: 9)),
+                  ],
+                ))
                     .toList(),
               ),
             ],
