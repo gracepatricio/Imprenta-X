@@ -3,29 +3,28 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'app_theme.dart';
 
+// ── Breakpoint ────────────────────────────────────────────────────────────────
+// Below this width the layout switches to compact/stacked mode.
+const double _kNarrow = 700.0;
+
+// Minimum table width so columns are never crushed on very small screens.
+const double _kTableMinWidth = 560.0;
+
 // ── Liquid Glass Design Tokens ────────────────────────────────────────────────
 class _Glass {
-  // Surfaces — white with varying opacity so the background always peeks through
-  static const Color surface = Color(0xEEFFFFFF); // dialogs
-  static const Color surfaceMid = Color(
-    0xCCFFFFFF,
-  ); // table header, summary cards
-  static const Color surfaceThin = Color(0x99FFFFFF); // chips inactive
-  static const Color surfaceRow = Color(0xBBFFFFFF); // list rows
+  static const Color surface = Color(0xEEFFFFFF);
+  static const Color surfaceMid = Color(0xCCFFFFFF);
+  static const Color surfaceThin = Color(0x99FFFFFF);
+  static const Color surfaceRow = Color(0xBBFFFFFF);
 
-  // Borders — hair-thin, white-tinted
-  static const Color borderTop = Color(
-    0xEEFFFFFF,
-  ); // top edge highlight (unused but kept)
-  static const Color borderMid = Color(0x55FFFFFF); // standard
-  static const Color borderDim = Color(0x28FFFFFF); // subtle dividers
+  static const Color borderTop = Color(0xEEFFFFFF);
+  static const Color borderMid = Color(0x55FFFFFF);
+  static const Color borderDim = Color(0x28FFFFFF);
 
-  // Text
   static const Color textPrimary = Color(0xFF111827);
   static const Color textSecondary = Color(0xBB111827);
   static const Color textMuted = Color(0x77111827);
 
-  // Shadows — soft and diffuse
   static const BoxShadow elevatedShadow = BoxShadow(
     color: Color(0x1A000000),
     blurRadius: 20,
@@ -61,14 +60,18 @@ class _Glass {
   );
 }
 
+// ── Sub-menu tab enum ─────────────────────────────────────────────────────────
+enum _InventoryTab { inventory, forecast }
+
+// =============================================================================
 class AdminInventoryScreen extends StatefulWidget {
   const AdminInventoryScreen({super.key});
-
   @override
   State<AdminInventoryScreen> createState() => _AdminInventoryScreenState();
 }
 
 class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
+  _InventoryTab _activeTab = _InventoryTab.inventory;
   String? _statusFilter;
   bool _seeding = false;
 
@@ -115,38 +118,51 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
         });
       }
       await batch.commit();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('29 raw materials seeded successfully'),
-            backgroundColor: _statusColor('In Stock'),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
+      if (mounted)
+        _snack(
+          '29 raw materials seeded successfully',
+          _statusColor('In Stock'),
         );
-      }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Seed error: $e'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      }
+      if (mounted) _snack('Seed error: $e', Colors.red);
     } finally {
       if (mounted) setState(() => _seeding = false);
     }
   }
 
+  void _snack(String msg, Color bg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: bg,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  // ── Root build ──────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SubMenuTabBar(
+          activeTab: _activeTab,
+          onTabChanged: (tab) => setState(() => _activeTab = tab),
+        ),
+        const SizedBox(height: 10),
+        Expanded(
+          child: _activeTab == _InventoryTab.forecast
+              ? const _ForecastPlaceholder()
+              : _buildInventoryContent(),
+        ),
+      ],
+    );
+  }
+
+  // ── Inventory content ───────────────────────────────────────────────────────
+  Widget _buildInventoryContent() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('RawMaterials')
@@ -162,7 +178,6 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
         }
 
         final docs = snapshot.data?.docs ?? [];
-
         if (docs.isEmpty) {
           return _EmptyState(seeding: _seeding, onSeed: _seedInitialData);
         }
@@ -188,176 +203,47 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
             ? materials
             : materials.where((m) => m['_status'] == _statusFilter).toList();
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Unified top panel ────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-              decoration: BoxDecoration(
-                color: _Glass.surfaceMid,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: _Glass.borderMid, width: 0.8),
-                boxShadow: const [_Glass.rowShadow],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // row 1 — title + buttons
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Inventory',
-                              style: TextStyle(
-                                color: _Glass.textPrimary,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.4,
-                              ),
-                            ),
-                            SizedBox(height: 1),
-                            Text(
-                              'Raw materials — view and adjust stock',
-                              style: TextStyle(
-                                color: _Glass.textMuted,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      _GlassButton(
-                        label: 'Add Material',
-                        icon: Icons.add_rounded,
-                        isPrimary: true,
-                        onPressed: () =>
-                            _showAddMaterialDialog(context, materials),
-                      ),
-                      const SizedBox(width: 8),
-                      _GlassButton(
-                        label: 'Re-seed',
-                        icon: Icons.refresh_rounded,
-                        isPrimary: false,
-                        isLoading: _seeding,
-                        onPressed: _seeding ? null : _seedInitialData,
-                      ),
-                    ],
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < _kNarrow;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _TopPanel(
+                  isNarrow: isNarrow,
+                  statuses: _statuses,
+                  counts: counts,
+                  statusFilter: _statusFilter,
+                  statusColor: _statusColor,
+                  seeding: _seeding,
+                  onFilterTap: (s) => setState(
+                    () => _statusFilter = _statusFilter == s ? null : s,
                   ),
-
-                  const SizedBox(height: 14),
-
-                  // row 2 — stat cards left, filter chips right (all in one line)
-                  Row(
-                    children: [
-                      // stat cards
-                      ..._statuses.map(
-                        (s) => _SummaryCard(
-                          status: s,
-                          count: counts[s] ?? 0,
-                          color: _statusColor(s),
-                          isActive: _statusFilter == s,
-                          onTap: () => setState(
-                            () => _statusFilter = _statusFilter == s ? null : s,
-                          ),
-                        ),
-                      ),
-
-                      const Spacer(),
-
-                      // filter chips
-                      _StatusChip(
-                        label: 'All',
-                        isActive: _statusFilter == null,
-                        onTap: () => setState(() => _statusFilter = null),
-                      ),
-                      ..._statuses.map(
-                        (s) => _StatusChip(
-                          label: s,
-                          color: _statusColor(s),
-                          isActive: _statusFilter == s,
-                          onTap: () => setState(
-                            () => _statusFilter = _statusFilter == s ? null : s,
-                          ),
-                        ),
-                      ),
-                    ],
+                  onClearFilter: () => setState(() => _statusFilter = null),
+                  onAddMaterial: () =>
+                      _showAddMaterialDialog(context, materials),
+                  onReseed: _seeding ? null : _seedInitialData,
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: _TablePanel(
+                    isNarrow: isNarrow,
+                    filtered: filtered,
+                    statusColor: _statusColor,
+                    statusFilter: _statusFilter,
+                    onQrTap: (m) => _showQr(context, m),
+                    onDeleteTap: (m) => _confirmDelete(context, m),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // ── Table panel — distinct section ───────────────────────────────
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: _Glass.surface,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: _Glass.borderMid, width: 0.8),
-                  boxShadow: const [_Glass.rowShadow],
                 ),
-                child: Column(
-                  children: [
-                    // sticky header inside the panel
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xF2F4F6F8), // very light cool tint
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(18),
-                        ),
-                        border: Border(
-                          bottom: BorderSide(
-                            color: _Glass.borderMid,
-                            width: 0.8,
-                          ),
-                        ),
-                      ),
-                      child: const _TableHeader(),
-                    ),
-
-                    // rows
-                    Expanded(
-                      child: filtered.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No materials with status "$_statusFilter"',
-                                style: const TextStyle(
-                                  color: _Glass.textMuted,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              padding: EdgeInsets.zero,
-                              itemCount: filtered.length,
-                              itemBuilder: (_, i) => _MaterialRow(
-                                data: filtered[i],
-                                isLast: i == filtered.length - 1,
-                                statusColor: _statusColor(
-                                  filtered[i]['_status'] as String,
-                                ),
-                                onQrTap: () => _showQr(context, filtered[i]),
-                                onDeleteTap: () =>
-                                    _confirmDelete(context, filtered[i]),
-                              ),
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // ── Helpers ─────────────────────────────────────────────────────────────────
 
   String _nextMaterialId(List<Map<String, dynamic>> materials) {
     int maxNum = 0;
@@ -370,8 +256,6 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     }
     return 'RM-${(maxNum + 1).toString().padLeft(3, '0')}';
   }
-
-  // ── Add material dialog ───────────────────────────────────────────────────────
 
   void _showAddMaterialDialog(
     BuildContext context,
@@ -571,8 +455,6 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     );
   }
 
-  // ── Delete confirmation ───────────────────────────────────────────────────────
-
   void _confirmDelete(BuildContext context, Map<String, dynamic> m) {
     final docId = m['doc_id']?.toString() ?? '';
     final name = m['material_name']?.toString() ?? docId;
@@ -658,8 +540,6 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     );
   }
 
-  // ── QR dialog ─────────────────────────────────────────────────────────────────
-
   void _showQr(BuildContext context, Map<String, dynamic> m) {
     showDialog(
       context: context,
@@ -710,7 +590,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
             const SizedBox(height: 12),
             Text(
               m['material_id']?.toString() ?? '',
-              style: TextStyle(
+              style: const TextStyle(
                 color: _Glass.textSecondary,
                 fontSize: 14,
                 fontFamily: 'monospace',
@@ -718,7 +598,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
+            const Text(
               'Print and attach to raw material storage',
               style: TextStyle(color: _Glass.textMuted, fontSize: 11),
               textAlign: TextAlign.center,
@@ -745,9 +625,437 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
   }
 }
 
-// ── Shared glass widgets ──────────────────────────────────────────────────────
+// =============================================================================
+// Top Panel — wide: single-row layout; narrow: stacked sections + scrollable rows
+// =============================================================================
+class _TopPanel extends StatelessWidget {
+  final bool isNarrow;
+  final List<String> statuses;
+  final Map<String, int> counts;
+  final String? statusFilter;
+  final Color Function(String) statusColor;
+  final bool seeding;
+  final void Function(String) onFilterTap;
+  final VoidCallback onClearFilter;
+  final VoidCallback onAddMaterial;
+  final VoidCallback? onReseed;
 
-/// A glass-styled button: primary uses gold tint, secondary is ghost.
+  const _TopPanel({
+    required this.isNarrow,
+    required this.statuses,
+    required this.counts,
+    required this.statusFilter,
+    required this.statusColor,
+    required this.seeding,
+    required this.onFilterTap,
+    required this.onClearFilter,
+    required this.onAddMaterial,
+    required this.onReseed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: _Glass.surfaceMid,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _Glass.borderMid, width: 0.8),
+        boxShadow: const [_Glass.rowShadow],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Title + action buttons ──────────────────────────────────────────
+          // On narrow, title is above buttons (stacked).
+          // On wide, they share a single row.
+          if (isNarrow) ...[
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Inventory',
+                  style: TextStyle(
+                    color: _Glass.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Raw materials — view and adjust stock',
+                  style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _GlassButton(
+                  label: 'Add Material',
+                  icon: Icons.add_rounded,
+                  isPrimary: true,
+                  onPressed: onAddMaterial,
+                ),
+                const SizedBox(width: 8),
+                _GlassButton(
+                  label: 'Re-seed',
+                  icon: Icons.refresh_rounded,
+                  isPrimary: false,
+                  isLoading: seeding,
+                  onPressed: onReseed,
+                ),
+              ],
+            ),
+          ] else ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Inventory',
+                        style: TextStyle(
+                          color: _Glass.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      SizedBox(height: 1),
+                      Text(
+                        'Raw materials — view and adjust stock',
+                        style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                _GlassButton(
+                  label: 'Add Material',
+                  icon: Icons.add_rounded,
+                  isPrimary: true,
+                  onPressed: onAddMaterial,
+                ),
+                const SizedBox(width: 8),
+                _GlassButton(
+                  label: 'Re-seed',
+                  icon: Icons.refresh_rounded,
+                  isPrimary: false,
+                  isLoading: seeding,
+                  onPressed: onReseed,
+                ),
+              ],
+            ),
+          ],
+
+          const SizedBox(height: 14),
+
+          // ── Stat cards — always in a horizontal scroll so they never overflow
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: statuses
+                  .map(
+                    (s) => _SummaryCard(
+                      status: s,
+                      count: counts[s] ?? 0,
+                      color: statusColor(s),
+                      isActive: statusFilter == s,
+                      onTap: () => onFilterTap(s),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // ── Filter chips — also scrollable
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _StatusChip(
+                  label: 'All',
+                  isActive: statusFilter == null,
+                  onTap: onClearFilter,
+                ),
+                ...statuses.map(
+                  (s) => _StatusChip(
+                    label: s,
+                    color: statusColor(s),
+                    isActive: statusFilter == s,
+                    onTap: () => onFilterTap(s),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Table Panel — horizontally scrollable on narrow screens
+// =============================================================================
+class _TablePanel extends StatelessWidget {
+  final bool isNarrow;
+  final List<Map<String, dynamic>> filtered;
+  final Color Function(String) statusColor;
+  final String? statusFilter;
+  final void Function(Map<String, dynamic>) onQrTap;
+  final void Function(Map<String, dynamic>) onDeleteTap;
+
+  const _TablePanel({
+    required this.isNarrow,
+    required this.filtered,
+    required this.statusColor,
+    required this.statusFilter,
+    required this.onQrTap,
+    required this.onDeleteTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _Glass.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _Glass.borderMid, width: 0.8),
+        boxShadow: const [_Glass.rowShadow],
+      ),
+      child: Column(
+        children: [
+          // Sticky header
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xF2F4F6F8),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(18),
+              ),
+              border: Border(
+                bottom: BorderSide(color: _Glass.borderMid, width: 0.8),
+              ),
+            ),
+            child: isNarrow
+                ? SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: _kTableMinWidth,
+                      child: const _TableHeader(),
+                    ),
+                  )
+                : const _TableHeader(),
+          ),
+
+          // Rows
+          Expanded(
+            child: filtered.isEmpty
+                ? Center(
+                    child: Text(
+                      'No materials with status "$statusFilter"',
+                      style: const TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 13,
+                      ),
+                    ),
+                  )
+                : isNarrow
+                ? SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: _kTableMinWidth,
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        itemCount: filtered.length,
+                        itemBuilder: (_, i) => _MaterialRow(
+                          data: filtered[i],
+                          isLast: i == filtered.length - 1,
+                          statusColor: statusColor(
+                            filtered[i]['_status'] as String,
+                          ),
+                          onQrTap: () => onQrTap(filtered[i]),
+                          onDeleteTap: () => onDeleteTap(filtered[i]),
+                        ),
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: filtered.length,
+                    itemBuilder: (_, i) => _MaterialRow(
+                      data: filtered[i],
+                      isLast: i == filtered.length - 1,
+                      statusColor: statusColor(
+                        filtered[i]['_status'] as String,
+                      ),
+                      onQrTap: () => onQrTap(filtered[i]),
+                      onDeleteTap: () => onDeleteTap(filtered[i]),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Sub-menu tab bar
+// =============================================================================
+class _SubMenuTabBar extends StatelessWidget {
+  final _InventoryTab activeTab;
+  final ValueChanged<_InventoryTab> onTabChanged;
+
+  const _SubMenuTabBar({required this.activeTab, required this.onTabChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: _Glass.surfaceThin,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _Glass.borderMid, width: 0.8),
+        boxShadow: const [_Glass.rowShadow],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _SubMenuTab(
+            label: 'Inventory',
+            icon: Icons.inventory_2_outlined,
+            isActive: activeTab == _InventoryTab.inventory,
+            onTap: () => onTabChanged(_InventoryTab.inventory),
+          ),
+          const SizedBox(width: 4),
+          _SubMenuTab(
+            label: 'Forecast',
+            icon: Icons.trending_up_rounded,
+            isActive: activeTab == _InventoryTab.forecast,
+            onTap: () => onTabChanged(_InventoryTab.forecast),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubMenuTab extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _SubMenuTab({
+    required this.label,
+    required this.icon,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xEE1A1A2E) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isActive ? const Color(0x33FFFFFF) : Colors.transparent,
+            width: 0.8,
+          ),
+          boxShadow: isActive ? const [_Glass.rowShadow] : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isActive ? Colors.white : _Glass.textSecondary,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? Colors.white : _Glass.textSecondary,
+                fontSize: 12,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                letterSpacing: 0.1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Forecast placeholder
+// =============================================================================
+class _ForecastPlaceholder extends StatelessWidget {
+  const _ForecastPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _Glass.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _Glass.borderMid, width: 0.8),
+        boxShadow: const [_Glass.rowShadow],
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: _Glass.card(radius: 20, elevated: true),
+              child: const Icon(
+                Icons.trending_up_rounded,
+                size: 32,
+                color: _Glass.textMuted,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Forecast',
+              style: TextStyle(
+                color: _Glass.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Stock forecasting — coming soon',
+              style: TextStyle(color: _Glass.textSecondary, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Shared glass widgets
+// =============================================================================
+
 class _GlassButton extends StatelessWidget {
   final String label;
   final IconData? icon;
@@ -771,9 +1079,7 @@ class _GlassButton extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         decoration: BoxDecoration(
-          color: isPrimary
-              ? const Color(0xDD1A1A2E) // deep navy, very readable
-              : _Glass.surfaceThin,
+          color: isPrimary ? const Color(0xDD1A1A2E) : _Glass.surfaceThin,
           borderRadius: BorderRadius.circular(99),
           border: Border.all(
             color: isPrimary ? const Color(0x44FFFFFF) : _Glass.borderMid,
@@ -815,7 +1121,6 @@ class _GlassButton extends StatelessWidget {
   }
 }
 
-/// Glass text field for dialogs
 class _GlassField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -840,7 +1145,7 @@ class _GlassField extends StatelessWidget {
       style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: _Glass.textSecondary, fontSize: 12),
+        labelStyle: const TextStyle(color: _Glass.textSecondary, fontSize: 12),
         prefixIcon: icon != null
             ? Icon(icon, size: 16, color: _Glass.textMuted)
             : null,
@@ -872,8 +1177,7 @@ class _GlassField extends StatelessWidget {
   }
 }
 
-// ── Screen widgets ────────────────────────────────────────────────────────────
-
+// ── Empty state ───────────────────────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
   final bool seeding;
   final VoidCallback onSeed;
@@ -889,7 +1193,7 @@ class _EmptyState extends StatelessWidget {
             width: 72,
             height: 72,
             decoration: _Glass.card(radius: 20, elevated: true),
-            child: Icon(
+            child: const Icon(
               Icons.inventory_2_outlined,
               size: 32,
               color: _Glass.textMuted,
@@ -905,7 +1209,7 @@ class _EmptyState extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
+          const Text(
             'Seed the 29 initial raw materials to get started',
             style: TextStyle(color: _Glass.textSecondary, fontSize: 13),
           ),
@@ -923,6 +1227,7 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+// ── Summary card ──────────────────────────────────────────────────────────────
 class _SummaryCard extends StatelessWidget {
   final String status;
   final int count;
@@ -947,7 +1252,6 @@ class _SummaryCard extends StatelessWidget {
         margin: const EdgeInsets.only(right: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          // active: solid dark navy so count + label are always white-on-dark
           color: isActive ? const Color(0xEE1A1A2E) : _Glass.surfaceMid,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -960,7 +1264,6 @@ class _SummaryCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // count
             Text(
               count.toString(),
               style: TextStyle(
@@ -971,7 +1274,6 @@ class _SummaryCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            // vertical divider
             Container(
               width: 0.8,
               height: 22,
@@ -980,7 +1282,6 @@ class _SummaryCard extends StatelessWidget {
                   : _Glass.borderMid,
             ),
             const SizedBox(width: 8),
-            // dot + label stacked
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -990,9 +1291,7 @@ class _SummaryCard extends StatelessWidget {
                   height: 5,
                   decoration: BoxDecoration(
                     color: isActive
-                        ? color.withValues(
-                            alpha: 0.85,
-                          ) // keep color dot for identity
+                        ? color.withValues(alpha: 0.85)
                         : color.withValues(alpha: 0.45),
                     shape: BoxShape.circle,
                   ),
@@ -1018,6 +1317,7 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
+// ── Status chip ───────────────────────────────────────────────────────────────
 class _StatusChip extends StatelessWidget {
   final String label;
   final bool isActive;
@@ -1033,8 +1333,6 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // "All" chip has no color passed — use dark navy so it's always readable
-    final c = color ?? const Color(0xFF1A1A2E);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -1042,7 +1340,6 @@ class _StatusChip extends StatelessWidget {
         margin: const EdgeInsets.only(right: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          // active: solid dark so text is always white-on-dark, never color-on-light
           color: isActive ? const Color(0xEE1A1A2E) : _Glass.surfaceThin,
           borderRadius: BorderRadius.circular(99),
           border: Border.all(
@@ -1064,34 +1361,9 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
+// ── Table header ──────────────────────────────────────────────────────────────
 class _TableHeader extends StatelessWidget {
   const _TableHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: const Row(
-        children: [
-          SizedBox(width: 74, child: Text('Code', style: _h)),
-          Expanded(child: Text('Material Name', style: _h)),
-          SizedBox(
-            width: 80,
-            child: Text('Stock', style: _h, textAlign: TextAlign.center),
-          ),
-          SizedBox(
-            width: 80,
-            child: Text('Restock At', style: _h, textAlign: TextAlign.center),
-          ),
-          SizedBox(
-            width: 96,
-            child: Text('Status', style: _h, textAlign: TextAlign.center),
-          ),
-          SizedBox(width: 66),
-        ],
-      ),
-    );
-  }
 
   static const _h = TextStyle(
     color: _Glass.textSecondary,
@@ -1099,8 +1371,35 @@ class _TableHeader extends StatelessWidget {
     fontWeight: FontWeight.w700,
     letterSpacing: 0.3,
   );
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        children: [
+          SizedBox(width: 74, child: Text('Code', style: _h)),
+          Expanded(child: Text('Material Name', style: _h)),
+          SizedBox(
+            width: 72,
+            child: Text('Stock', style: _h, textAlign: TextAlign.center),
+          ),
+          SizedBox(
+            width: 80,
+            child: Text('Restock At', style: _h, textAlign: TextAlign.center),
+          ),
+          SizedBox(
+            width: 90,
+            child: Text('Status', style: _h, textAlign: TextAlign.center),
+          ),
+          SizedBox(width: 60),
+        ],
+      ),
+    );
+  }
 }
 
+// ── Material row ──────────────────────────────────────────────────────────────
 class _MaterialRow extends StatelessWidget {
   final Map<String, dynamic> data;
   final Color statusColor;
@@ -1176,7 +1475,7 @@ class _MaterialRow extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 80,
+            width: 72,
             child: Text(
               fmt(current),
               style: const TextStyle(
@@ -1196,13 +1495,10 @@ class _MaterialRow extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 96,
+            width: 90,
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(99),
@@ -1216,7 +1512,7 @@ class _MaterialRow extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: statusColor,
-                    fontSize: 10.5,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.1,
                   ),
@@ -1225,35 +1521,35 @@ class _MaterialRow extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 66,
+            width: 60,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 IconButton(
-                  icon: Icon(
+                  icon: const Icon(
                     Icons.qr_code_rounded,
-                    size: 16,
+                    size: 15,
                     color: _Glass.textMuted,
                   ),
                   onPressed: onQrTap,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
-                    minWidth: 30,
-                    minHeight: 30,
+                    minWidth: 28,
+                    minHeight: 28,
                   ),
                   tooltip: 'View QR Code',
                 ),
                 IconButton(
                   icon: Icon(
                     Icons.delete_outline_rounded,
-                    size: 16,
+                    size: 15,
                     color: Colors.red.shade400,
                   ),
                   onPressed: onDeleteTap,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
-                    minWidth: 30,
-                    minHeight: 30,
+                    minWidth: 28,
+                    minHeight: 28,
                   ),
                   tooltip: 'Delete material',
                 ),
@@ -1266,8 +1562,9 @@ class _MaterialRow extends StatelessWidget {
   }
 }
 
-// ── Seed data ─────────────────────────────────────────────────────────────────
-
+// =============================================================================
+// Seed data
+// =============================================================================
 const _kInitialMaterials = [
   {
     'material_id': 'RM-001',
