@@ -4,10 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'app_theme.dart';
 
 // ── Breakpoint ────────────────────────────────────────────────────────────────
-// Below this width the layout switches to compact/stacked mode.
 const double _kNarrow = 700.0;
-
-// Minimum table width so columns are never crushed on very small screens.
 const double _kTableMinWidth = 560.0;
 
 // ── Liquid Glass Design Tokens ────────────────────────────────────────────────
@@ -207,32 +204,40 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
           builder: (context, constraints) {
             final isNarrow = constraints.maxWidth < _kNarrow;
             return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _TopPanel(
-                  isNarrow: isNarrow,
-                  statuses: _statuses,
-                  counts: counts,
-                  statusFilter: _statusFilter,
-                  statusColor: _statusColor,
-                  seeding: _seeding,
-                  onFilterTap: (s) => setState(
-                    () => _statusFilter = _statusFilter == s ? null : s,
+                // Constrain top panel to parent width
+                SizedBox(
+                  width: constraints.maxWidth,
+                  child: _TopPanel(
+                    isNarrow: isNarrow,
+                    statuses: _statuses,
+                    counts: counts,
+                    statusFilter: _statusFilter,
+                    statusColor: _statusColor,
+                    seeding: _seeding,
+                    onFilterTap: (s) => setState(
+                      () => _statusFilter = _statusFilter == s ? null : s,
+                    ),
+                    onClearFilter: () => setState(() => _statusFilter = null),
+                    onAddMaterial: () =>
+                        _showAddMaterialDialog(context, materials),
+                    onReseed: _seeding ? null : _seedInitialData,
                   ),
-                  onClearFilter: () => setState(() => _statusFilter = null),
-                  onAddMaterial: () =>
-                      _showAddMaterialDialog(context, materials),
-                  onReseed: _seeding ? null : _seedInitialData,
                 ),
                 const SizedBox(height: 8),
                 Expanded(
-                  child: _TablePanel(
-                    isNarrow: isNarrow,
-                    filtered: filtered,
-                    statusColor: _statusColor,
-                    statusFilter: _statusFilter,
-                    onQrTap: (m) => _showQr(context, m),
-                    onDeleteTap: (m) => _confirmDelete(context, m),
+                  // Constrain table panel to same parent width
+                  child: SizedBox(
+                    width: constraints.maxWidth,
+                    child: _TablePanel(
+                      isNarrow: isNarrow,
+                      filtered: filtered,
+                      statusColor: _statusColor,
+                      statusFilter: _statusFilter,
+                      onQrTap: (m) => _showQr(context, m),
+                      onDeleteTap: (m) => _confirmDelete(context, m),
+                    ),
                   ),
                 ),
               ],
@@ -626,7 +631,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
 }
 
 // =============================================================================
-// Top Panel — wide: single-row layout; narrow: stacked sections + scrollable rows
+// Top Panel
 // =============================================================================
 class _TopPanel extends StatelessWidget {
   final bool isNarrow;
@@ -666,9 +671,6 @@ class _TopPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Title + action buttons ──────────────────────────────────────────
-          // On narrow, title is above buttons (stacked).
-          // On wide, they share a single row.
           if (isNarrow) ...[
             const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -753,7 +755,6 @@ class _TopPanel extends StatelessWidget {
 
           const SizedBox(height: 14),
 
-          // ── Stat cards — always in a horizontal scroll so they never overflow
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -773,7 +774,6 @@ class _TopPanel extends StatelessWidget {
 
           const SizedBox(height: 10),
 
-          // ── Filter chips — also scrollable
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -801,7 +801,7 @@ class _TopPanel extends StatelessWidget {
 }
 
 // =============================================================================
-// Table Panel — horizontally scrollable on narrow screens
+// Table Panel — fixed responsiveness: ClipRRect + clamped scroll width
 // =============================================================================
 class _TablePanel extends StatelessWidget {
   final bool isNarrow;
@@ -822,84 +822,103 @@ class _TablePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _Glass.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _Glass.borderMid, width: 0.8),
-        boxShadow: const [_Glass.rowShadow],
-      ),
-      child: Column(
-        children: [
-          // Sticky header
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xF2F4F6F8),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(18),
+    // ClipRRect ensures the horizontal scroll inside never bleeds past
+    // the rounded corners of the outer container at any screen width.
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _Glass.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _Glass.borderMid, width: 0.8),
+          boxShadow: const [_Glass.rowShadow],
+        ),
+        child: Column(
+          children: [
+            // ── Sticky header ───────────────────────────────────────────────
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xF2F4F6F8),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(18),
+                ),
+                border: Border(
+                  bottom: BorderSide(color: _Glass.borderMid, width: 0.8),
+                ),
               ),
-              border: Border(
-                bottom: BorderSide(color: _Glass.borderMid, width: 0.8),
-              ),
-            ),
-            child: isNarrow
-                ? SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: _kTableMinWidth,
-                      child: const _TableHeader(),
-                    ),
-                  )
-                : const _TableHeader(),
-          ),
-
-          // Rows
-          Expanded(
-            child: filtered.isEmpty
-                ? Center(
-                    child: Text(
-                      'No materials with status "$statusFilter"',
-                      style: const TextStyle(
-                        color: _Glass.textMuted,
-                        fontSize: 13,
-                      ),
-                    ),
-                  )
-                : isNarrow
-                ? SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: _kTableMinWidth,
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        itemCount: filtered.length,
-                        itemBuilder: (_, i) => _MaterialRow(
-                          data: filtered[i],
-                          isLast: i == filtered.length - 1,
-                          statusColor: statusColor(
-                            filtered[i]['_status'] as String,
+              // Use LayoutBuilder so the header width matches available space,
+              // expanding beyond _kTableMinWidth only when there is room.
+              child: isNarrow
+                  ? LayoutBuilder(
+                      builder: (context, c) => SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: _kTableMinWidth.clamp(
+                            c.maxWidth,
+                            double.infinity,
                           ),
-                          onQrTap: () => onQrTap(filtered[i]),
-                          onDeleteTap: () => onDeleteTap(filtered[i]),
+                          child: const _TableHeader(),
                         ),
                       ),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: EdgeInsets.zero,
-                    itemCount: filtered.length,
-                    itemBuilder: (_, i) => _MaterialRow(
-                      data: filtered[i],
-                      isLast: i == filtered.length - 1,
-                      statusColor: statusColor(
-                        filtered[i]['_status'] as String,
+                    )
+                  : const _TableHeader(),
+            ),
+
+            // ── Rows ────────────────────────────────────────────────────────
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No materials with status "$statusFilter"',
+                        style: const TextStyle(
+                          color: _Glass.textMuted,
+                          fontSize: 13,
+                        ),
                       ),
-                      onQrTap: () => onQrTap(filtered[i]),
-                      onDeleteTap: () => onDeleteTap(filtered[i]),
+                    )
+                  : isNarrow
+                  // On narrow screens: scroll horizontally with a minimum
+                  // width, but expand to fill if the viewport is wider.
+                  ? LayoutBuilder(
+                      builder: (context, c) => SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: _kTableMinWidth.clamp(
+                            c.maxWidth,
+                            double.infinity,
+                          ),
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: filtered.length,
+                            itemBuilder: (_, i) => _MaterialRow(
+                              data: filtered[i],
+                              isLast: i == filtered.length - 1,
+                              statusColor: statusColor(
+                                filtered[i]['_status'] as String,
+                              ),
+                              onQrTap: () => onQrTap(filtered[i]),
+                              onDeleteTap: () => onDeleteTap(filtered[i]),
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: EdgeInsets.zero,
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) => _MaterialRow(
+                        data: filtered[i],
+                        isLast: i == filtered.length - 1,
+                        statusColor: statusColor(
+                          filtered[i]['_status'] as String,
+                        ),
+                        onQrTap: () => onQrTap(filtered[i]),
+                        onDeleteTap: () => onDeleteTap(filtered[i]),
+                      ),
                     ),
-                  ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

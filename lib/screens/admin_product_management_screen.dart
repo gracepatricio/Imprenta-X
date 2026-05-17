@@ -5,6 +5,81 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'app_theme.dart';
 
+// ── Breakpoint ────────────────────────────────────────────────────────────────
+const double _kNarrow = 700.0;
+
+// ── Amber color constant ──────────────────────────────────────────────────────
+const Color _amber = Color.fromRGBO(180, 83, 9, 1);
+
+// ── Liquid Glass Design Tokens ────────────────────────────────────────────────
+class _Glass {
+  static const Color surface = Color(0xEEFFFFFF);
+  static const Color surfaceMid = Color(0xCCFFFFFF);
+  static const Color surfaceThin = Color(0x99FFFFFF);
+
+  static const Color borderMid = Color(0x55FFFFFF);
+  static const Color borderDim = Color(0x28FFFFFF);
+
+  static const Color textPrimary = Color(0xFF111827);
+  static const Color textSecondary = Color(0xBB111827);
+  static const Color textMuted = Color(0x77111827);
+
+  static const BoxShadow elevatedShadow = BoxShadow(
+    color: Color(0x1A000000),
+    blurRadius: 20,
+    spreadRadius: -2,
+    offset: Offset(0, 6),
+  );
+  static const BoxShadow rowShadow = BoxShadow(
+    color: Color(0x0D000000),
+    blurRadius: 8,
+    spreadRadius: 0,
+    offset: Offset(0, 2),
+  );
+
+  static BoxDecoration card({
+    Color? color,
+    double radius = 14,
+    bool elevated = false,
+  }) => BoxDecoration(
+    color: color ?? surfaceMid,
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: borderMid, width: 0.8),
+    boxShadow: [elevated ? elevatedShadow : rowShadow],
+  );
+
+  // Input field decoration matching glass aesthetic
+  static InputDecoration field(
+    String hint, {
+    IconData? icon,
+  }) => InputDecoration(
+    hintText: hint,
+    hintStyle: const TextStyle(color: textMuted, fontSize: 13),
+    prefixIcon: icon != null ? Icon(icon, size: 16, color: textMuted) : null,
+    filled: true,
+    fillColor: surfaceThin,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: borderMid, width: 0.8),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: AppTheme.gold.withValues(alpha: 0.7)),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: Color(0xFFE53935)),
+    ),
+    focusedErrorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: Color(0xFFE53935)),
+    ),
+    errorStyle: const TextStyle(fontSize: 10, color: Color(0xFFE53935)),
+  );
+}
+
+// =============================================================================
 class AdminProductManagementScreen extends StatefulWidget {
   const AdminProductManagementScreen({super.key});
 
@@ -28,150 +103,268 @@ class _AdminProductManagementScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header
-        Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < _kNarrow;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Expanded(
+            // ── Header panel ─────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              decoration: BoxDecoration(
+                color: _Glass.surfaceMid,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _Glass.borderMid, width: 0.8),
+                boxShadow: const [_Glass.rowShadow],
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Product Management',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold)),
-                  Text('Manage catalog, pricing, and availability',
-                      style:
-                      TextStyle(color: Colors.white54, fontSize: 12)),
+                  // Title row — stacks on narrow
+                  if (isNarrow) ...[
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Product Management',
+                          style: TextStyle(
+                            color: _Glass.textPrimary,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Manage catalog, pricing, and availability',
+                          style: TextStyle(
+                            color: _Glass.textMuted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _GlassButton(
+                      label: 'Add Product',
+                      icon: Icons.add_rounded,
+                      isPrimary: true,
+                      onPressed: () => _openProductForm(context, null),
+                    ),
+                  ] else ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Product Management',
+                                style: TextStyle(
+                                  color: _Glass.textPrimary,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.4,
+                                ),
+                              ),
+                              SizedBox(height: 1),
+                              Text(
+                                'Manage catalog, pricing, and availability',
+                                style: TextStyle(
+                                  color: _Glass.textMuted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        _GlassButton(
+                          label: 'Add Product',
+                          icon: Icons.add_rounded,
+                          isPrimary: true,
+                          onPressed: () => _openProductForm(context, null),
+                        ),
+                      ],
+                    ),
+                  ],
+
+                  const SizedBox(height: 14),
+
+                  // Category filter chips — always horizontally scrollable
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _GlassChip(
+                          label: 'All',
+                          isActive: _categoryFilter == null,
+                          onTap: () => setState(() => _categoryFilter = null),
+                        ),
+                        ..._categories.map(
+                          (c) => _GlassChip(
+                            label: c,
+                            isActive: _categoryFilter == c,
+                            onTap: () => setState(
+                              () => _categoryFilter = _categoryFilter == c
+                                  ? null
+                                  : c,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-            ElevatedButton.icon(
-              onPressed: () => _openProductForm(context, null),
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Add Product'),
-              style: AppTheme.primaryButton(),
+
+            const SizedBox(height: 8),
+
+            // ── Product list panel ────────────────────────────────────────────
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _Glass.surface,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: _Glass.borderMid, width: 0.8),
+                  boxShadow: const [_Glass.rowShadow],
+                ),
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: _categoryFilter != null
+                      ? FirebaseFirestore.instance
+                            .collection('Products')
+                            .where('category', isEqualTo: _categoryFilter)
+                            .snapshots()
+                      : FirebaseFirestore.instance
+                            .collection('Products')
+                            .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(
+                        child: CircularProgressIndicator(
+                          color: _Glass.textPrimary.withValues(alpha: 0.4),
+                        ),
+                      );
+                    }
+
+                    final docs = snapshot.data?.docs ?? [];
+                    if (docs.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 72,
+                              height: 72,
+                              decoration: _Glass.card(
+                                radius: 20,
+                                elevated: true,
+                              ),
+                              child: const Icon(
+                                Icons.storefront_outlined,
+                                size: 32,
+                                color: _Glass.textMuted,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            const Text(
+                              'No products yet',
+                              style: TextStyle(
+                                color: _Glass.textPrimary,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Tap "Add Product" to create the first product',
+                              style: TextStyle(
+                                color: _Glass.textSecondary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.all(10),
+                      itemCount: docs.length,
+                      itemBuilder: (_, i) {
+                        final data = docs[i].data() as Map<String, dynamic>;
+                        return _ProductTile(
+                          data: data,
+                          docId: docs[i].id,
+                          onEdit: () => _openProductForm(context, {
+                            'id': docs[i].id,
+                            ...data,
+                          }),
+                          onDelete: () => _confirmDelete(
+                            context,
+                            docs[i].id,
+                            data['product_name']?.toString() ?? '',
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
             ),
           ],
-        ),
-        const SizedBox(height: 14),
-
-        // Category filter
-        SizedBox(
-          height: 30,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              _Chip(
-                  label: 'All',
-                  isActive: _categoryFilter == null,
-                  onTap: () => setState(() => _categoryFilter = null)),
-              ..._categories.map((c) => _Chip(
-                label: c,
-                isActive: _categoryFilter == c,
-                onTap: () => setState(() =>
-                _categoryFilter = _categoryFilter == c ? null : c),
-              )),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-
-        // Product list
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: _categoryFilter != null
-                ? FirebaseFirestore.instance
-                .collection('Products')
-                .where('category', isEqualTo: _categoryFilter)
-                .snapshots()
-                : FirebaseFirestore.instance
-                .collection('Products')
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(
-                    child:
-                    CircularProgressIndicator(color: Colors.white));
-              }
-              final docs = snapshot.data?.docs ?? [];
-              if (docs.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.storefront_outlined,
-                          size: 56, color: Colors.white24),
-                      const SizedBox(height: 16),
-                      const Text('No products yet',
-                          style: TextStyle(
-                              color: Colors.white60, fontSize: 15)),
-                      const SizedBox(height: 8),
-                      const Text(
-                          'Tap "Add Product" to create the first product',
-                          style: TextStyle(
-                              color: Colors.white38, fontSize: 12)),
-                    ],
-                  ),
-                );
-              }
-              return ListView.builder(
-                itemCount: docs.length,
-                itemBuilder: (_, i) {
-                  final data =
-                  docs[i].data() as Map<String, dynamic>;
-                  return _ProductTile(
-                    data: data,
-                    docId: docs[i].id,
-                    onEdit: () => _openProductForm(
-                        context, {'id': docs[i].id, ...data}),
-                    onDelete: () => _confirmDelete(context, docs[i].id,
-                        data['product_name']?.toString() ?? ''),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
-  void _openProductForm(
-      BuildContext context, Map<String, dynamic>? existing) {
+  void _openProductForm(BuildContext context, Map<String, dynamic>? existing) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _ProductFormDialog(
-        existing: existing,
-        categories: _categories,
-      ),
+      barrierColor: Colors.black.withValues(alpha: 0.25),
+      builder: (_) =>
+          _ProductFormDialog(existing: existing, categories: _categories),
     );
   }
 
-  void _confirmDelete(
-      BuildContext context, String docId, String name) {
+  void _confirmDelete(BuildContext context, String docId, String name) {
     showDialog(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.25),
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1a1a2e),
+        backgroundColor: _Glass.surface,
+        elevation: 32,
+        shadowColor: Colors.black.withValues(alpha: 0.3),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: _Glass.borderMid, width: 1),
         ),
-        title: const Text('Delete Product',
-            style: TextStyle(color: Colors.white, fontSize: 16)),
+        title: const Text(
+          'Delete Product',
+          style: TextStyle(
+            color: _Glass.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         content: Text(
-            'Are you sure you want to delete "$name"? This cannot be undone.',
-            style: const TextStyle(color: Colors.white60, fontSize: 13)),
+          'Are you sure you want to delete "$name"? This cannot be undone.',
+          style: const TextStyle(color: _Glass.textSecondary, fontSize: 13),
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel',
-                  style: TextStyle(color: Colors.white54))),
+            onPressed: () => Navigator.pop(context),
+            style: TextButton.styleFrom(
+              foregroundColor: _Glass.textSecondary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
@@ -182,14 +375,25 @@ class _AdminProductManagementScreenState
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                      content: Text('"$name" deleted'),
-                      backgroundColor: Colors.red.shade700),
+                    content: Text('"$name" deleted'),
+                    backgroundColor: Colors.red.shade700,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 );
               }
             },
             style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade700,
-                foregroundColor: Colors.white),
+              backgroundColor: Colors.red.shade600.withValues(alpha: 0.85),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shadowColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -198,19 +402,21 @@ class _AdminProductManagementScreenState
   }
 }
 
-// ── Product tile ──────────────────────────────────────────────────────────────
-
+// =============================================================================
+// Product tile — liquid glass row
+// =============================================================================
 class _ProductTile extends StatelessWidget {
   final Map<String, dynamic> data;
   final String docId;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _ProductTile(
-      {required this.data,
-        required this.docId,
-        required this.onEdit,
-        required this.onDelete});
+  const _ProductTile({
+    required this.data,
+    required this.docId,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -224,88 +430,114 @@ class _ProductTile extends StatelessWidget {
     final isFeatured = data['featured'] as bool? ?? false;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        color: _Glass.surfaceMid,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _Glass.borderMid, width: 0.8),
+        boxShadow: const [_Glass.rowShadow],
       ),
       child: Row(
         children: [
-          // Image
+          // Thumbnail
           Container(
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              color: _Glass.surfaceThin,
+              border: Border.all(color: _Glass.borderMid, width: 0.8),
             ),
             clipBehavior: Clip.antiAlias,
             child: imageUrl.isNotEmpty
-                ? Image.network(imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Icon(
+                ? Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.image_outlined,
+                      color: _Glass.textMuted,
+                      size: 22,
+                    ),
+                  )
+                : const Icon(
                     Icons.image_outlined,
-                    color: Colors.white24,
-                    size: 22))
-                : const Icon(Icons.image_outlined,
-                color: Colors.white24, size: 22),
+                    color: _Glass.textMuted,
+                    size: 22,
+                  ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
 
           // Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-                Text(cat,
-                    style: const TextStyle(
-                        color: Colors.white38, fontSize: 11)),
-                const SizedBox(height: 2),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    color: _Glass.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  cat,
+                  style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                ),
+                const SizedBox(height: 5),
                 Row(
                   children: [
                     if (isFeatured) ...[
-                      const Icon(Icons.star_rounded,
-                          color: AppTheme.gold, size: 13),
+                      const Icon(
+                        Icons.star_rounded,
+                        color: _amber, // ← was AppTheme.gold
+                        size: 13,
+                      ),
                       const SizedBox(width: 4),
                     ],
-                    if (price != null)
-                      Text('₱$price${unit.isNotEmpty ? ' $unit' : ''}',
-                          style: const TextStyle(
-                              color: AppTheme.gold,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 8),
+                    if (price != null) ...[
+                      Text(
+                        '₱$price${unit.isNotEmpty ? ' $unit' : ''}',
+                        style: const TextStyle(
+                          color: _amber, // ← was AppTheme.gold
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    // Availability badge
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: isAvailable
-                            ? const Color(0xFF4CAF50).withValues(alpha: 0.2)
-                            : Colors.red.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
+                            ? const Color(0xFF2E7D32).withValues(alpha: 0.12)
+                            : const Color(0xFFC62828).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(99),
                         border: Border.all(
-                            color: isAvailable
-                                ? const Color(0xFF4CAF50)
-                                .withValues(alpha: 0.5)
-                                : Colors.red.withValues(alpha: 0.5)),
+                          color: isAvailable
+                              ? const Color(0xFF2E7D32).withValues(alpha: 0.35)
+                              : const Color(0xFFC62828).withValues(alpha: 0.35),
+                          width: 0.8,
+                        ),
                       ),
                       child: Text(
-                        '${isAvailable ? 'Available' : 'Unavailable'}${hasOverride ? ' (manual)' : ''}',
+                        '${isAvailable ? 'Available' : 'Unavailable'}'
+                        '${hasOverride ? ' (manual)' : ''}',
                         style: TextStyle(
-                            color: isAvailable
-                                ? const Color(0xFF4CAF50)
-                                : Colors.red,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold),
+                          color: isAvailable
+                              ? const Color(0xFF2E7D32)
+                              : const Color(0xFFC62828),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],
@@ -314,18 +546,73 @@ class _ProductTile extends StatelessWidget {
             ),
           ),
 
-          // Actions
-          IconButton(
-            icon: const Icon(Icons.edit_outlined,
-                color: AppTheme.gold, size: 18),
-            onPressed: onEdit,
-            tooltip: 'Edit',
+          const SizedBox(width: 10),
+
+          // Edit button
+          GestureDetector(
+            onTap: onEdit,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xDD1A1A2E),
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(color: const Color(0x44FFFFFF), width: 0.8),
+                boxShadow: const [_Glass.rowShadow],
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.edit_outlined, color: Colors.white, size: 13),
+                  SizedBox(width: 5),
+                  Text(
+                    'Edit',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          IconButton(
-            icon: Icon(Icons.delete_outline,
-                color: Colors.red.shade400, size: 18),
-            onPressed: onDelete,
-            tooltip: 'Delete',
+
+          const SizedBox(width: 8),
+
+          // Delete button
+          GestureDetector(
+            onTap: onDelete,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(
+                  color: Colors.red.withValues(alpha: 0.35),
+                  width: 0.8,
+                ),
+                boxShadow: const [_Glass.rowShadow],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.red.shade500,
+                    size: 13,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    'Delete',
+                    style: TextStyle(
+                      color: Colors.red.shade500,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -333,14 +620,14 @@ class _ProductTile extends StatelessWidget {
   }
 }
 
-// ── Product form dialog ───────────────────────────────────────────────────────
-
+// =============================================================================
+// Product form dialog — liquid glass
+// =============================================================================
 class _ProductFormDialog extends StatefulWidget {
   final Map<String, dynamic>? existing;
   final List<String> categories;
 
-  const _ProductFormDialog(
-      {required this.existing, required this.categories});
+  const _ProductFormDialog({required this.existing, required this.categories});
 
   @override
   State<_ProductFormDialog> createState() => _ProductFormDialogState();
@@ -366,7 +653,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
 
   List<Map<String, dynamic>> _bom = [];
   List<Map<String, dynamic>> _bulkPricing = [];
-
   List<Map<String, dynamic>> _allMaterials = [];
   bool _materialsLoaded = false;
 
@@ -376,23 +662,29 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     final e = widget.existing;
     _nameCtrl = TextEditingController(text: e?['product_name'] ?? '');
     _descCtrl = TextEditingController(text: e?['description'] ?? '');
-    _priceCtrl =
-        TextEditingController(text: e?['price']?.toString() ?? '');
-    _pricingUnitCtrl =
-        TextEditingController(text: e?['pricing_unit'] ?? '');
+    _priceCtrl = TextEditingController(text: e?['price']?.toString() ?? '');
+    _pricingUnitCtrl = TextEditingController(text: e?['pricing_unit'] ?? '');
     _minQtyCtrl = TextEditingController(
-        text: e?['min_quantity']?.toString() ?? '1');
-    _uomCtrl =
-        TextEditingController(text: e?['unit_of_measurement'] ?? '');
+      text: e?['min_quantity']?.toString() ?? '1',
+    );
+    _uomCtrl = TextEditingController(text: e?['unit_of_measurement'] ?? '');
     _selectedCategory = e?['category'];
     _isAvailable = e?['is_available'] as bool? ?? true;
     _availabilityOverride = e?['availability_override'] as bool?;
     _isFeatured = e?['featured'] as bool? ?? false;
     _imageUrl = e?['image_url'] ?? '';
     _bom = List<Map<String, dynamic>>.from(
-        (e?['bill_of_materials'] as List?)?.map((x) => Map<String, dynamic>.from(x as Map)) ?? []);
+      (e?['bill_of_materials'] as List?)?.map(
+            (x) => Map<String, dynamic>.from(x as Map),
+          ) ??
+          [],
+    );
     _bulkPricing = List<Map<String, dynamic>>.from(
-        (e?['bulk_pricing'] as List?)?.map((x) => Map<String, dynamic>.from(x as Map)) ?? []);
+      (e?['bulk_pricing'] as List?)?.map(
+            (x) => Map<String, dynamic>.from(x as Map),
+          ) ??
+          [],
+    );
     _loadMaterials();
   }
 
@@ -415,10 +707,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     if (mounted) {
       setState(() {
         _allMaterials = snap.docs
-            .map((d) => {
-          'id': d.id,
-          ...d.data(),
-        })
+            .map((d) => {'id': d.id, ...d.data()})
             .toList();
         _materialsLoaded = true;
       });
@@ -428,7 +717,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final file = await picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 80);
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
     if (file == null) return;
     final bytes = await file.readAsBytes();
     final ext = file.path.split('.').last.toLowerCase();
@@ -440,8 +731,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
 
   Future<String?> _uploadImage(String productId) async {
     if (_pickedImageBytes == null) return _imageUrl;
-    final ref = FirebaseStorage.instance
-        .ref('products/$productId.$_pickedImageExt');
+    final ref = FirebaseStorage.instance.ref(
+      'products/$productId.$_pickedImageExt',
+    );
     final task = await ref.putData(
       _pickedImageBytes!,
       SettableMetadata(contentType: 'image/$_pickedImageExt'),
@@ -461,9 +753,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
           : FirebaseFirestore.instance.collection('Products').doc().id;
 
       final uploadedUrl = await _uploadImage(docId);
-
-      // Use override if set; otherwise use the manual toggle.
-      // BOM-based availability is recalculated automatically when employees update stock.
       final computedAvailable = _availabilityOverride ?? _isAvailable;
 
       final data = {
@@ -482,7 +771,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         'bulk_pricing': _bulkPricing,
         'updated_at': FieldValue.serverTimestamp(),
       };
-
       if (!isEdit) {
         data['created_at'] = FieldValue.serverTimestamp();
         data['product_id'] = docId;
@@ -497,13 +785,25 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-              '${_nameCtrl.text.trim()} ${isEdit ? 'updated' : 'created'}'),
-          backgroundColor: const Color(0xFF4CAF50),
+            '${_nameCtrl.text.trim()} ${isEdit ? 'updated' : 'created'}',
+          ),
+          backgroundColor: const Color(0xFF2E7D32),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
       );
       if (mounted) setState(() => _saving = false);
     }
@@ -514,41 +814,67 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     final isEdit = widget.existing != null;
 
     return Dialog(
-      backgroundColor: const Color(0xFF1a1a2e),
+      backgroundColor: _Glass.surface,
+      elevation: 32,
+      shadowColor: Colors.black.withValues(alpha: 0.3),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: _Glass.borderMid, width: 1),
       ),
       child: SizedBox(
         width: 560,
         height: MediaQuery.of(context).size.height * 0.88,
         child: Column(
           children: [
-            // Dialog title bar
+            // ── Dialog title bar ──────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
               child: Row(
                 children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0x1A1A1A2E),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _Glass.borderMid),
+                    ),
+                    child: Icon(
+                      isEdit ? Icons.edit_outlined : Icons.add_box_outlined,
+                      color: _Glass.textSecondary,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       isEdit ? 'Edit Product' : 'Add Product',
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold),
+                        color: _Glass.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close,
-                        color: Colors.white54, size: 20),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: _Glass.textMuted,
+                      size: 18,
+                    ),
                     onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                   ),
                 ],
               ),
             ),
-            const Divider(color: Colors.white12, height: 16),
+            Divider(color: _Glass.borderMid, height: 16, thickness: 0.8),
 
-            // Scrollable form
+            // ── Scrollable form body ──────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
@@ -558,154 +884,157 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Image picker
-                      _sectionLabel('Product Image'),
+                      _SectionLabel('Product Image'),
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          GestureDetector(
-                            onTap: _pickedImageBytes != null || _imageUrl.isNotEmpty
-                                ? null
-                                : _pickImage,
-                            child: Container(
-                              width: 100,
-                              height: 100,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(10),
-                                color: Colors.white.withValues(alpha: 0.07),
-                                border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.15)),
+                          Container(
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: _Glass.surfaceThin,
+                              border: Border.all(
+                                color: _Glass.borderMid,
+                                width: 0.8,
                               ),
-                              clipBehavior: Clip.antiAlias,
-                              child: _pickedImageBytes != null
-                                  ? Image.memory(_pickedImageBytes!,
-                                  fit: BoxFit.cover)
-                                  : _imageUrl.isNotEmpty
-                                  ? Image.network(_imageUrl,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) =>
-                                  const Icon(Icons.image_outlined,
-                                      color: Colors.white24,
-                                      size: 28))
-                                  : const Icon(Icons.add_photo_alternate,
-                                  color: Colors.white38, size: 32),
                             ),
+                            clipBehavior: Clip.antiAlias,
+                            child: _pickedImageBytes != null
+                                ? Image.memory(
+                                    _pickedImageBytes!,
+                                    fit: BoxFit.cover,
+                                  )
+                                : _imageUrl.isNotEmpty
+                                ? Image.network(
+                                    _imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(
+                                      Icons.image_outlined,
+                                      color: _Glass.textMuted,
+                                      size: 28,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.add_photo_alternate,
+                                    color: _Glass.textMuted,
+                                    size: 32,
+                                  ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 14),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              ElevatedButton.icon(
+                              _GlassButton(
+                                label: 'Upload Image',
+                                icon: Icons.upload_file_outlined,
+                                isPrimary: false,
                                 onPressed: _pickImage,
-                                icon: const Icon(
-                                    Icons.upload_file_outlined,
-                                    size: 14),
-                                label: const Text('Upload Image',
-                                    style: TextStyle(fontSize: 12)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                  Colors.white.withValues(alpha: 0.12),
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 8),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                      BorderRadius.circular(20)),
-                                ),
                               ),
                               if (_pickedImageBytes != null ||
                                   _imageUrl.isNotEmpty) ...[
-                                const SizedBox(height: 6),
-                                TextButton(
-                                  onPressed: () => setState(() {
+                                const SizedBox(height: 8),
+                                GestureDetector(
+                                  onTap: () => setState(() {
                                     _pickedImageBytes = null;
                                     _imageUrl = '';
                                   }),
-                                  style: TextButton.styleFrom(
-                                      foregroundColor: Colors.red,
-                                      padding: EdgeInsets.zero),
-                                  child: const Text('Remove',
-                                      style: TextStyle(fontSize: 11)),
+                                  child: const Text(
+                                    'Remove',
+                                    style: TextStyle(
+                                      color: Color(0xFFC62828),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 18),
 
-                      // Name
-                      _sectionLabel('Product Name *'),
+                      // Product Name
+                      _SectionLabel('Product Name *'),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _nameCtrl,
                         style: const TextStyle(
-                            color: Colors.white, fontSize: 14),
-                        decoration:
-                        AppTheme.inputDecoration('e.g. Tarpaulin'),
+                          color: _Glass.textPrimary,
+                          fontSize: 13,
+                        ),
+                        decoration: _Glass.field('e.g. Tarpaulin'),
                         validator: (v) =>
-                        v?.trim().isEmpty == true ? 'Required' : null,
+                            v?.trim().isEmpty == true ? 'Required' : null,
                       ),
                       const SizedBox(height: 12),
 
                       // Category
-                      _sectionLabel('Category *'),
+                      _SectionLabel('Category *'),
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
                         value: _selectedCategory,
                         items: widget.categories
-                            .map((c) => DropdownMenuItem(
-                            value: c, child: Text(c)))
+                            .map(
+                              (c) => DropdownMenuItem(value: c, child: Text(c)),
+                            )
                             .toList(),
-                        onChanged: (v) =>
-                            setState(() => _selectedCategory = v),
-                        dropdownColor: const Color(0xFF1a1a2e),
+                        onChanged: (v) => setState(() => _selectedCategory = v),
+                        dropdownColor: _Glass.surface,
                         style: const TextStyle(
-                            color: Colors.white, fontSize: 14),
-                        decoration:
-                        AppTheme.inputDecoration('Select category'),
+                          color: _Glass.textPrimary,
+                          fontSize: 13,
+                        ),
+                        decoration: _Glass.field('Select category'),
                         validator: (v) =>
-                        v == null ? 'Please select a category' : null,
+                            v == null ? 'Please select a category' : null,
                       ),
                       const SizedBox(height: 12),
 
                       // Description
-                      _sectionLabel('Description'),
+                      _SectionLabel('Description'),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _descCtrl,
                         maxLines: 2,
                         style: const TextStyle(
-                            color: Colors.white, fontSize: 14),
-                        decoration:
-                        AppTheme.inputDecoration('Brief description'),
+                          color: _Glass.textPrimary,
+                          fontSize: 13,
+                        ),
+                        decoration: _Glass.field('Brief description'),
                       ),
                       const SizedBox(height: 12),
 
-                      // Price row
+                      // Price + Pricing Unit
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
                             child: Column(
-                              crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _sectionLabel('Price (₱)'),
+                                _SectionLabel('Price (₱)'),
                                 const SizedBox(height: 6),
                                 TextFormField(
                                   controller: _priceCtrl,
                                   keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                      decimal: true),
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
                                   style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
-                                  decoration: AppTheme.inputDecoration(
-                                      'e.g. 25',
-                                      icon: Icons.currency_exchange),
+                                    color: _Glass.textPrimary,
+                                    fontSize: 13,
+                                  ),
+                                  decoration: _Glass.field(
+                                    'e.g. 25',
+                                    icon: Icons.currency_exchange,
+                                  ),
                                   validator: (v) {
-                                    if (v == null || v.trim().isEmpty) return 'Required';
-                                    if (double.tryParse(v.trim()) == null) return 'Enter a valid number';
+                                    if (v == null || v.trim().isEmpty)
+                                      return 'Required';
+                                    if (double.tryParse(v.trim()) == null)
+                                      return 'Invalid number';
                                     return null;
                                   },
                                 ),
@@ -715,19 +1044,22 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
-                              crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _sectionLabel('Pricing Unit'),
+                                _SectionLabel('Pricing Unit'),
                                 const SizedBox(height: 6),
                                 TextFormField(
                                   controller: _pricingUnitCtrl,
                                   style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
-                                  decoration: AppTheme.inputDecoration(
-                                      'per sqft / piece / fixed'),
-                                  validator: (v) =>
-                                  v?.trim().isEmpty == true ? 'Required' : null,
+                                    color: _Glass.textPrimary,
+                                    fontSize: 13,
+                                  ),
+                                  decoration: _Glass.field(
+                                    'per sqft / piece / fixed',
+                                  ),
+                                  validator: (v) => v?.trim().isEmpty == true
+                                      ? 'Required'
+                                      : null,
                                 ),
                               ],
                             ),
@@ -736,25 +1068,24 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Min qty + UOM row
+                      // Min Qty + UOM
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
                             child: Column(
-                              crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _sectionLabel('Min. Quantity'),
+                                _SectionLabel('Min. Quantity'),
                                 const SizedBox(height: 6),
                                 TextFormField(
                                   controller: _minQtyCtrl,
-                                  keyboardType:
-                                  TextInputType.number,
+                                  keyboardType: TextInputType.number,
                                   style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
-                                  decoration:
-                                  AppTheme.inputDecoration('1'),
+                                    color: _Glass.textPrimary,
+                                    fontSize: 13,
+                                  ),
+                                  decoration: _Glass.field('1'),
                                 ),
                               ],
                             ),
@@ -762,18 +1093,17 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
-                              crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _sectionLabel('Unit of Measurement'),
+                                _SectionLabel('Unit of Measurement'),
                                 const SizedBox(height: 6),
                                 TextFormField(
                                   controller: _uomCtrl,
                                   style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
-                                  decoration:
-                                  AppTheme.inputDecoration(
-                                      'pcs / sqft / roll'),
+                                    color: _Glass.textPrimary,
+                                    fontSize: 13,
+                                  ),
+                                  decoration: _Glass.field('pcs / sqft / roll'),
                                 ),
                               ],
                             ),
@@ -782,17 +1112,18 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Availability
-                      _sectionLabel('Availability'),
+                      // ── Availability ────────────────────────────────────────
+                      _SectionLabel('Availability'),
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(10),
+                          color: _Glass.surfaceThin,
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                              color:
-                              Colors.white.withValues(alpha: 0.12)),
+                            color: _Glass.borderMid,
+                            width: 0.8,
+                          ),
                         ),
                         child: Column(
                           children: [
@@ -801,91 +1132,113 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                    children: [
-                                      const Text('Manual override',
-                                          style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 13)),
-                                      const Text(
-                                          'Force available/unavailable, ignoring BOM check',
-                                          style: TextStyle(
-                                              color: Colors.white38,
-                                              fontSize: 11)),
+                                        CrossAxisAlignment.start,
+                                    children: const [
+                                      Text(
+                                        'Manual override',
+                                        style: TextStyle(
+                                          color: _Glass.textPrimary,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Force available/unavailable, ignoring BOM check',
+                                        style: TextStyle(
+                                          color: _Glass.textMuted,
+                                          fontSize: 11,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
                                 Switch(
                                   value: _availabilityOverride != null,
-                                  onChanged: (v) => setState(() =>
-                                  _availabilityOverride = v
-                                      ? _isAvailable
-                                      : null),
-                                  activeThumbColor: AppTheme.gold,
+                                  onChanged: (v) => setState(
+                                    () => _availabilityOverride = v
+                                        ? _isAvailable
+                                        : null,
+                                  ),
+                                  activeColor: AppTheme.gold,
                                 ),
                               ],
                             ),
                             if (_availabilityOverride != null) ...[
-                              const Divider(
-                                  color: Colors.white12, height: 16),
+                              Divider(
+                                color: _Glass.borderDim,
+                                height: 16,
+                                thickness: 0.8,
+                              ),
                               Row(
                                 children: [
                                   const Expanded(
-                                    child: Text('Set as available',
-                                        style: TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 13)),
+                                    child: Text(
+                                      'Set as available',
+                                      style: TextStyle(
+                                        color: _Glass.textSecondary,
+                                        fontSize: 13,
+                                      ),
+                                    ),
                                   ),
                                   Switch(
-                                    value:
-                                    _availabilityOverride == true,
-                                    onChanged: (v) => setState(() =>
-                                    _availabilityOverride = v),
-                                    activeThumbColor: const Color(0xFF4CAF50),
+                                    value: _availabilityOverride == true,
+                                    onChanged: (v) => setState(
+                                      () => _availabilityOverride = v,
+                                    ),
+                                    activeColor: const Color(0xFF2E7D32),
                                   ),
                                 ],
                               ),
                             ],
                             if (_bom.isEmpty &&
-                                _availabilityOverride == null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Row(
-                                  children: [
-                                    const Expanded(
-                                      child: Text(
-                                          'No BOM set — toggle availability manually',
-                                          style: TextStyle(
-                                              color: Colors.white38,
-                                              fontSize: 11)),
-                                    ),
-                                    Switch(
-                                      value: _isAvailable,
-                                      onChanged: (v) =>
-                                          setState(() => _isAvailable = v),
-                                      activeThumbColor: const Color(0xFF4CAF50),
-                                    ),
-                                  ],
-                                ),
+                                _availabilityOverride == null) ...[
+                              Divider(
+                                color: _Glass.borderDim,
+                                height: 16,
+                                thickness: 0.8,
                               ),
+                              Row(
+                                children: [
+                                  const Expanded(
+                                    child: Text(
+                                      'No BOM set — toggle availability manually',
+                                      style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: _isAvailable,
+                                    onChanged: (v) =>
+                                        setState(() => _isAvailable = v),
+                                    activeColor: const Color(0xFF2E7D32),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
                       const SizedBox(height: 12),
 
-                      // Featured toggle
+                      // ── Featured toggle ─────────────────────────────────────
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: _isFeatured
-                              ? AppTheme.gold.withValues(alpha: 0.1)
-                              : Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(10),
+                              ? AppTheme.gold.withValues(alpha: 0.08)
+                              : _Glass.surfaceThin,
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: _isFeatured
                                 ? AppTheme.gold.withValues(alpha: 0.4)
-                                : Colors.white.withValues(alpha: 0.12),
+                                : _Glass.borderMid,
+                            width: 0.8,
                           ),
                         ),
                         child: Row(
@@ -894,7 +1247,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                               Icons.star_outline_rounded,
                               color: _isFeatured
                                   ? AppTheme.gold
-                                  : Colors.white38,
+                                  : _Glass.textMuted,
                               size: 18,
                             ),
                             const SizedBox(width: 10),
@@ -905,75 +1258,79 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                   Text(
                                     'Feature on Homepage',
                                     style: TextStyle(
-                                        color: _isFeatured
-                                            ? AppTheme.gold
-                                            : Colors.white70,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600),
+                                      color: _isFeatured
+                                          ? AppTheme.gold
+                                          : _Glass.textSecondary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                   const Text(
                                     'Shows in the Featured Products section on the customer homepage',
                                     style: TextStyle(
-                                        color: Colors.white38,
-                                        fontSize: 11),
+                                      color: _Glass.textMuted,
+                                      fontSize: 11,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                             Switch(
                               value: _isFeatured,
-                              onChanged: (v) =>
-                                  setState(() => _isFeatured = v),
-                              activeThumbColor: AppTheme.gold,
+                              onChanged: (v) => setState(() => _isFeatured = v),
+                              activeColor: AppTheme.gold,
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 18),
 
-                      // Bill of Materials
+                      // ── Bill of Materials ───────────────────────────────────
                       Row(
                         children: [
-                          _sectionLabel('Bill of Materials'),
+                          _SectionLabel('Bill of Materials'),
                           const Spacer(),
-                          TextButton.icon(
-                            onPressed: _materialsLoaded
-                                ? () => _addBomItem()
-                                : null,
-                            icon: const Icon(Icons.add, size: 14),
-                            label: const Text('Add Material',
-                                style: TextStyle(fontSize: 12)),
-                            style: TextButton.styleFrom(
-                                foregroundColor: AppTheme.gold),
+                          _GlassButton(
+                            label: 'Add Material',
+                            icon: Icons.add_rounded,
+                            isPrimary: false,
+                            onPressed: _materialsLoaded ? _addBomItem : null,
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       if (_bom.isEmpty)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: const Text(
-                              'No BOM set. Add materials to enable automatic availability tracking.',
-                              style: TextStyle(
-                                  color: Colors.white38, fontSize: 11)),
+                            'No BOM set. Add materials to enable automatic availability tracking.',
+                            style: TextStyle(
+                              color: _Glass.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
                         ),
-                      ..._bom.asMap().entries.map((e) => _BomEditRow(
-                        key: ValueKey('bom_${e.key}'),
-                        item: e.value,
-                        allMaterials: _allMaterials,
-                        onChanged: (updated) =>
-                            setState(() => _bom[e.key] = updated),
-                        onRemove: () =>
-                            setState(() => _bom.removeAt(e.key)),
-                      )),
-                      const SizedBox(height: 16),
+                      ..._bom.asMap().entries.map(
+                        (e) => _BomEditRow(
+                          key: ValueKey('bom_${e.key}'),
+                          item: e.value,
+                          allMaterials: _allMaterials,
+                          onChanged: (updated) =>
+                              setState(() => _bom[e.key] = updated),
+                          onRemove: () => setState(() => _bom.removeAt(e.key)),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
 
-                      // Bulk Pricing
+                      // ── Bulk Pricing ────────────────────────────────────────
                       Row(
                         children: [
-                          _sectionLabel('Bulk Pricing (Optional)'),
+                          _SectionLabel('Bulk Pricing (Optional)'),
                           const Spacer(),
-                          TextButton.icon(
+                          _GlassButton(
+                            label: 'Add Tier',
+                            icon: Icons.add_rounded,
+                            isPrimary: false,
                             onPressed: () => setState(() {
                               _bulkPricing.add({
                                 'min_quantity': 10,
@@ -981,65 +1338,64 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                 'discount_value': 10.0,
                               });
                             }),
-                            icon: const Icon(Icons.add, size: 14),
-                            label: const Text('Add Tier',
-                                style: TextStyle(fontSize: 12)),
-                            style: TextButton.styleFrom(
-                                foregroundColor: AppTheme.gold),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       if (_bulkPricing.isEmpty)
                         const Padding(
                           padding: EdgeInsets.only(bottom: 8),
                           child: Text(
-                              'No bulk pricing. Add tiers to offer quantity discounts.',
-                              style: TextStyle(
-                                  color: Colors.white38, fontSize: 11)),
+                            'No bulk pricing. Add tiers to offer quantity discounts.',
+                            style: TextStyle(
+                              color: _Glass.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
                         ),
-                      ..._bulkPricing
-                          .asMap()
-                          .entries
-                          .map((e) => _BulkPricingRow(
-                        item: e.value,
-                        index: e.key,
-                        onChanged: (updated) => setState(
-                                () => _bulkPricing[e.key] = updated),
-                        onRemove: () => setState(
-                                () => _bulkPricing.removeAt(e.key)),
-                      )),
+                      ..._bulkPricing.asMap().entries.map(
+                        (e) => _BulkPricingRow(
+                          item: e.value,
+                          index: e.key,
+                          onChanged: (updated) =>
+                              setState(() => _bulkPricing[e.key] = updated),
+                          onRemove: () =>
+                              setState(() => _bulkPricing.removeAt(e.key)),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
             ),
 
-            // Action bar
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            // ── Action bar ────────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: _Glass.borderMid, width: 0.8),
+                ),
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed:
-                    _saving ? null : () => Navigator.pop(context),
-                    child: const Text('Cancel',
-                        style: TextStyle(color: Colors.white54)),
+                    onPressed: _saving ? null : () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      foregroundColor: _Glass.textSecondary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text('Cancel'),
                   ),
                   const SizedBox(width: 10),
-                  ElevatedButton(
+                  _GlassButton(
+                    label: isEdit ? 'Save Changes' : 'Create Product',
+                    isPrimary: true,
+                    isLoading: _saving,
                     onPressed: _saving ? null : _save,
-                    style: AppTheme.primaryButton(),
-                    child: _saving
-                        ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.black))
-                        : Text(widget.existing != null
-                        ? 'Save Changes'
-                        : 'Create Product'),
                   ),
                 ],
               ),
@@ -1061,18 +1417,11 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       });
     });
   }
-
-  Widget _sectionLabel(String text) {
-    return Text(text,
-        style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 12,
-            fontWeight: FontWeight.w600));
-  }
 }
 
-// ── BOM edit row (interactive dropdown + qty) ─────────────────────────────────
-
+// =============================================================================
+// BOM edit row — glass
+// =============================================================================
 class _BomEditRow extends StatefulWidget {
   final Map<String, dynamic> item;
   final List<Map<String, dynamic>> allMaterials;
@@ -1102,15 +1451,15 @@ class _BomEditRowState extends State<_BomEditRow> {
     _materialId = widget.item['material_id']?.toString() ?? '';
     _materialName = widget.item['material_name']?.toString() ?? '';
     _qtyCtrl = TextEditingController(
-        text: widget.item['quantity_per_unit']?.toString() ?? '1');
+      text: widget.item['quantity_per_unit']?.toString() ?? '1',
+    );
 
-    // If stored ID not found in list, default to first material
     if (widget.allMaterials.isNotEmpty &&
-        !widget.allMaterials.any((m) =>
-        (m['material_id'] ?? m['id'])?.toString() == _materialId)) {
+        !widget.allMaterials.any(
+          (m) => (m['material_id'] ?? m['id'])?.toString() == _materialId,
+        )) {
       final first = widget.allMaterials.first;
-      _materialId =
-          (first['material_id'] ?? first['id'])?.toString() ?? '';
+      _materialId = (first['material_id'] ?? first['id'])?.toString() ?? '';
       _materialName = first['material_name']?.toString() ?? '';
       WidgetsBinding.instance.addPostFrameCallback((_) => _notify());
     }
@@ -1138,12 +1487,17 @@ class _BomEditRowState extends State<_BomEditRow> {
         child: Row(
           children: [
             const Expanded(
-                child: Text('Loading materials…',
-                    style:
-                    TextStyle(color: Colors.white38, fontSize: 12))),
+              child: Text(
+                'Loading materials…',
+                style: TextStyle(color: _Glass.textMuted, fontSize: 12),
+              ),
+            ),
             IconButton(
-              icon: Icon(Icons.remove_circle_outline,
-                  color: Colors.red.shade400, size: 16),
+              icon: Icon(
+                Icons.remove_circle_outline,
+                color: Colors.red.shade400,
+                size: 16,
+              ),
               onPressed: widget.onRemove,
               padding: EdgeInsets.zero,
             ),
@@ -1152,74 +1506,81 @@ class _BomEditRowState extends State<_BomEditRow> {
       );
     }
 
-    final valueExists = widget.allMaterials.any((m) =>
-    (m['material_id'] ?? m['id'])?.toString() == _materialId);
+    final valueExists = widget.allMaterials.any(
+      (m) => (m['material_id'] ?? m['id'])?.toString() == _materialId,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        color: _Glass.surfaceThin,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _Glass.borderMid, width: 0.8),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // Material dropdown
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Material',
-                    style: TextStyle(
-                        color: Colors.white54, fontSize: 10)),
+                const Text(
+                  'Material',
+                  style: TextStyle(
+                    color: _Glass.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 2),
+                    horizontal: 10,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.07),
+                    color: _Glass.surface,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.15)),
+                    border: Border.all(color: _Glass.borderMid, width: 0.8),
                   ),
                   child: DropdownButton<String>(
                     value: valueExists ? _materialId : null,
                     isExpanded: true,
-                    dropdownColor: const Color(0xFF1a1a2e),
+                    dropdownColor: _Glass.surface,
                     underline: const SizedBox.shrink(),
-                    hint: const Text('Select material',
-                        style: TextStyle(
-                            color: Colors.white54, fontSize: 13)),
+                    hint: const Text(
+                      'Select material',
+                      style: TextStyle(color: _Glass.textMuted, fontSize: 12),
+                    ),
                     style: const TextStyle(
-                        color: Colors.white, fontSize: 13),
+                      color: _Glass.textPrimary,
+                      fontSize: 12,
+                    ),
                     items: widget.allMaterials.map((m) {
                       final id =
-                          (m['material_id'] ?? m['id'])
-                              ?.toString() ??
-                              '';
-                      final name =
-                          m['material_name']?.toString() ?? '';
+                          (m['material_id'] ?? m['id'])?.toString() ?? '';
+                      final name = m['material_name']?.toString() ?? '';
                       return DropdownMenuItem<String>(
                         value: id,
-                        child: Text('$id – $name',
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 12)),
+                        child: Text(
+                          '$id – $name',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _Glass.textPrimary,
+                            fontSize: 12,
+                          ),
+                        ),
                       );
                     }).toList(),
                     onChanged: (id) {
                       if (id == null) return;
                       final mat = widget.allMaterials.firstWhere(
-                              (m) =>
-                          (m['material_id'] ?? m['id'])
-                              ?.toString() ==
-                              id);
+                        (m) => (m['material_id'] ?? m['id'])?.toString() == id,
+                      );
                       setState(() {
                         _materialId = id;
-                        _materialName =
-                            mat['material_name']?.toString() ?? '';
+                        _materialName = mat['material_name']?.toString() ?? '';
                       });
                       _notify();
                     },
@@ -1229,37 +1590,45 @@ class _BomEditRowState extends State<_BomEditRow> {
             ),
           ),
           const SizedBox(width: 8),
-          // Qty field
           SizedBox(
             width: 76,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Qty/unit',
-                    style: TextStyle(
-                        color: Colors.white54, fontSize: 10)),
+                const Text(
+                  'Qty/unit',
+                  style: TextStyle(
+                    color: _Glass.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 TextField(
                   controller: _qtyCtrl,
                   keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true),
+                    decimal: true,
+                  ),
                   style: const TextStyle(
-                      color: Colors.white, fontSize: 13),
-                  decoration: AppTheme.inputDecoration('1'),
+                    color: _Glass.textPrimary,
+                    fontSize: 13,
+                  ),
+                  decoration: _Glass.field('1'),
                   onChanged: (_) => _notify(),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 4),
-          // Remove button
           IconButton(
-            icon: Icon(Icons.remove_circle_outline,
-                color: Colors.red.shade400, size: 18),
+            icon: Icon(
+              Icons.remove_circle_outline,
+              color: Colors.red.shade400,
+              size: 18,
+            ),
             onPressed: widget.onRemove,
             padding: const EdgeInsets.only(bottom: 2),
-            constraints:
-            const BoxConstraints(minWidth: 36, minHeight: 40),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 40),
           ),
         ],
       ),
@@ -1267,19 +1636,21 @@ class _BomEditRowState extends State<_BomEditRow> {
   }
 }
 
-// ── Bulk pricing row ──────────────────────────────────────────────────────────
-
+// =============================================================================
+// Bulk pricing row — glass
+// =============================================================================
 class _BulkPricingRow extends StatefulWidget {
   final Map<String, dynamic> item;
   final int index;
   final Function(Map<String, dynamic>) onChanged;
   final VoidCallback onRemove;
 
-  const _BulkPricingRow(
-      {required this.item,
-        required this.index,
-        required this.onChanged,
-        required this.onRemove});
+  const _BulkPricingRow({
+    required this.item,
+    required this.index,
+    required this.onChanged,
+    required this.onRemove,
+  });
 
   @override
   State<_BulkPricingRow> createState() => _BulkPricingRowState();
@@ -1294,9 +1665,11 @@ class _BulkPricingRowState extends State<_BulkPricingRow> {
   void initState() {
     super.initState();
     _minQtyCtrl = TextEditingController(
-        text: widget.item['min_quantity']?.toString() ?? '10');
+      text: widget.item['min_quantity']?.toString() ?? '10',
+    );
     _valueCtrl = TextEditingController(
-        text: widget.item['discount_value']?.toString() ?? '10');
+      text: widget.item['discount_value']?.toString() ?? '10',
+    );
     _discountType = widget.item['discount_type'] ?? 'rate';
   }
 
@@ -1318,29 +1691,40 @@ class _BulkPricingRowState extends State<_BulkPricingRow> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        color: _Glass.surfaceThin,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _Glass.borderMid, width: 0.8),
       ),
       child: Column(
         children: [
+          // Tier label + remove
           Row(
             children: [
-              Text('Tier ${widget.index + 1}',
-                  style: const TextStyle(color: AppTheme.gold, fontSize: 12, fontWeight: FontWeight.bold)),
+              Text(
+                'Tier ${widget.index + 1}',
+                style: const TextStyle(
+                  color: _amber, // ← was AppTheme.gold
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const Spacer(),
               IconButton(
-                icon: Icon(Icons.remove_circle_outline, color: Colors.red.shade400, size: 16),
+                icon: Icon(
+                  Icons.remove_circle_outline,
+                  color: Colors.red.shade400,
+                  size: 16,
+                ),
                 onPressed: widget.onRemove,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Row(
             children: [
               // Min qty
@@ -1349,13 +1733,23 @@ class _BulkPricingRowState extends State<_BulkPricingRow> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Min. Qty', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                    const Text(
+                      'Min. Qty',
+                      style: TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     TextField(
                       controller: _minQtyCtrl,
                       keyboardType: TextInputType.number,
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      decoration: AppTheme.inputDecoration('10'),
+                      style: const TextStyle(
+                        color: _Glass.textPrimary,
+                        fontSize: 13,
+                      ),
+                      decoration: _Glass.field('10'),
                       onChanged: (_) => _notify(),
                     ),
                   ],
@@ -1367,16 +1761,32 @@ class _BulkPricingRowState extends State<_BulkPricingRow> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Discount Type', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                    const Text(
+                      'Discount Type',
+                      style: TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     DropdownButtonFormField<String>(
                       value: _discountType,
-                      dropdownColor: const Color(0xFF1a1a2e),
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      decoration: AppTheme.inputDecoration(''),
+                      dropdownColor: _Glass.surface,
+                      style: const TextStyle(
+                        color: _Glass.textPrimary,
+                        fontSize: 13,
+                      ),
+                      decoration: _Glass.field(''),
                       items: const [
-                        DropdownMenuItem(value: 'rate', child: Text('% Rate Off')),
-                        DropdownMenuItem(value: 'fixed', child: Text('₱ Fixed Off')),
+                        DropdownMenuItem(
+                          value: 'rate',
+                          child: Text('% Rate Off'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'fixed',
+                          child: Text('₱ Fixed Off'),
+                        ),
                       ],
                       onChanged: (v) {
                         setState(() => _discountType = v ?? 'rate');
@@ -1393,14 +1803,27 @@ class _BulkPricingRowState extends State<_BulkPricingRow> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_discountType == 'rate' ? 'Rate (%)' : 'Amount (₱)',
-                        style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                    Text(
+                      _discountType == 'rate' ? 'Rate (%)' : 'Amount (₱)',
+                      style: const TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     TextField(
                       controller: _valueCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      decoration: AppTheme.inputDecoration(_discountType == 'rate' ? '10' : '5'),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: const TextStyle(
+                        color: _Glass.textPrimary,
+                        fontSize: 13,
+                      ),
+                      decoration: _Glass.field(
+                        _discountType == 'rate' ? '10' : '5',
+                      ),
                       onChanged: (_) => _notify(),
                     ),
                   ],
@@ -1408,14 +1831,14 @@ class _BulkPricingRowState extends State<_BulkPricingRow> {
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
               _discountType == 'rate'
                   ? 'Order ≥ ${_minQtyCtrl.text}: ${_valueCtrl.text}% off'
                   : 'Order ≥ ${_minQtyCtrl.text}: ₱${_valueCtrl.text} off per unit',
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
+              style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
             ),
           ),
         ],
@@ -1424,38 +1847,130 @@ class _BulkPricingRowState extends State<_BulkPricingRow> {
   }
 }
 
-// ── Chip ──────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Shared glass widgets
+// =============================================================================
 
-class _Chip extends StatelessWidget {
+/// Pill button — primary (dark navy) or ghost (glass thin)
+class _GlassButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final bool isPrimary;
+  final bool isLoading;
+  final VoidCallback? onPressed;
+
+  const _GlassButton({
+    required this.label,
+    this.icon,
+    required this.isPrimary,
+    this.isLoading = false,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: isPrimary ? const Color(0xDD1A1A2E) : _Glass.surfaceThin,
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(
+            color: isPrimary ? const Color(0x44FFFFFF) : _Glass.borderMid,
+            width: 0.8,
+          ),
+          boxShadow: const [_Glass.rowShadow],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isLoading)
+              SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: isPrimary ? Colors.white : _Glass.textSecondary,
+                ),
+              )
+            else if (icon != null)
+              Icon(
+                icon,
+                size: 14,
+                color: isPrimary ? Colors.white : _Glass.textSecondary,
+              ),
+            if (icon != null || isLoading) const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isPrimary ? Colors.white : _Glass.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Category filter chip
+class _GlassChip extends StatelessWidget {
   final String label;
   final bool isActive;
   final VoidCallback onTap;
 
-  const _Chip({required this.label, required this.isActive, required this.onTap});
+  const _GlassChip({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
         margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: isActive
-              ? AppTheme.gold.withValues(alpha: 0.2)
-              : Colors.white.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(14),
+          color: isActive ? const Color(0xEE1A1A2E) : _Glass.surfaceThin,
+          borderRadius: BorderRadius.circular(99),
           border: Border.all(
-              color: isActive
-                  ? AppTheme.gold.withValues(alpha: 0.7)
-                  : Colors.white.withValues(alpha: 0.15)),
+            color: isActive ? const Color(0x33FFFFFF) : _Glass.borderMid,
+            width: 0.8,
+          ),
+          boxShadow: const [_Glass.rowShadow],
         ),
-        child: Text(label,
-            style: TextStyle(
-                color: isActive ? AppTheme.gold : Colors.white60,
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive ? Colors.white : _Glass.textSecondary,
+            fontSize: 11,
+            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
       ),
     );
   }
+}
+
+/// Small bold section label inside the dialog form
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: const TextStyle(
+      color: _Glass.textSecondary,
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+    ),
+  );
 }

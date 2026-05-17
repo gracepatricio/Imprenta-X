@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,6 +10,31 @@ import 'admin_inventory_screen.dart';
 import 'admin_product_management_screen.dart';
 import 'admin_logs_screen.dart';
 
+// ── Liquid Glass Design Tokens ────────────────────────────────────────────────
+class _Glass {
+  static const Color surface = Color(0xEEFFFFFF);
+  static const Color surfaceMid = Color(0xCCFFFFFF);
+  static const Color surfaceThin = Color(0x99FFFFFF);
+  static const Color borderMid = Color(0x55FFFFFF);
+  static const Color textPrimary = Color(0xFF111827);
+  static const Color textSecondary = Color(0xBB111827);
+  static const Color textMuted = Color(0x77111827);
+
+  static const BoxShadow elevatedShadow = BoxShadow(
+    color: Color(0x1A000000),
+    blurRadius: 20,
+    spreadRadius: -2,
+    offset: Offset(0, 6),
+  );
+  static const BoxShadow rowShadow = BoxShadow(
+    color: Color(0x0D000000),
+    blurRadius: 8,
+    spreadRadius: 0,
+    offset: Offset(0, 2),
+  );
+}
+
+// =============================================================================
 class AdminHomepage extends StatefulWidget {
   const AdminHomepage({super.key, this.initialTab = 'Home'});
   final String initialTab;
@@ -34,7 +60,22 @@ class _AdminHomepageState extends State<AdminHomepage> {
   void initState() {
     super.initState();
     _active = widget.initialTab;
+    _loadAdminName();
     _listenForDeletion();
+  }
+
+  Future<void> _loadAdminName() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final doc = await FirebaseFirestore.instance
+        .collection('User')
+        .doc(user.uid)
+        .get();
+    if (doc.exists && mounted) {
+      setState(() {
+        _adminName = doc.data()?['full_name'] ?? user.displayName ?? '';
+      });
+    }
   }
 
   void _listenForDeletion() {
@@ -45,15 +86,15 @@ class _AdminHomepageState extends State<AdminHomepage> {
         .doc(user.uid)
         .snapshots()
         .listen((snap) async {
-      final deleted =
-          !snap.exists || (snap.data() as Map?)?['is_deleted'] == true;
-      if (deleted && mounted) {
-        await FirebaseAuth.instance.signOut();
-        if (mounted) {
-          Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
-        }
-      }
-    }, onError: (_) {});
+          final deleted =
+              !snap.exists || (snap.data() as Map?)?['is_deleted'] == true;
+          if (deleted && mounted) {
+            await FirebaseAuth.instance.signOut();
+            if (mounted) {
+              Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+            }
+          }
+        }, onError: (_) {});
   }
 
   @override
@@ -80,7 +121,10 @@ class _AdminHomepageState extends State<AdminHomepage> {
           child: AdminLogsScreen(),
         );
       default:
-        return _AdminHomeContent(adminName: _adminName);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: _AdminHomeContent(adminName: _adminName),
+        );
     }
   }
 
@@ -117,112 +161,201 @@ class _AdminHomepageState extends State<AdminHomepage> {
   }
 }
 
-// ── Home branding ─────────────────────────────────────────────────────────────
-
+// =============================================================================
+// Home content
+// =============================================================================
 class _AdminHomeContent extends StatelessWidget {
   final String adminName;
   const _AdminHomeContent({this.adminName = ''});
 
   @override
   Widget build(BuildContext context) {
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12
+        ? 'Good morning'
+        : hour < 17
+        ? 'Good afternoon'
+        : 'Good evening';
+    final displayName = adminName.isNotEmpty ? adminName : 'Admin';
+
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: SizedBox(
+        width: 380,
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Logo
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.16),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.45),
-                  width: 2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
+            // ── Logo + brand block ──────────────────────────────────
+            Column(
+              children: [
+                // Logo with ring
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.22),
+                        blurRadius: 32,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/images/imprentalogo.jpg',
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.local_print_shop,
-                    color: Colors.white,
-                    size: 44,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 28),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: const Text(
-                'IMPRENTA INC.',
-                style: TextStyle(
-                  fontSize: 38,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.gold,
-                  letterSpacing: 4,
-                  shadows: [
-                    Shadow(
-                      color: Color(0x80000000),
-                      blurRadius: 12,
-                      offset: Offset(0, 3),
+                  child: ClipOval(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+                      child: Image.asset(
+                        'assets/images/imprentalogo.jpg',
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withValues(alpha: 0.30),
+                          ),
+                          child: Icon(
+                            Icons.local_print_shop_rounded,
+                            color: Colors.white.withValues(alpha: 0.80),
+                            size: 44,
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            // Subtitle — plain text, no pill/container
-            const Text(
-              'Specializes in manufacturing of customized product printing.',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white70,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            // Admin badge (no 'Panel')
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.gold.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: AppTheme.gold.withValues(alpha: 0.5)),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.admin_panel_settings_outlined,
-                    color: AppTheme.gold,
-                    size: 16,
                   ),
-                  SizedBox(width: 6),
-                  Text(
-                    'Admin',
+                ),
+                const SizedBox(height: 20),
+
+                // Brand name — plain text, no card behind it
+                ShaderMask(
+                  shaderCallback: (bounds) => LinearGradient(
+                    colors: [
+                      Colors.white,
+                      AppTheme.gold.withValues(alpha: 0.95),
+                      Colors.white.withValues(alpha: 0.85),
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  ).createShader(bounds),
+                  child: const Text(
+                    'IMPRENTA INC.',
                     style: TextStyle(
-                      color: AppTheme.gold,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: 5,
                     ),
                   ),
-                ],
+                ),
+                const SizedBox(height: 8),
+
+                // Tagline
+                Text(
+                  'Specializes in manufacturing of customized product printing.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: Colors.white.withValues(alpha: 0.55),
+                    height: 1.6,
+                    letterSpacing: 0.2,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 36),
+
+            // ── Greeting pill ───────────────────────────────────────
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 22,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.30),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              greeting,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.55),
+                                fontWeight: FontWeight.w400,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              displayName,
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                letterSpacing: -0.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Admin badge
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(99),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.gold.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(99),
+                              border: Border.all(
+                                color: AppTheme.gold.withValues(alpha: 0.55),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.admin_panel_settings_outlined,
+                                  color: AppTheme.gold,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Admin',
+                                  style: TextStyle(
+                                    color: AppTheme.gold,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 20),
           ],
         ),
       ),
