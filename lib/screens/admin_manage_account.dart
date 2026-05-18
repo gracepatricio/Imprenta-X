@@ -5,7 +5,8 @@ import 'app_theme.dart';
 
 class AdminManageAccount extends StatefulWidget {
   final void Function(String newName)? onNameUpdated;
-  const AdminManageAccount({super.key, this.onNameUpdated});
+  final void Function(String newEmail)? onEmailUpdated;
+  const AdminManageAccount({super.key, this.onNameUpdated, this.onEmailUpdated});
 
   @override
   State<AdminManageAccount> createState() => _AdminManageAccountState();
@@ -16,6 +17,15 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   bool _savingInfo = false;
+
+  // ── Email change ───────────────────────────────────────────────
+  bool _editingEmail       = false;
+  bool _savingEmail        = false;
+  String _originalEmail    = ''; // Firestore baseline — used for duplicate check
+  final _emailPasswordCtrl = TextEditingController();
+  bool _showEmailPassword  = false;
+  String? _emailMessage;
+  String? _emailError;
 
   // ── Password ───────────────────────────────────────────────────
   final _currentPasswordController = TextEditingController();
@@ -43,6 +53,7 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _emailPasswordCtrl.dispose();
     _currentPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
@@ -58,9 +69,9 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
         .get();
     if (mounted) {
       setState(() {
-        _nameController.text =
-            doc.data()?['full_name'] ?? user.displayName ?? '';
+        _nameController.text  = doc.data()?['full_name'] ?? user.displayName ?? '';
         _emailController.text = doc.data()?['email'] ?? user.email ?? '';
+        _originalEmail        = _emailController.text;
         _loading = false;
       });
     }
@@ -107,6 +118,124 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
       }
     } finally {
       if (mounted) setState(() => _savingInfo = false);
+    }
+  }
+
+  Future<void> _changeEmail() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final newEmail = _emailController.text.trim();
+    final password = _emailPasswordCtrl.text;
+
+    if (newEmail.isEmpty) {
+      setState(() { _emailError = 'Email cannot be empty.'; _emailMessage = null; });
+      return;
+    }
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(newEmail)) {
+      setState(() { _emailError = 'Enter a valid email address.'; _emailMessage = null; });
+      return;
+    }
+    if (newEmail == _originalEmail) {
+      setState(() { _emailError = 'This is already your current email.'; _emailMessage = null; });
+      return;
+    }
+    if (password.isEmpty) {
+      setState(() { _emailError = 'Enter your current password to confirm.'; _emailMessage = null; });
+      return;
+    }
+
+    setState(() { _savingEmail = true; _emailError = null; _emailMessage = null; });
+
+    try {
+      final db = FirebaseFirestore.instance;
+
+      // Reauthenticate using the real Firebase Auth email (placeholder)
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: password,
+      );
+      await user.reauthenticateWithCredential(credential);
+
+      // Check if new email is already taken by a different account
+      final existing = await db
+          .collection('User')
+          .where('email', isEqualTo: newEmail)
+          .limit(1)
+          .get();
+      if (existing.docs.isNotEmpty && existing.docs.first.id != user.uid) {
+        setState(() { _emailError = 'That email is already linked to another account.'; _savingEmail = false; });
+        return;
+      }
+
+      // Snapshot the old email BEFORE any writes.
+      final emailToDelete = _originalEmail;
+
+      final batch = db.batch();
+
+      // 1. Update User doc
+      batch.update(db.collection('User').doc(user.uid), {'email': newEmail});
+
+      // 2. Hard-delete the old email_index entry so AuthService.login()
+      //    cannot resolve the old email to this uid.
+      if (emailToDelete.isNotEmpty && emailToDelete != newEmail) {
+        batch.delete(db.collection('email_index').doc(emailToDelete));
+      }
+
+      // 3. Write new email to email_index so login-by-email works
+      batch.set(db.collection('email_index').doc(newEmail), {
+        'uid':    user.uid,
+        'status': 'active',
+      });
+
+      await batch.commit();
+
+      // 4. Sweep: delete any other stale email_index docs pointing to this uid
+      //    (leftover from previous partial updates).
+      try {
+        final staleIndexDocs = await db
+            .collection('email_index')
+            .where('uid', isEqualTo: user.uid)
+            .get();
+        for (final doc in staleIndexDocs.docs) {
+          if (doc.id != newEmail) {
+            await doc.reference.delete();
+          }
+        }
+      } catch (_) {
+        // Non-fatal — stale entries don't break login, they just leave orphan docs.
+      }
+
+      if (!mounted) return;
+      _originalEmail = newEmail;
+      widget.onEmailUpdated?.call(newEmail);
+      setState(() {
+        _emailMessage      = 'Email updated successfully.';
+        _emailError        = null;
+        _editingEmail      = false;
+        _savingEmail       = false;
+        _emailPasswordCtrl.clear();
+        _showEmailPassword = false;
+      });
+    } on FirebaseAuthException catch (e) {
+      String msg;
+      switch (e.code) {
+        case 'wrong-password':
+        case 'invalid-credential':
+          msg = 'Incorrect password.';
+          break;
+        case 'requires-recent-login':
+          msg = 'Session expired. Please log out and log back in.';
+          break;
+        case 'too-many-requests':
+          msg = 'Too many attempts. Please wait and try again.';
+          break;
+        default:
+          msg = 'Error (${e.code}): ${e.message ?? 'Please try again.'}';
+      }
+      if (mounted) setState(() { _emailError = msg; _savingEmail = false; });
+    } catch (e) {
+      if (mounted) setState(() { _emailError = 'Unexpected error: $e'; _savingEmail = false; });
     }
   }
 
@@ -288,27 +417,113 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
                           _buildField(
                             label: 'Email Address',
                             controller: _emailController,
-                            hint: '',
-                            readOnly: true,
+                            hint: 'Enter new email',
+                            readOnly: !_editingEmail,
                           ),
                           const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.info_outline,
-                                size: 11,
-                                color: Colors.white.withValues(alpha: 0.60),
+                          if (!_editingEmail)
+                            GestureDetector(
+                              onTap: () => setState(() {
+                                _editingEmail = true;
+                                _emailError   = null;
+                                _emailMessage = null;
+                              }),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit_outlined,
+                                      size: 11,
+                                      color: AppTheme.gold.withValues(alpha: 0.8)),
+                                  const SizedBox(width: 5),
+                                  Text('Change email',
+                                      style: TextStyle(
+                                          color: AppTheme.gold.withValues(alpha: 0.8),
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w500)),
+                                ],
                               ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Email cannot be changed.',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.4),
-                                  fontSize: 11.5,
+                            ),
+                          if (_editingEmail) ...[
+                            const SizedBox(height: 10),
+                            _buildPasswordField(
+                              label: 'Confirm with current password',
+                              controller: _emailPasswordCtrl,
+                              hint: 'Enter your password',
+                              visible: _showEmailPassword,
+                              onToggle: () => setState(
+                                      () => _showEmailPassword = !_showEmailPassword),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: SizedBox(
+                                    height: 40,
+                                    child: ElevatedButton(
+                                      onPressed: _savingEmail ? null : _changeEmail,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.gold,
+                                        foregroundColor: Colors.black,
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      child: _savingEmail
+                                          ? const SizedBox(
+                                          width: 16, height: 16,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.black54))
+                                          : const Text('Update Email',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12)),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  height: 40,
+                                  child: OutlinedButton(
+                                    onPressed: _savingEmail
+                                        ? null
+                                        : () {
+                                      setState(() {
+                                        _editingEmail = false;
+                                        _emailError   = null;
+                                        _emailMessage = null;
+                                        _emailPasswordCtrl.clear();
+                                        _showEmailPassword = false;
+                                        _emailController.text = _originalEmail;
+                                      });
+                                    },
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white54,
+                                      side: BorderSide(
+                                          color: Colors.white.withValues(
+                                              alpha: 0.2)),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                          BorderRadius.circular(10)),
+                                    ),
+                                    child: const Text('Cancel',
+                                        style: TextStyle(fontSize: 12)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_emailError != null) ...[
+                              const SizedBox(height: 8),
+                              _FeedbackBanner(
+                                  message: _emailError!, isError: true),
                             ],
-                          ),
+                          ],
+                          // Success banner is outside _editingEmail so it
+                          // stays visible after the form closes on success.
+                          if (_emailMessage != null) ...[
+                            const SizedBox(height: 8),
+                            _FeedbackBanner(
+                                message: _emailMessage!, isError: false),
+                          ],
                         ],
                       ),
                     ),
@@ -330,20 +545,20 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
                           ),
                           child: _savingInfo
                               ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.black54,
-                                  ),
-                                )
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.black54,
+                            ),
+                          )
                               : const Text(
-                                  'Save Changes',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
-                                  ),
-                                ),
+                            'Save Changes',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -451,20 +666,20 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
                       ),
                       child: _savingPassword
                           ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.black54,
-                              ),
-                            )
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.black54,
+                        ),
+                      )
                           : const Text(
-                              'Update Password',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
+                        'Update Password',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
                   ),
                 ),

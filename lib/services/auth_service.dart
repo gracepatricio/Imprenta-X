@@ -11,32 +11,10 @@ class AuthService {
 
   static String generateTemporaryPassword() {
     const adjectives = [
-      'Amber',
-      'Brisk',
-      'Coral',
-      'Dusky',
-      'Ember',
-      'Flair',
-      'Glint',
-      'Haven',
-      'Ivory',
-      'Jade',
-      'Karma',
-      'Lunar',
-      'Mango',
-      'Noble',
-      'Opal',
-      'Prism',
-      'Quest',
-      'Raven',
-      'Solar',
-      'Terra',
-      'Ultra',
-      'Vivid',
-      'Wheat',
-      'Xenon',
-      'Yield',
-      'Zonal',
+      'Amber', 'Brisk', 'Coral', 'Dusky', 'Ember', 'Flair', 'Glint', 'Haven',
+      'Ivory', 'Jade', 'Karma', 'Lunar', 'Mango', 'Noble', 'Opal', 'Prism',
+      'Quest', 'Raven', 'Solar', 'Terra', 'Ultra', 'Vivid', 'Wheat', 'Xenon',
+      'Yield', 'Zonal',
     ];
     const symbols = ['@', '#', '!', r'$', '%', '&'];
     final rng = Random.secure();
@@ -95,17 +73,9 @@ class AuthService {
       await secondaryAuth.signOut();
       return (uid: uid, placeholderEmail: placeholderEmail, error: null);
     } on FirebaseAuthException catch (e) {
-      return (
-      uid: null,
-      placeholderEmail: null,
-      error: e.message ?? 'Failed to create auth user.',
-      );
+      return (uid: null, placeholderEmail: null, error: e.message ?? 'Failed to create auth user.');
     } catch (e) {
-      return (
-      uid: null,
-      placeholderEmail: null,
-      error: 'Failed to create auth user: $e',
-      );
+      return (uid: null, placeholderEmail: null, error: 'Failed to create auth user: $e');
     } finally {
       await secondaryApp?.delete();
     }
@@ -169,12 +139,7 @@ class AuthService {
     final tempPassword = generateTemporaryPassword();
     final authResult = await _createAuthUserSecondary(password: tempPassword);
     if (authResult.error != null) {
-      return (
-      password: null,
-      uid: null,
-      employeeId: null,
-      error: authResult.error,
-      );
+      return (password: null, uid: null, employeeId: null, error: authResult.error);
     }
 
     final uid = authResult.uid!;
@@ -197,19 +162,9 @@ class AuthService {
         'is_deleted': false,
         'is_disabled': false,
       });
-      return (
-      password: tempPassword,
-      uid: uid,
-      employeeId: employeeId,
-      error: null,
-      );
+      return (password: tempPassword, uid: uid, employeeId: employeeId, error: null);
     } catch (e) {
-      return (
-      password: null,
-      uid: null,
-      employeeId: null,
-      error: 'Account created in Auth but Firestore write failed: $e',
-      );
+      return (password: null, uid: null, employeeId: null, error: 'Account created in Auth but Firestore write failed: $e');
     }
   }
 
@@ -242,11 +197,7 @@ class AuthService {
       });
       return (uid: uid, password: tempPassword, error: null);
     } catch (e) {
-      return (
-      uid: null,
-      password: null,
-      error: 'Account created in Auth but Firestore write failed: $e',
-      );
+      return (uid: null, password: null, error: 'Account created in Auth but Firestore write failed: $e');
     }
   }
 
@@ -335,6 +286,45 @@ class AuthService {
 
     if (identifier.contains('@')) {
       print('DEBUG: plain email branch');
+
+      // FIX: Before resolving, check email_index for this email.
+      // If it exists but is NOT 'active', it was invalidated by an email
+      // change — reject it so the old email cannot be used to log in.
+      // This blocks the fallthrough path where the identifier is returned
+      // as-is and Firebase Auth still accepts the old credential.
+      try {
+        final indexDoc = await _firestore
+            .collection('email_index')
+            .doc(identifier)
+            .get();
+        if (indexDoc.exists) {
+          final status = indexDoc.data()?['status'] as String? ?? '';
+          if (status != 'active') {
+            // Email was disabled/deleted — do not resolve it.
+            print('DEBUG: email_index status="$status" for "$identifier" — rejecting');
+            return null;
+          }
+          // Active entry found — resolve uid to auth email
+          final uid = indexDoc.data()?['uid'] as String?;
+          if (uid != null) {
+            final userDoc = await _firestore.collection('User').doc(uid).get();
+            final role = userDoc.data()?['user_role'] as String? ?? '';
+            if (role == 'employee' || role == 'admin') {
+              final authEmail = await _getPlaceholderEmail(uid);
+              print('DEBUG: email_index → employee/admin authEmail=$authEmail');
+              return authEmail ?? identifier;
+            }
+            // Customer: Firebase Auth email == real email
+            return identifier;
+          }
+        }
+      } catch (e) {
+        print('DEBUG: email_index check threw: $e');
+      }
+
+      // No email_index entry — fall back to querying User collection directly.
+      // This handles customers who registered before email_index was written,
+      // or accounts where email_index was never created.
       try {
         final snap = await _firestore
             .collection('User')
@@ -342,18 +332,29 @@ class AuthService {
             .limit(1)
             .get();
         if (snap.docs.isNotEmpty) {
-          final role = snap.docs.first.data()['user_role'] as String? ?? '';
+          final data = snap.docs.first.data();
+          final role = data['user_role'] as String? ?? '';
           if (role == 'employee' || role == 'admin') {
             final uid = snap.docs.first.id;
             final authEmail = await _getPlaceholderEmail(uid);
-            print('DEBUG: email → employee/admin authEmail=$authEmail');
+            print('DEBUG: User query → employee/admin authEmail=$authEmail');
             return authEmail ?? identifier;
           }
+          // Customer account found in User doc — return email directly.
+          print('DEBUG: User query → customer, returning identifier');
+          return identifier;
         }
       } catch (e) {
-        print('DEBUG: email branch threw: $e');
+        print('DEBUG: User query threw: $e');
       }
-      return identifier;
+
+      // FIX: Do NOT fall through and return identifier here.
+      // The original code did `return identifier` unconditionally, which
+      // allowed any email — including ones invalidated by an email change —
+      // to attempt Firebase Auth sign-in directly. This was the root cause
+      // of being able to log in with the old email after changing it.
+      print('DEBUG: no User doc found for "$identifier" — returning null');
+      return null;
     }
 
     if (identifier.startsWith('CUS-')) {
@@ -422,9 +423,7 @@ class AuthService {
     print('DEBUG _getPlaceholderEmail uid=$uid');
     try {
       final doc = await _firestore.collection('AuthIndex').doc(uid).get();
-      print(
-        'DEBUG _getPlaceholderEmail doc exists=${doc.exists} data=${doc.data()}',
-      );
+      print('DEBUG _getPlaceholderEmail doc exists=${doc.exists} data=${doc.data()}');
       return doc.data()?['placeholder_email'] as String?;
     } catch (e) {
       print('DEBUG _getPlaceholderEmail threw: $e');
@@ -461,26 +460,11 @@ class AuthService {
     }
   }
 
-  /// Sets up email verification for an employee/admin account.
-  ///
-  /// For placeholder accounts (@imprenta.internal):
-  ///   Creates a secondary Firebase Auth account with the real email,
-  ///   sends a standard email verification to it, stores the pending
-  ///   migration in PendingEmailVerification, and migrates the User doc
-  ///   once the employee clicks the link.
-  ///   [currentPassword] is required so the new account gets the same
-  ///   password — the employee keeps logging in with the same credentials.
-  ///
-  /// For accounts already on a real email:
-  ///   Uses verifyBeforeUpdateEmail (works because the account is verified).
-  ///
-  /// Returns 'verification_sent' or an error string.
   Future<String?> addEmail(String newEmail, {String? currentPassword}) async {
     try {
       final user = _auth.currentUser;
       if (user == null) return 'Not logged in.';
 
-      // Reject if another Firestore User doc already owns this email.
       final existing = await _firestore
           .collection('User')
           .where('email', isEqualTo: newEmail)
@@ -494,21 +478,15 @@ class AuthService {
       final hasPlaceholder = currentEmail.endsWith('@imprenta.internal');
 
       if (!hasPlaceholder) {
-        // Already on a real verified email — standard flow works fine.
         await user.verifyBeforeUpdateEmail(newEmail);
         return 'verification_sent';
       }
 
-      // Placeholder account: create a secondary account with the real email
-      // so we can send a proper verification email without the enumeration-
-      // protection restriction that blocks verifyBeforeUpdateEmail here.
       FirebaseApp? secondaryApp;
       try {
         secondaryApp = await _createSecondaryApp();
         final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
 
-        // Use the employee's actual password for the new account so they
-        // keep logging in with the same credentials after migration.
         final passwordToUse = (currentPassword != null && currentPassword.isNotEmpty)
             ? currentPassword
             : generateTemporaryPassword();
@@ -529,7 +507,6 @@ class AuthService {
         final newUid = secondaryCred.user!.uid;
         await secondaryCred.user!.sendEmailVerification();
 
-        // Store the pending migration record.
         await _firestore
             .collection('PendingEmailVerification')
             .doc(user.uid)
@@ -542,7 +519,7 @@ class AuthService {
         });
 
         await secondaryAuth.signOut();
-        return 'migration_sent'; // distinct from verifyBeforeUpdateEmail path
+        return 'migration_sent';
       } finally {
         await secondaryApp?.delete();
       }
@@ -556,10 +533,6 @@ class AuthService {
     }
   }
 
-  /// Polls to check if the pending email verification is complete.
-  /// If verified, migrates the Firestore User doc to the new uid,
-  /// signs the user into the new account, and cleans up.
-  /// Returns the verified new email on success, null if not yet done.
   Future<String?> checkAndFinalizeMigration(String oldUid) async {
     try {
       final pendingDoc = await _firestore
@@ -573,7 +546,6 @@ class AuthService {
       final newUid   = data['new_uid']   as String;
       final password = data['password']  as String;
 
-      // Check verification status via secondary app.
       FirebaseApp? secondaryApp;
       bool verified = false;
       try {
@@ -592,7 +564,6 @@ class AuthService {
 
       if (!verified) return null;
 
-      // Read the old User doc BEFORE signing out (we still have old-uid auth).
       final oldDoc = await _firestore.collection('User').doc(oldUid).get();
       Map<String, dynamic>? userData;
       if (oldDoc.exists) {
@@ -600,30 +571,18 @@ class AuthService {
         userData['email'] = newEmail;
       }
 
-      // Sign the main app into the NEW account first.
-      // Firebase Security Rules require request.auth.uid == newUid to write
-      // User/{newUid} and AuthIndex/{newUid}, so we must be authenticated as
-      // the new user before those writes — doing it as the old user causes the
-      // "permission-denied" error seen in checkAndFinalizeMigration.
       await _auth.signInWithEmailAndPassword(
         email: newEmail,
         password: password,
       );
 
-      // Now authenticated as newUid — all Firestore writes below will succeed.
       if (userData != null) {
         await _firestore.collection('User').doc(newUid).set(userData);
-        // AuthIndex for the new account: store the real email so that
-        // _resolveToAuthEmail can look it up correctly for future logins.
         await _firestore.collection('AuthIndex').doc(newUid).set({
           'placeholder_email': newEmail,
         });
       }
 
-      // Clean up old docs — these are deletions so the old UID's rules
-      // (allow delete: request.auth.uid == oldUid) won't block us because
-      // we are now signed in as newUid. Use a batch so it's atomic, and
-      // wrap in try/catch so a rule miss on deletion never blocks the user.
       try {
         final batch = _firestore.batch();
         batch.delete(_firestore.collection('User').doc(oldUid));
@@ -633,7 +592,6 @@ class AuthService {
         );
         await batch.commit();
       } catch (cleanupErr) {
-        // Non-fatal — the new account is fully usable even if old docs linger.
         print('DEBUG checkAndFinalizeMigration cleanup error: $cleanupErr');
       }
 
@@ -644,8 +602,6 @@ class AuthService {
     }
   }
 
-  /// Called after the user clicks the verification link.
-  /// Updates both User doc and AuthIndex so login-by-ID still works.
   Future<String?> finalizeEmailUpdate(String newEmail) async {
     try {
       final user = _auth.currentUser;
@@ -654,8 +610,6 @@ class AuthService {
       await _firestore.collection('User').doc(user.uid).update({
         'email': newEmail,
       });
-      // Keep AuthIndex in sync — _resolveToAuthEmail reads this to know
-      // what email Firebase Auth currently has for this account.
       await _firestore.collection('AuthIndex').doc(user.uid).update({
         'placeholder_email': newEmail,
       });
