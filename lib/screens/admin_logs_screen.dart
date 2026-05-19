@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
 import 'sales_widgets.dart';
+import 'invoice_screen.dart';
 
 // ── Liquid Glass Design Tokens ────────────────────────────────────────────────
 class _Glass {
@@ -64,19 +65,14 @@ class _Glass {
 
 // ── iOS-style design tokens ───────────────────────────────────────────────────
 class _iOS {
-  // Background used behind grouped lists (iOS systemGroupedBackground)
   static const Color groupedBg = Color(0xFFF2F2F7);
-  // Card/cell fill
   static const Color cellBg = Colors.white;
-  // Separator line colour (iOS opaqueSeparator)
   static const Color separator = Color(0xFFE5E5EA);
-  // iOS label colours
   static const Color label = Color(0xFF000000);
-  static const Color label2 = Color(0xFF3C3C43); // secondaryLabel
-  static const Color label3 = Color(0xFF8E8E93); // tertiaryLabel
-  static const Color tint = Color(0xFF007AFF); // iOS blue
+  static const Color label2 = Color(0xFF3C3C43);
+  static const Color label3 = Color(0xFF8E8E93);
+  static const Color tint = Color(0xFF007AFF);
 
-  // Standard cell shadow
   static const BoxShadow cardShadow = BoxShadow(
     color: Color(0x0A000000),
     blurRadius: 12,
@@ -346,7 +342,6 @@ class _JobQueueTab extends StatefulWidget {
 class _JobQueueTabState extends State<_JobQueueTab> {
   _QueueSubTab _sub = _QueueSubTab.pending;
 
-  // (enum, label, icon, accent)
   static const _statusTabs = [
     (
       _QueueSubTab.pending,
@@ -378,11 +373,9 @@ class _JobQueueTabState extends State<_JobQueueTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── iOS segmented-style top bar ─────────────────────────────────
           if (!isHistory)
             Row(
               children: [
-                // Status segment control
                 Expanded(
                   child: _IOSSegmentControl<_QueueSubTab>(
                     selected: _sub,
@@ -402,7 +395,6 @@ class _JobQueueTabState extends State<_JobQueueTab> {
 
                 const SizedBox(width: 10),
 
-                // Order History — solid iOS-style button
                 GestureDetector(
                   onTap: () => setState(() => _sub = _QueueSubTab.history),
                   child: Container(
@@ -505,7 +497,7 @@ class _IOSSegmentControl<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFEFF4), // iOS systemGray6
+        color: const Color(0xFFEFEFF4),
         borderRadius: BorderRadius.circular(10),
       ),
       child: SingleChildScrollView(
@@ -568,7 +560,7 @@ class _IOSSegmentControl<T> extends StatelessWidget {
   }
 }
 
-// ── Single-status queue list (iOS grouped list style) ─────────────────────────
+// ── Single-status queue list ──────────────────────────────────────────────────
 class _QueueStatusList extends StatelessWidget {
   final String jobStatus;
   const _QueueStatusList({required this.jobStatus});
@@ -701,7 +693,6 @@ class _QueueStatusList extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Count label — iOS section header style
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 8),
               child: Text(
@@ -715,7 +706,6 @@ class _QueueStatusList extends StatelessWidget {
               ),
             ),
 
-            // iOS inset-grouped list
             Expanded(
               child: ListView.separated(
                 itemCount: docs.length,
@@ -759,7 +749,6 @@ class _QueueStatusList extends StatelessWidget {
 }
 
 // ── iOS Job Card ──────────────────────────────────────────────────────────────
-// Number badge sits OUTSIDE the card to the left, matching original layout.
 class _IOSJobCard extends StatelessWidget {
   final int index;
   final String orderId;
@@ -788,7 +777,6 @@ class _IOSJobCard extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // ── Number badge — outside the card ─────────────────────────────
         SizedBox(
           width: 32,
           child: Center(
@@ -816,7 +804,6 @@ class _IOSJobCard extends StatelessWidget {
 
         const SizedBox(width: 6),
 
-        // ── Card ─────────────────────────────────────────────────────────
         Expanded(
           child: Container(
             padding: const EdgeInsets.all(14),
@@ -829,7 +816,6 @@ class _IOSJobCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header row: order ID + status chip
                 Row(
                   children: [
                     Expanded(
@@ -877,7 +863,6 @@ class _IOSJobCard extends StatelessWidget {
                   ],
                 ),
 
-                // Product summary pill
                 if (productSummary != null) ...[
                   const SizedBox(height: 8),
                   Text(
@@ -892,7 +877,6 @@ class _IOSJobCard extends StatelessWidget {
                 Container(height: 0.5, color: _iOS.separator),
                 const SizedBox(height: 10),
 
-                // Footer: date + price
                 Row(
                   children: [
                     const Icon(
@@ -926,7 +910,7 @@ class _IOSJobCard extends StatelessWidget {
 }
 
 // =============================================================================
-// Admin Order History — iOS redesign
+// Admin Order History — with Customer ID search + invoice + total/paid/balance
 // =============================================================================
 class _AdminOrderHistory extends StatefulWidget {
   final VoidCallback onBack;
@@ -1069,7 +1053,6 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
         // ── Top bar: Back + Search + Filter ─────────────────────────────
         Row(
           children: [
-            // Back button — iOS chevron style
             GestureDetector(
               onTap: widget.onBack,
               child: Container(
@@ -1104,7 +1087,7 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
 
             const SizedBox(width: 10),
 
-            // Search bar — iOS style (rounded rect, inset icon)
+            // FIXED: Search now includes customer_uid / customer ID
             Expanded(
               child: Container(
                 height: 38,
@@ -1112,7 +1095,7 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                   color: const Color(0xFFEFEFF4),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: TextFormField(
+                child: TextField(
                   controller: _searchCtrl,
                   onChanged: (v) =>
                       setState(() => _search = v.trim().toLowerCase()),
@@ -1122,14 +1105,26 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                     letterSpacing: -0.1,
                   ),
                   decoration: InputDecoration(
-                    hintText:
-                        'Search by Order ID, Customer Name, or Customer ID…',
-                    hintStyle: TextStyle(color: _iOS.label3, fontSize: 14),
+                    hintText: 'Search by Order ID or Customer Name',
+                    hintStyle: TextStyle(color: _iOS.label3, fontSize: 13),
                     prefixIcon: const Icon(
                       Icons.search,
                       size: 16,
                       color: _iOS.label3,
                     ),
+                    suffixIcon: _search.isNotEmpty
+                        ? GestureDetector(
+                            onTap: () {
+                              _searchCtrl.clear();
+                              setState(() => _search = '');
+                            },
+                            child: const Icon(
+                              Icons.clear,
+                              size: 16,
+                              color: _iOS.label3,
+                            ),
+                          )
+                        : null,
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 10),
                   ),
@@ -1139,7 +1134,6 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
 
             const SizedBox(width: 10),
 
-            // Status filter — solid iOS-style pill, always dark
             Container(
               height: 38,
               padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1221,7 +1215,6 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
 
         const SizedBox(height: 14),
 
-        // ── Order list ───────────────────────────────────────────────────
         Expanded(
           child: StreamBuilder<List<QueryDocumentSnapshot>>(
             stream: _stream(),
@@ -1247,6 +1240,8 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
               }
 
               var docs = snap.data ?? [];
+
+              // FIXED: search checks order_id, customer_name, AND customer_uid
               if (_search.isNotEmpty) {
                 docs = docs.where((d) {
                   final data = d.data() as Map<String, dynamic>;
@@ -1254,7 +1249,11 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                       .toLowerCase();
                   final name = (data['customer_name']?.toString() ?? '')
                       .toLowerCase();
-                  return id.contains(_search) || name.contains(_search);
+                  final customerId = (data['customer_uid']?.toString() ?? '')
+                      .toLowerCase();
+                  return id.contains(_search) ||
+                      name.contains(_search) ||
+                      customerId.contains(_search);
                 }).toList();
               }
 
@@ -1296,7 +1295,6 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                 );
               }
 
-              // Section header
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1329,14 +1327,19 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                             (data['total_price'] as num?)?.toDouble() ?? 0;
                         final paid =
                             (data['amount_paid'] as num?)?.toDouble() ?? 0;
+                        final remaining =
+                            (data['remaining_balance'] as num?)?.toDouble() ??
+                            (total - paid);
                         final products =
                             (data['products'] as List?)
                                 ?.cast<Map<String, dynamic>>() ??
                             [];
                         final dateStr = _fmtDate(data['created_at']);
                         final statusColor = _statusColor(status);
+                        final invoiceId = data['invoice_id']?.toString();
 
                         return _IOSOrderHistoryCard(
+                          docId: doc.id,
                           orderId: orderLabel,
                           customer: customer,
                           dateStr: dateStr,
@@ -1345,6 +1348,8 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                           products: products,
                           paid: paid,
                           total: total,
+                          remaining: remaining,
+                          invoiceId: invoiceId,
                         );
                       },
                     ),
@@ -1359,8 +1364,9 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
   }
 }
 
-// ── iOS Order History Card ────────────────────────────────────────────────────
+// ── iOS Order History Card — with total/paid/balance + View Invoice ───────────
 class _IOSOrderHistoryCard extends StatelessWidget {
+  final String docId;
   final String orderId;
   final String customer;
   final String dateStr;
@@ -1369,8 +1375,11 @@ class _IOSOrderHistoryCard extends StatelessWidget {
   final List<Map<String, dynamic>> products;
   final double paid;
   final double total;
+  final double remaining;
+  final String? invoiceId;
 
   const _IOSOrderHistoryCard({
+    required this.docId,
     required this.orderId,
     required this.customer,
     required this.dateStr,
@@ -1379,12 +1388,16 @@ class _IOSOrderHistoryCard extends StatelessWidget {
     required this.products,
     required this.paid,
     required this.total,
+    required this.remaining,
+    this.invoiceId,
   });
 
   static const Color _amber = Color(0xFFB45309);
 
   @override
   Widget build(BuildContext context) {
+    final fullyPaid = remaining < 0.01;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1456,23 +1469,102 @@ class _IOSOrderHistoryCard extends StatelessWidget {
           Container(height: 0.5, color: _iOS.separator),
           const SizedBox(height: 10),
 
-          // Footer
-          Row(
-            children: [
-              Text(
-                '₱${paid.toStringAsFixed(2)} paid',
-                style: const TextStyle(color: _iOS.label3, fontSize: 12),
+          // IMPROVED: Total / Paid / Balance — full-width row with better spacing
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                  child: _HistoryChipWide(
+                    label: 'Total',
+                    value: '₱${total.toStringAsFixed(2)}',
+                    color: const Color(0xFF374151),
+                    bgColor: const Color(0xFFF9FAFB),
+                    borderColor: const Color(0xFFE5E7EB),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _HistoryChipWide(
+                    label: 'Paid',
+                    value: '₱${paid.toStringAsFixed(2)}',
+                    color: const Color(0xFF16A34A),
+                    bgColor: const Color(0xFFF0FDF4),
+                    borderColor: const Color(0xFFBBF7D0),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _HistoryChipWide(
+                    label: fullyPaid ? 'Fully Paid' : 'Balance',
+                    value: fullyPaid
+                        ? '✓ Paid'
+                        : '₱${remaining.toStringAsFixed(2)}',
+                    color: fullyPaid ? const Color(0xFF16A34A) : _amber,
+                    bgColor: fullyPaid
+                        ? const Color(0xFFF0FDF4)
+                        : const Color(0xFFFFFBEB),
+                    borderColor: fullyPaid
+                        ? const Color(0xFFBBF7D0)
+                        : const Color(0xFFFDE68A),
+                    bold: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // ── View Invoice button ────────────────────────────────────
+          Builder(
+            builder: (ctx) => OutlinedButton.icon(
+              onPressed: () async {
+                String? invId = invoiceId;
+                if (invId == null) {
+                  final orderSnap = await FirebaseFirestore.instance
+                      .collection('Orders')
+                      .doc(docId)
+                      .get();
+                  invId = orderSnap.data()?['invoice_id']?.toString();
+                }
+                if (invId != null && ctx.mounted) {
+                  Navigator.of(ctx).push(
+                    MaterialPageRoute(
+                      builder: (_) => InvoiceScreen(invoiceId: invId!),
+                    ),
+                  );
+                } else if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('No invoice for this order')),
+                  );
+                }
+              },
+              icon: const Icon(
+                Icons.receipt_long_rounded,
+                size: 15,
+                color: Color(0xFF6D28D9),
               ),
-              const Spacer(),
-              Text(
-                '₱${total.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  color: _amber,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
+              label: const Text(
+                'View Invoice',
+                style: TextStyle(
+                  color: Color(0xFF6D28D9),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
                 ),
               ),
-            ],
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                  color: const Color(0xFF6D28D9).withValues(alpha: 0.4),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 7,
+                  horizontal: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(9),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1480,8 +1572,100 @@ class _IOSOrderHistoryCard extends StatelessWidget {
   }
 }
 
+// ── Improved wide info chip for order history card ────────────────────────────
+class _HistoryChipWide extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  final Color bgColor;
+  final Color borderColor;
+  final bool bold;
+
+  const _HistoryChipWide({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.bgColor,
+    required this.borderColor,
+    this.bold = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    decoration: BoxDecoration(
+      color: bgColor,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: borderColor, width: 1),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: color.withValues(alpha: 0.6),
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: bold ? 13 : 12,
+            fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    ),
+  );
+}
+
+// Keep the old _HistoryChip for backward compatibility if needed
+class _HistoryChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  final bool bold;
+
+  const _HistoryChip({
+    required this.label,
+    required this.value,
+    required this.color,
+    this.bold = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          color: color.withValues(alpha: 0.6),
+          fontSize: 9,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        value,
+        style: TextStyle(
+          color: color,
+          fontSize: bold ? 13 : 12,
+          fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+        ),
+      ),
+    ],
+  );
+}
+
 // =============================================================================
-// Sales Record Sub-Tab  (unchanged logic, unchanged design)
+// Sales Record Sub-Tab
 // =============================================================================
 enum _SalesSubTab { record, report }
 
@@ -1595,7 +1779,7 @@ class _SalesInnerTab extends StatelessWidget {
 }
 
 // =============================================================================
-// Employee Activity (Inventory Logs) Tab  (unchanged)
+// Employee Activity (Inventory Logs) Tab
 // =============================================================================
 class _InventoryLogsTab extends StatefulWidget {
   const _InventoryLogsTab();
@@ -1986,7 +2170,7 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
 }
 
 // =============================================================================
-// Customer Feedback Tab  (unchanged)
+// Customer Feedback Tab
 // =============================================================================
 class _CustomerFeedbackTab extends StatelessWidget {
   const _CustomerFeedbackTab();
@@ -2197,7 +2381,7 @@ class _CustomerFeedbackTab extends StatelessWidget {
 }
 
 // =============================================================================
-// Log Row  (unchanged)
+// Log Row
 // =============================================================================
 class _LogRow extends StatelessWidget {
   final Map<String, dynamic> data;

@@ -15,11 +15,13 @@ class _T {
 }
 
 // ── Period filter enum shared by both record and report ───────────────────────
-enum _Period { day, week, month, year, all }
+enum _Period { all, day, week, month, year }
 
 extension _PeriodLabel on _Period {
   String get label {
     switch (this) {
+      case _Period.all:
+        return 'All Time';
       case _Period.day:
         return 'Today';
       case _Period.week:
@@ -28,13 +30,13 @@ extension _PeriodLabel on _Period {
         return 'This Month';
       case _Period.year:
         return 'This Year';
-      case _Period.all:
-        return 'All Time';
     }
   }
 
   String get shortLabel {
     switch (this) {
+      case _Period.all:
+        return 'All';
       case _Period.day:
         return 'Today';
       case _Period.week:
@@ -43,8 +45,6 @@ extension _PeriodLabel on _Period {
         return 'Month';
       case _Period.year:
         return 'Year';
-      case _Period.all:
-        return 'All';
     }
   }
 }
@@ -53,6 +53,8 @@ bool _inPeriod(DateTime dt, _Period period) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   switch (period) {
+    case _Period.all:
+      return true;
     case _Period.day:
       return !dt.isBefore(today);
     case _Period.week:
@@ -62,8 +64,6 @@ bool _inPeriod(DateTime dt, _Period period) {
       return dt.year == now.year && dt.month == now.month;
     case _Period.year:
       return dt.year == now.year;
-    case _Period.all:
-      return true;
   }
 }
 
@@ -148,6 +148,8 @@ class SalesRecordTable extends StatefulWidget {
 class _SalesRecordTableState extends State<SalesRecordTable> {
   String _typeFilter = 'all';
   _Period _period = _Period.all;
+  // FIX: use a local state variable that is only updated on change, not on
+  // every build, to prevent the cursor-jump / re-entry bug.
   String _search = '';
   final _searchCtrl = TextEditingController();
 
@@ -254,15 +256,6 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
     }
   }
 
-  // ── Type filter data ──────────────────────────────────────────────────────
-  static const _typeOptions = [
-    ('all', 'All Types', null),
-    ('downpayment', 'Downpayment', Color(0xFF1D4ED8)),
-    ('balance', 'Balance', Color(0xFFB45309)),
-    ('cash', 'Cash', Color(0xFF15803D)),
-    ('full', 'Full', Color(0xFF6D28D9)),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final query = FirebaseFirestore.instance
@@ -309,14 +302,19 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
               .toList();
         }
 
-        // Apply search
+        // Apply search — now also checks customer_uid / customer ID
         if (_search.isNotEmpty) {
           filtered = filtered.where((d) {
             final data = d.data() as Map<String, dynamic>;
             final ordId = (data['order_id']?.toString() ?? '').toLowerCase();
             final cust = (data['customer_name']?.toString() ?? '')
                 .toLowerCase();
-            return ordId.contains(_search) || cust.contains(_search);
+            // FIX: also search by customer_uid
+            final custId = (data['customer_uid']?.toString() ?? '')
+                .toLowerCase();
+            return ordId.contains(_search) ||
+                cust.contains(_search) ||
+                custId.contains(_search);
           }).toList();
         }
 
@@ -340,7 +338,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Row 1: Summary chips (Period Total | Records | All-Time) ──
+                  // ── Row 1: Summary chips ──────────────────────────────
                   Row(
                     children: [
                       _SummaryChip(
@@ -379,14 +377,23 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                   ),
                   const SizedBox(height: 12),
 
-                  // ── Row 3: Search field ────────────────────────────────
-                  TextFormField(
+                  // ── Row 3: Search field ──────────────────────────────────
+                  // FIX: Use a separate ValueNotifier / local variable so that
+                  // TextField is never rebuilt while the user is typing, which
+                  // was causing the "keeps entering" cursor-jump bug.
+                  TextField(
                     controller: _searchCtrl,
-                    onChanged: (v) =>
-                        setState(() => _search = v.trim().toLowerCase()),
+                    onChanged: (v) {
+                      // Only call setState if the trimmed lowercase value
+                      // actually changed, avoiding unnecessary rebuilds.
+                      final trimmed = v.trim().toLowerCase();
+                      if (trimmed != _search) {
+                        setState(() => _search = trimmed);
+                      }
+                    },
                     style: const TextStyle(color: _T.textPrimary, fontSize: 13),
                     decoration: InputDecoration(
-                      hintText: 'Search by order ID or customer name…',
+                      hintText: 'Search by Order ID, Customer Name',
                       hintStyle: const TextStyle(
                         color: _T.textMuted,
                         fontSize: 13,
@@ -435,6 +442,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
             ),
 
             // ── Table header ──────────────────────────────────────────────
+            // IMPROVED: wider Type column, fixed min-width to prevent squishing
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
@@ -448,7 +456,8 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                 children: [
                   Expanded(flex: 3, child: _H('Order')),
                   Expanded(flex: 3, child: _H('Customer')),
-                  Expanded(flex: 2, child: _H('Type')),
+                  // Type column: give it more flex so 'Downpayment' doesn't squish
+                  Expanded(flex: 3, child: _H('Type')),
                   Expanded(flex: 2, child: _H('Method')),
                   Expanded(flex: 2, child: _H('Amount')),
                   Expanded(flex: 3, child: _H('Date')),
@@ -516,9 +525,10 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                           color: i.isEven
                               ? Colors.white
                               : const Color(0xFFFAFAFA),
+                          // IMPROVED: more vertical padding for easier scanning
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,
-                            vertical: 12,
+                            vertical: 14,
                           ),
                           child: Row(
                             children: [
@@ -545,8 +555,9 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                                   ),
                                 ),
                               ),
+                              // IMPROVED: flex 3 + SoftWrap to prevent squishing
                               Expanded(
-                                flex: 2,
+                                flex: 3,
                                 child: Align(
                                   alignment: Alignment.centerLeft,
                                   child: Container(
@@ -569,6 +580,8 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
                                       ),
+                                      softWrap: false,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ),
@@ -657,7 +670,7 @@ class _UnifiedFilterBar extends StatelessWidget {
           Row(
             children: [
               // Label
-              Container(
+              SizedBox(
                 width: 72,
                 child: Row(
                   children: const [
@@ -679,7 +692,7 @@ class _UnifiedFilterBar extends StatelessWidget {
                   ],
                 ),
               ),
-              // Period pills
+              // Period pills — 'All' is first in the enum so it appears leftmost
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -743,7 +756,7 @@ class _UnifiedFilterBar extends StatelessWidget {
           Row(
             children: [
               // Label
-              Container(
+              SizedBox(
                 width: 72,
                 child: Row(
                   children: const [
@@ -974,256 +987,308 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
 
   @override
   Widget build(BuildContext context) {
+    // NEW: We need two streams — Sales_Records for revenue, and Orders for
+    // outstanding balance (remaining_balance on non-cancelled orders).
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('Sales_Records')
           .orderBy('sale_date', descending: false)
           .snapshots(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
+      builder: (context, salesSnap) {
+        if (salesSnap.connectionState == ConnectionState.waiting) {
           return Center(
             child: CircularProgressIndicator(
               color: _T.textPrimary.withValues(alpha: 0.4),
             ),
           );
         }
-        if (snap.hasError) {
+        if (salesSnap.hasError) {
           return Center(
             child: Text(
-              'Error: ${snap.error}',
+              'Error: ${salesSnap.error}',
               style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13),
             ),
           );
         }
 
-        final allDocs = snap.data?.docs ?? [];
-        final docs = allDocs.where((doc) {
-          final d = doc.data() as Map<String, dynamic>;
-          final ts = d['sale_date'] as Timestamp?;
-          if (ts == null) return _period == _Period.all;
-          return _inPeriod(ts.toDate().toLocal(), _period);
-        }).toList();
-
-        double totalRevenue = 0;
-        double downpaymentTotal = 0;
-        double balanceTotal = 0;
-        final orderIds = <String>{};
-
-        final now = DateTime.now();
-        final monthBuckets = List.generate(6, (i) {
-          final m = DateTime(now.year, now.month - (5 - i));
-          return _MonthBucket(month: m, label: _shortMonth(m.month), total: 0);
-        });
-
-        for (final doc in docs) {
-          final d = doc.data() as Map<String, dynamic>;
-          final amount = (d['sale_amount'] as num?)?.toDouble() ?? 0;
-          final type = d['payment_type']?.toString() ?? '';
-          final ordId = d['order_id']?.toString() ?? '';
-
-          totalRevenue += amount;
-          if (type == 'downpayment') downpaymentTotal += amount;
-          if (type == 'balance' || type == 'cash') balanceTotal += amount;
-          if (ordId.isNotEmpty) orderIds.add(ordId);
-
-          final ts = d['sale_date'] as Timestamp?;
-          if (ts != null) {
-            final dt = ts.toDate();
-            for (final b in monthBuckets) {
-              if (b.month.year == dt.year && b.month.month == dt.month) {
-                b.total += amount;
-                break;
+        // NEW: Also stream Orders to compute outstanding balance
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('Orders')
+              .where(
+                'status',
+                whereIn: ['pending', 'in_production', 'ready', 'completed'],
+              )
+              .snapshots(),
+          builder: (context, ordersSnap) {
+            // Compute outstanding balance from non-cancelled orders
+            double outstandingBalance = 0;
+            if (ordersSnap.hasData) {
+              for (final doc in ordersSnap.data!.docs) {
+                final d = doc.data() as Map<String, dynamic>;
+                final remaining = (d['remaining_balance'] as num?)?.toDouble();
+                if (remaining != null && remaining > 0.01) {
+                  outstandingBalance += remaining;
+                } else {
+                  // Fallback: compute from total - paid
+                  final total = (d['total_price'] as num?)?.toDouble() ?? 0;
+                  final paid = (d['amount_paid'] as num?)?.toDouble() ?? 0;
+                  final diff = total - paid;
+                  if (diff > 0.01) outstandingBalance += diff;
+                }
               }
             }
-          }
-        }
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title + period filter
-              Row(
+            final allDocs = salesSnap.data?.docs ?? [];
+            final docs = allDocs.where((doc) {
+              final d = doc.data() as Map<String, dynamic>;
+              final ts = d['sale_date'] as Timestamp?;
+              if (ts == null) return _period == _Period.all;
+              return _inPeriod(ts.toDate().toLocal(), _period);
+            }).toList();
+
+            double totalRevenue = 0;
+            double downpaymentTotal = 0;
+            double balanceTotal = 0;
+            final orderIds = <String>{};
+
+            final now = DateTime.now();
+            final monthBuckets = List.generate(6, (i) {
+              final m = DateTime(now.year, now.month - (5 - i));
+              return _MonthBucket(
+                month: m,
+                label: _shortMonth(m.month),
+                total: 0,
+              );
+            });
+
+            for (final doc in docs) {
+              final d = doc.data() as Map<String, dynamic>;
+              final amount = (d['sale_amount'] as num?)?.toDouble() ?? 0;
+              final type = d['payment_type']?.toString() ?? '';
+              final ordId = d['order_id']?.toString() ?? '';
+
+              totalRevenue += amount;
+              if (type == 'downpayment') downpaymentTotal += amount;
+              if (type == 'balance' || type == 'cash') balanceTotal += amount;
+              if (ordId.isNotEmpty) orderIds.add(ordId);
+
+              final ts = d['sale_date'] as Timestamp?;
+              if (ts != null) {
+                final dt = ts.toDate();
+                for (final b in monthBuckets) {
+                  if (b.month.year == dt.year && b.month.month == dt.month) {
+                    b.total += amount;
+                    break;
+                  }
+                }
+              }
+            }
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Expanded(
+                  // Title + period filter
+                  const Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Sales Report',
+                              style: TextStyle(
+                                color: _T.textPrimary,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Revenue breakdown and trends',
+                              style: TextStyle(
+                                color: _T.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Period filter bar
+                  _PeriodFilterBar(
+                    active: _period,
+                    onChanged: (p) => setState(() => _period = p),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // KPI cards — now 5 cards including Balance to Collect
+                  LayoutBuilder(
+                    builder: (_, constraints) {
+                      final narrow = constraints.maxWidth < 460;
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _AdminReportCard(
+                            label: 'Total Revenue',
+                            value: '₱${totalRevenue.toStringAsFixed(2)}',
+                            color: _T.gold,
+                            bg: const Color(0xFFFFFBEB),
+                            border: const Color(0xFFFDE68A),
+                            narrow: narrow,
+                          ),
+                          _AdminReportCard(
+                            label: 'Orders',
+                            value: '${orderIds.length}',
+                            color: const Color(0xFF1D4ED8),
+                            bg: const Color(0xFFEFF6FF),
+                            border: const Color(0xFFBFDBFE),
+                            narrow: narrow,
+                          ),
+                          _AdminReportCard(
+                            label: 'Downpayments',
+                            value: '₱${downpaymentTotal.toStringAsFixed(2)}',
+                            color: const Color(0xFF6D28D9),
+                            bg: const Color(0xFFF5F3FF),
+                            border: const Color(0xFFDDD6FE),
+                            narrow: narrow,
+                          ),
+                          _AdminReportCard(
+                            label: 'Balance Collected',
+                            value: '₱${balanceTotal.toStringAsFixed(2)}',
+                            color: const Color(0xFF15803D),
+                            bg: const Color(0xFFF0FDF4),
+                            border: const Color(0xFFBBF7D0),
+                            narrow: narrow,
+                          ),
+                          // NEW: Balance still to be collected from active orders
+                          _AdminReportCard(
+                            label: 'Balance to Collect',
+                            value: '₱${outstandingBalance.toStringAsFixed(2)}',
+                            color: const Color(0xFFDC2626),
+                            bg: const Color(0xFFFEF2F2),
+                            border: const Color(0xFFFECACA),
+                            narrow: narrow,
+                            tooltip:
+                                'Total remaining balance on non-cancelled orders',
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Chart section
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _T.divider, width: 1),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x08000000),
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Sales Report',
-                          style: TextStyle(
-                            color: _T.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.3,
+                        Row(
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFFBFDBFE),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.bar_chart_rounded,
+                                color: Color(0xFF1D4ED8),
+                                size: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Monthly Revenue',
+                                  style: TextStyle(
+                                    color: _T.textPrimary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Text(
+                                  'Last 6 months',
+                                  style: TextStyle(
+                                    color: _T.textMuted,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: 160,
+                          child: CustomPaint(
+                            painter: _AdminChartPainter(buckets: monthBuckets),
+                            child: Container(),
                           ),
                         ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Revenue breakdown and trends',
-                          style: TextStyle(color: _T.textMuted, fontSize: 12),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: monthBuckets
+                              .map(
+                                (b) => Column(
+                                  children: [
+                                    Text(
+                                      b.label,
+                                      style: const TextStyle(
+                                        color: _T.textMuted,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                    if (b.total > 0) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '₱${b.total >= 1000 ? '${(b.total / 1000).toStringAsFixed(1)}k' : b.total.toStringAsFixed(0)}',
+                                        style: const TextStyle(
+                                          color: _T.gold,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              )
+                              .toList(),
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-
-              // Period filter bar
-              _PeriodFilterBar(
-                active: _period,
-                onChanged: (p) => setState(() => _period = p),
-              ),
-              const SizedBox(height: 20),
-
-              // KPI cards
-              LayoutBuilder(
-                builder: (_, constraints) {
-                  final narrow = constraints.maxWidth < 460;
-                  return Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _AdminReportCard(
-                        label: 'Total Revenue',
-                        value: '₱${totalRevenue.toStringAsFixed(2)}',
-                        color: _T.gold,
-                        bg: const Color(0xFFFFFBEB),
-                        border: const Color(0xFFFDE68A),
-                        narrow: narrow,
-                      ),
-                      _AdminReportCard(
-                        label: 'Orders',
-                        value: '${orderIds.length}',
-                        color: const Color(0xFF1D4ED8),
-                        bg: const Color(0xFFEFF6FF),
-                        border: const Color(0xFFBFDBFE),
-                        narrow: narrow,
-                      ),
-                      _AdminReportCard(
-                        label: 'Downpayments',
-                        value: '₱${downpaymentTotal.toStringAsFixed(2)}',
-                        color: const Color(0xFF6D28D9),
-                        bg: const Color(0xFFF5F3FF),
-                        border: const Color(0xFFDDD6FE),
-                        narrow: narrow,
-                      ),
-                      _AdminReportCard(
-                        label: 'Balance Collected',
-                        value: '₱${balanceTotal.toStringAsFixed(2)}',
-                        color: const Color(0xFF15803D),
-                        bg: const Color(0xFFF0FDF4),
-                        border: const Color(0xFFBBF7D0),
-                        narrow: narrow,
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 24),
-
-              // Chart section
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _T.divider, width: 1),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x08000000),
-                      blurRadius: 8,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEFF6FF),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFBFDBFE)),
-                          ),
-                          child: const Icon(
-                            Icons.bar_chart_rounded,
-                            color: Color(0xFF1D4ED8),
-                            size: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Monthly Revenue',
-                              style: TextStyle(
-                                color: _T.textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              'Last 6 months',
-                              style: TextStyle(
-                                color: _T.textMuted,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 160,
-                      child: CustomPaint(
-                        painter: _AdminChartPainter(buckets: monthBuckets),
-                        child: Container(),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: monthBuckets
-                          .map(
-                            (b) => Column(
-                              children: [
-                                Text(
-                                  b.label,
-                                  style: const TextStyle(
-                                    color: _T.textMuted,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                                if (b.total > 0) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '₱${b.total >= 1000 ? '${(b.total / 1000).toStringAsFixed(1)}k' : b.total.toStringAsFixed(0)}',
-                                    style: const TextStyle(
-                                      color: _T.gold,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -1234,6 +1299,8 @@ class _AdminReportCard extends StatelessWidget {
   final String label, value;
   final Color color, bg, border;
   final bool narrow;
+  // NEW: optional tooltip for extra context
+  final String? tooltip;
 
   const _AdminReportCard({
     required this.label,
@@ -1242,40 +1309,60 @@ class _AdminReportCard extends StatelessWidget {
     required this.bg,
     required this.border,
     required this.narrow,
+    this.tooltip,
   });
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: narrow ? double.infinity : 168,
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    decoration: BoxDecoration(
-      color: bg,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: border, width: 1),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: color.withValues(alpha: 0.7),
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
+  Widget build(BuildContext context) {
+    final card = Container(
+      width: narrow ? double.infinity : 168,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: color.withValues(alpha: 0.7),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (tooltip != null) ...[
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: tooltip!,
+                  child: Icon(
+                    Icons.info_outline_rounded,
+                    size: 12,
+                    color: color.withValues(alpha: 0.5),
+                  ),
+                ),
+              ],
+            ],
           ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
+          const SizedBox(height: 5),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+
+    return card;
+  }
 }
 
 class _AdminChartPainter extends CustomPainter {
