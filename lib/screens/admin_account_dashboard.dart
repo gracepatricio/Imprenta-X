@@ -6,9 +6,62 @@ import 'app_navbar.dart';
 import 'admin_manage_users_screen.dart';
 import 'admin_manage_account.dart';
 
+// ── Liquid Glass Design Tokens ────────────────────────────────────────────────
+class _Glass {
+  static const Color surface = Color(0xF5FFFFFF);
+  static const Color surfaceMid = Color(0xD8FFFFFF);
+  static const Color surfaceThin = Color(0xA0FFFFFF);
+
+  static const Color borderTop = Color(0xF0FFFFFF);
+  static const Color borderMid = Color(0x60FFFFFF);
+  static const Color borderDim = Color(0x30FFFFFF);
+
+  static const Color textPrimary = Color(0xFF111827);
+  static const Color textSecondary = Color(0xC0111827);
+  static const Color textMuted = Color(0x80111827);
+
+  static const BoxShadow elevatedShadow = BoxShadow(
+    color: Color(0x1A000000),
+    blurRadius: 24,
+    spreadRadius: -2,
+    offset: Offset(0, 6),
+  );
+  static const BoxShadow rowShadow = BoxShadow(
+    color: Color(0x0D000000),
+    blurRadius: 8,
+    offset: Offset(0, 2),
+  );
+  static const BoxShadow glowShadow = BoxShadow(
+    color: Color(0x14000000),
+    blurRadius: 16,
+    offset: Offset(0, 4),
+  );
+
+  static BoxDecoration card({
+    Color? color,
+    double radius = 16,
+    bool elevated = false,
+  }) => BoxDecoration(
+    color: color ?? surfaceMid,
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: borderMid, width: 0.9),
+    boxShadow: [elevated ? elevatedShadow : rowShadow],
+  );
+
+  static BoxDecoration pill({Color? tint}) => BoxDecoration(
+    color: tint != null ? tint.withValues(alpha: 0.13) : surfaceThin,
+    borderRadius: BorderRadius.circular(99),
+    border: Border.all(
+      color: tint != null ? tint.withValues(alpha: 0.45) : borderMid,
+      width: 0.8,
+    ),
+    boxShadow: [rowShadow],
+  );
+}
+
+// =============================================================================
 class AdminAccountDashboard extends StatefulWidget {
   final void Function(String tab)? onNavigateToTab;
-
   const AdminAccountDashboard({super.key, this.onNavigateToTab});
 
   @override
@@ -24,9 +77,9 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
     'Account',
   ];
 
-  String selectedMenu = "dashboard";
-  String fullName = "";
-  String email = "";
+  String _selectedMenu = 'dashboard';
+  String _fullName = '';
+  String _email = '';
 
   @override
   void initState() {
@@ -43,16 +96,16 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
         .get();
     if (doc.exists && mounted) {
       setState(() {
-        fullName = doc.data()?['full_name'] ?? user.displayName ?? "Admin";
-        email = doc.data()?['email'] ?? user.email ?? "";
+        _fullName = doc.data()?['full_name'] ?? user.displayName ?? 'Admin';
+        _email = doc.data()?['email'] ?? user.email ?? '';
       });
     }
   }
 
-  void _logout() async {
+  Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
     if (context.mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (r) => false);
     }
   }
 
@@ -65,22 +118,33 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
           children: [
             AppNavBar(
               items: _adminNavItems,
-              activeItem: "Account",
+              activeItem: 'Account',
               onTap: (item) {
-                if (item == "Account") return;
+                if (item == 'Account') return;
                 Navigator.pop(context);
                 widget.onNavigateToTab?.call(item);
               },
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSidebar(),
-                    const SizedBox(width: 16),
-                    Expanded(child: _buildContent()),
+                    _Sidebar(
+                      fullName: _fullName,
+                      email: _email,
+                      selectedMenu: _selectedMenu,
+                      onMenuTap: (key) => setState(() => _selectedMenu = key),
+                      onLogout: _logout,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _ContentPanel(
+                        selectedMenu: _selectedMenu,
+                        onNameUpdated: (n) => setState(() => _fullName = n),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -90,107 +154,132 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
       ),
     );
   }
+}
 
-  Widget _buildSidebar() {
+// =============================================================================
+// Sidebar
+// =============================================================================
+class _Sidebar extends StatelessWidget {
+  final String fullName;
+  final String email;
+  final String selectedMenu;
+  final ValueChanged<String> onMenuTap;
+  final VoidCallback onLogout;
+
+  const _Sidebar({
+    required this.fullName,
+    required this.email,
+    required this.selectedMenu,
+    required this.onMenuTap,
+    required this.onLogout,
+  });
+
+  static const _items = [
+    ('dashboard', 'Dashboard', Icons.dashboard_rounded),
+    ('manage', 'Manage Account', Icons.manage_accounts_rounded),
+    ('roles', 'Manage Users', Icons.admin_panel_settings_rounded),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       width: 210,
-      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 18),
+      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.30),
+        color: _Glass.surfaceMid,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 24,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: _Glass.borderMid, width: 0.9),
+        boxShadow: const [_Glass.glowShadow],
       ),
       child: Column(
         children: [
           // Avatar
           Container(
-            width: 68,
-            height: 68,
+            width: 62,
+            height: 62,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  Colors.white.withValues(alpha: 0.18),
-                  Colors.white.withValues(alpha: 0.06),
-                ],
-              ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.28),
-                width: 1.5,
-              ),
+              color: _Glass.surfaceThin,
+              border: Border.all(color: _Glass.borderMid, width: 1.2),
+              boxShadow: const [_Glass.elevatedShadow],
             ),
-            child: Icon(
+            child: const Icon(
               Icons.person_rounded,
-              size: 36,
-              color: Colors.white.withValues(alpha: 0.88),
+              size: 28,
+              color: _Glass.textSecondary,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 11),
           Text(
-            fullName.isNotEmpty ? fullName : "Loading...",
+            fullName.isNotEmpty ? fullName : 'Loading…',
             style: const TextStyle(
-              color: Colors.white,
+              color: _Glass.textPrimary,
               fontWeight: FontWeight.w700,
-              fontSize: 15,
-              letterSpacing: 0.2,
+              fontSize: 13.5,
+              letterSpacing: 0.1,
             ),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           Text(
-            email.isNotEmpty ? email : "",
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
-              fontSize: 11,
-            ),
+            email.isNotEmpty ? email : '',
+            style: const TextStyle(color: _Glass.textMuted, fontSize: 10.5),
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 28),
-          // Divider
-          Divider(color: Colors.white.withValues(alpha: 0.1), thickness: 1),
-          const SizedBox(height: 16),
-          _sidebarButton("Dashboard", "dashboard", Icons.dashboard_rounded),
-          const SizedBox(height: 8),
-          _sidebarButton(
-            "Manage Account",
-            "manage",
-            Icons.manage_accounts_rounded,
+
+          const SizedBox(height: 18),
+          Divider(color: _Glass.borderMid, thickness: 0.8),
+          const SizedBox(height: 10),
+
+          // Nav items
+          ..._items.map(
+            (item) => _SidebarItem(
+              label: item.$2,
+              icon: item.$3,
+              isActive: selectedMenu == item.$1,
+              onTap: () => onMenuTap(item.$1),
+            ),
           ),
-          const SizedBox(height: 8),
-          _sidebarButton(
-            "Manage Users",
-            "roles",
-            Icons.admin_panel_settings_rounded,
-          ),
+
           const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _logout,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade700.withValues(alpha: 0.85),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+
+          // Logout
+          GestureDetector(
+            onTap: onLogout,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(
+                  color: Colors.red.withValues(alpha: 0.28),
+                  width: 0.8,
                 ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                boxShadow: const [_Glass.rowShadow],
               ),
-              icon: const Icon(Icons.logout_rounded, size: 16),
-              label: const Text(
-                "Logout",
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.logout_rounded,
+                    size: 14,
+                    color: Colors.red.shade600,
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    'Logout',
+                    style: TextStyle(
+                      color: Colors.red.shade600,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -198,89 +287,99 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
       ),
     );
   }
+}
 
-  Widget _sidebarButton(String label, String menuKey, IconData icon) {
-    final isActive = selectedMenu == menuKey;
-    return SizedBox(
-      width: double.infinity,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: () => setState(() => selectedMenu = menuKey),
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
-            decoration: BoxDecoration(
-              color: isActive
-                  ? const Color(0xFFFFE9AD).withValues(alpha: 0.15)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isActive
-                    ? AppTheme.gold.withValues(alpha: 0.5)
-                    : Colors.transparent,
+class _SidebarItem extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _SidebarItem({
+    required this.label,
+    required this.icon,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeInOut,
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xEA1A1A2E) : Colors.transparent,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(
+            color: isActive ? const Color(0x35FFFFFF) : Colors.transparent,
+            width: 0.8,
+          ),
+          boxShadow: isActive ? const [_Glass.rowShadow] : null,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isActive ? Colors.white : _Glass.textSecondary,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? Colors.white : _Glass.textSecondary,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 12.5,
+                letterSpacing: 0.1,
               ),
             ),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 16,
-                  color: isActive
-                      ? AppTheme.gold
-                      : Colors.white.withValues(alpha: 0.75),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: isActive
-                        ? AppTheme.gold
-                        : Colors.white.withValues(alpha: 0.88),
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildContent() {
+// =============================================================================
+// Content Panel
+// =============================================================================
+class _ContentPanel extends StatelessWidget {
+  final String selectedMenu;
+  final ValueChanged<String> onNameUpdated;
+
+  const _ContentPanel({
+    required this.selectedMenu,
+    required this.onNameUpdated,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(28),
+      // Fill remaining height so all tabs look consistent
+      constraints: const BoxConstraints(minHeight: double.infinity),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.30),
+        color: _Glass.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 24,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: _Glass.borderMid, width: 0.9),
+        boxShadow: const [_Glass.glowShadow],
       ),
-      child: _getContentWidget(),
+      padding: const EdgeInsets.all(22),
+      child: _buildContent(),
     );
   }
 
-  Widget _getContentWidget() {
+  Widget _buildContent() {
     switch (selectedMenu) {
-      case "dashboard":
+      case 'dashboard':
         return const _AdminDashboardContent();
-      case "manage":
-        return AdminManageAccount(
-          onNameUpdated: (newName) {
-            setState(() => fullName = newName);
-          },
-        );
-      case "roles":
+      case 'manage':
+        return AdminManageAccount(onNameUpdated: onNameUpdated);
+      case 'roles':
         return const ManageUsersScreen();
       default:
         return const SizedBox.shrink();
@@ -288,8 +387,9 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
   }
 }
 
-// ── Admin Dashboard Content ───────────────────────────────────────────────────
-
+// =============================================================================
+// Dashboard Content
+// =============================================================================
 class _AdminDashboardContent extends StatelessWidget {
   const _AdminDashboardContent();
 
@@ -300,16 +400,17 @@ class _AdminDashboardContent extends StatelessWidget {
     return 'In Stock';
   }
 
-  // Consistent glass card decoration used throughout the dashboard
-  static BoxDecoration _glassSection({
-    double opacity = 0.20,
-    double radius = 14,
-  }) {
-    return BoxDecoration(
-      color: Colors.white.withValues(alpha: opacity),
-      borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-    );
+  Color _statusColor(String s) {
+    switch (s) {
+      case 'In Stock':
+        return const Color(0xFF2E7D32);
+      case 'Low Stock':
+        return const Color(0xFFF57F17);
+      case 'Critical':
+        return const Color(0xFFBF360C);
+      default:
+        return const Color(0xFFC62828);
+    }
   }
 
   @override
@@ -318,29 +419,39 @@ class _AdminDashboardContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Page Title ────────────────────────────────────────────
+          // Page title
           Row(
             children: [
-              const Icon(
-                Icons.dashboard_rounded,
-                color: Colors.white,
-                size: 20,
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: _Glass.surfaceThin,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: _Glass.borderMid, width: 0.8),
+                  boxShadow: const [_Glass.rowShadow],
+                ),
+                child: const Icon(
+                  Icons.dashboard_rounded,
+                  size: 16,
+                  color: _Glass.textSecondary,
+                ),
               ),
               const SizedBox(width: 10),
               const Text(
                 'Dashboard',
                 style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
+                  color: _Glass.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.4,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
 
-          // ── Order Stats ──────────────────────────────────────────
+          // ── Order overview ──────────────────────────────────────────────
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance.collection('Orders').snapshots(),
             builder: (_, snap) {
@@ -351,15 +462,16 @@ class _AdminDashboardContent extends StatelessWidget {
                 if (s == 'in_production') active++;
                 if (s == 'ready_for_pickup') ready++;
               }
-
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _SectionLabel(
+                  const _SectionLabel(
                     label: 'Order Overview',
                     icon: Icons.receipt_long_rounded,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
+
+                  // ── Responsive order cards ──────────────────────────────
                   LayoutBuilder(
                     builder: (_, c) {
                       final cards = [
@@ -367,25 +479,26 @@ class _AdminDashboardContent extends StatelessWidget {
                           'Pending',
                           pending,
                           Icons.sync_rounded,
-                          const Color.fromARGB(255, 204, 53, 53),
+                          const Color(0xFFBF360C),
                         ),
                         _DashCard(
                           'In Production',
                           active,
                           Icons.inventory_2_rounded,
-                          Colors.orange,
+                          const Color(0xFFF57F17),
                         ),
                         _DashCard(
                           'Ready for Pickup',
                           ready,
                           Icons.check_circle_rounded,
-                          Colors.greenAccent.shade400,
+                          const Color(0xFF2E7D32),
                         ),
                       ];
-                      if (c.maxWidth >= 400) {
+
+                      // Wide enough for 3 columns
+                      if (c.maxWidth >= 480) {
                         return IntrinsicHeight(
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Expanded(child: cards[0]),
                               const SizedBox(width: 10),
@@ -396,8 +509,26 @@ class _AdminDashboardContent extends StatelessWidget {
                           ),
                         );
                       }
+                      // Medium: 2 + 1 row
+                      if (c.maxWidth >= 280) {
+                        return Column(
+                          children: [
+                            IntrinsicHeight(
+                              child: Row(
+                                children: [
+                                  Expanded(child: cards[0]),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: cards[1]),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            cards[2],
+                          ],
+                        );
+                      }
+                      // Narrow: single column
                       return Column(
-                        mainAxisSize: MainAxisSize.min,
                         children: [
                           cards[0],
                           const SizedBox(height: 10),
@@ -413,9 +544,9 @@ class _AdminDashboardContent extends StatelessWidget {
             },
           ),
 
-          const SizedBox(height: 28),
+          const SizedBox(height: 22),
 
-          // ── Stock Replenishment ──────────────────────────────────
+          // ── Stock replenishment ─────────────────────────────────────────
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('RawMaterials')
@@ -452,27 +583,27 @@ class _AdminDashboardContent extends StatelessWidget {
                   });
 
               return Container(
-                padding: const EdgeInsets.all(20),
-                decoration: _glassSection(),
+                padding: const EdgeInsets.all(18),
+                decoration: _Glass.card(radius: 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        _SectionLabel(
+                        const _SectionLabel(
                           label: 'Stock Replenishment',
                           icon: Icons.inventory_rounded,
                         ),
                         if (items.isNotEmpty) ...[
                           const SizedBox(width: 10),
-                          _StatusBadge(
-                            '${items.length} items need attention',
-                            const Color.fromARGB(255, 204, 53, 53),
+                          _StatusPill(
+                            '${items.length} need attention',
+                            const Color(0xFFC62828),
                           ),
                         ],
                       ],
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     if (items.isEmpty)
                       _OkRow('All materials are sufficiently stocked')
                     else
@@ -483,16 +614,7 @@ class _AdminDashboardContent extends StatelessWidget {
                         final restock = (data['restock_level'] as num?) ?? 1;
                         final unit = data['unit_description']?.toString() ?? '';
                         final st = _status(current, restock);
-                        final color = switch (st) {
-                          'Out of Stock' => const Color.fromARGB(
-                            255,
-                            204,
-                            53,
-                            53,
-                          ),
-                          'Critical' => const Color(0xFFFF6D00),
-                          _ => Colors.amber,
-                        };
+                        final color = _statusColor(st);
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.symmetric(
@@ -500,17 +622,18 @@ class _AdminDashboardContent extends StatelessWidget {
                             vertical: 11,
                           ),
                           decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.20),
+                            color: color.withValues(alpha: 0.07),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: color.withValues(alpha: 0.10),
+                              color: color.withValues(alpha: 0.22),
+                              width: 0.8,
                             ),
                           ),
                           child: Row(
                             children: [
                               Container(
-                                width: 8,
-                                height: 8,
+                                width: 7,
+                                height: 7,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: color,
@@ -521,12 +644,13 @@ class _AdminDashboardContent extends StatelessWidget {
                                 child: Text(
                                   name,
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: _Glass.textPrimary,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ),
+                              const SizedBox(width: 8),
                               Text(
                                 '$current / $restock $unit',
                                 style: TextStyle(
@@ -536,7 +660,7 @@ class _AdminDashboardContent extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              _StatusBadge(st, color),
+                              _StatusPill(st, color),
                             ],
                           ),
                         );
@@ -547,9 +671,9 @@ class _AdminDashboardContent extends StatelessWidget {
             },
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
 
-          // ── Customer Reviews ─────────────────────────────────────
+          // ── Customer reviews ────────────────────────────────────────────
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('OrderReviews')
@@ -567,27 +691,27 @@ class _AdminDashboardContent extends StatelessWidget {
                     });
 
               return Container(
-                padding: const EdgeInsets.all(20),
-                decoration: _glassSection(),
+                padding: const EdgeInsets.all(18),
+                decoration: _Glass.card(radius: 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        _SectionLabel(
+                        const _SectionLabel(
                           label: 'Customer Reviews',
                           icon: Icons.star_rounded,
                         ),
                         if (unread.isNotEmpty) ...[
                           const SizedBox(width: 10),
-                          _StatusBadge(
+                          _StatusPill(
                             '${unread.length} unread',
-                            Colors.orange,
+                            const Color(0xFFF57F17),
                           ),
                         ],
                       ],
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     if (unread.isEmpty)
                       _OkRow('No unread reviews')
                     else
@@ -600,13 +724,15 @@ class _AdminDashboardContent extends StatelessWidget {
                         final message = data['message']?.toString() ?? '';
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(12),
+                            color: _Glass.surfaceThin,
+                            borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.1),
+                              color: _Glass.borderMid,
+                              width: 0.8,
                             ),
+                            boxShadow: const [_Glass.rowShadow],
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -617,7 +743,7 @@ class _AdminDashboardContent extends StatelessWidget {
                                     child: Text(
                                       customer,
                                       style: const TextStyle(
-                                        color: Colors.white,
+                                        color: _Glass.textPrimary,
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -633,14 +759,12 @@ class _AdminDashboardContent extends StatelessWidget {
                                             : Icons.star_outline_rounded,
                                         color: i < rating
                                             ? AppTheme.gold
-                                            : Colors.white.withValues(
-                                                alpha: 0.35,
-                                              ),
-                                        size: 15,
+                                            : _Glass.textMuted,
+                                        size: 14,
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 8),
                                   GestureDetector(
                                     onTap: () => FirebaseFirestore.instance
                                         .collection('OrderReviews')
@@ -648,22 +772,20 @@ class _AdminDashboardContent extends StatelessWidget {
                                         .update({'read': true}),
                                     child: Tooltip(
                                       message: 'Mark as read',
-                                      child: Icon(
+                                      child: const Icon(
                                         Icons.check_circle_outline,
-                                        color: Colors.white.withValues(
-                                          alpha: 0.55,
-                                        ),
-                                        size: 18,
+                                        color: _Glass.textMuted,
+                                        size: 17,
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
                               if (product.isNotEmpty) ...[
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 3),
                                 Text(
                                   product,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: AppTheme.gold,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
@@ -671,11 +793,11 @@ class _AdminDashboardContent extends StatelessWidget {
                                 ),
                               ],
                               if (message.isNotEmpty) ...[
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 7),
                                 Text(
                                   message,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.85),
+                                  style: const TextStyle(
+                                    color: _Glass.textSecondary,
                                     fontSize: 12.5,
                                     height: 1.5,
                                   ),
@@ -698,8 +820,9 @@ class _AdminDashboardContent extends StatelessWidget {
   }
 }
 
-// ── Reusable Widgets ──────────────────────────────────────────────────────────
-
+// =============================================================================
+// Reusable dashboard widgets
+// =============================================================================
 class _SectionLabel extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -709,41 +832,41 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Icon(icon, color: Colors.white.withValues(alpha: 0.75), size: 15),
+      Icon(icon, color: _Glass.textSecondary, size: 14),
       const SizedBox(width: 7),
       Text(
         label,
         style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
+          color: _Glass.textPrimary,
+          fontSize: 13,
           fontWeight: FontWeight.w700,
-          letterSpacing: 0.2,
+          letterSpacing: 0.1,
         ),
       ),
     ],
   );
 }
 
-class _StatusBadge extends StatelessWidget {
+class _StatusPill extends StatelessWidget {
   final String text;
   final Color color;
-  const _StatusBadge(this.text, this.color);
+  const _StatusPill(this.text, this.color);
 
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: color.withValues(alpha: 0.4)),
+      color: color.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(99),
+      border: Border.all(color: color.withValues(alpha: 0.38), width: 0.8),
     ),
     child: Text(
       text,
       style: TextStyle(
         color: color,
-        fontSize: 11,
+        fontSize: 10.5,
         fontWeight: FontWeight.w700,
-        letterSpacing: 0.2,
+        letterSpacing: 0.1,
       ),
     ),
   );
@@ -757,24 +880,24 @@ class _OkRow extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     decoration: BoxDecoration(
-      color: Colors.greenAccent.withValues(alpha: 0.06),
+      color: const Color(0xFF2E7D32).withValues(alpha: 0.07),
       borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.20)),
+      border: Border.all(
+        color: const Color(0xFF2E7D32).withValues(alpha: 0.22),
+        width: 0.8,
+      ),
     ),
     child: Row(
       children: [
         const Icon(
           Icons.check_circle_outline,
-          color: Colors.greenAccent,
-          size: 16,
+          color: Color(0xFF2E7D32),
+          size: 15,
         ),
         const SizedBox(width: 10),
         Text(
           text,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.82),
-            fontSize: 13,
-          ),
+          style: const TextStyle(color: _Glass.textSecondary, fontSize: 13),
         ),
       ],
     ),
@@ -790,39 +913,55 @@ class _DashCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(18),
+    padding: const EdgeInsets.all(15),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.30),
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: color.withValues(alpha: 0.25)),
+      color: color.withValues(alpha: 0.07),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: color.withValues(alpha: 0.25), width: 0.8),
+      boxShadow: const [_Glass.rowShadow],
     ),
     child: Column(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(icon, color: color, size: 22),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              width: 30,
+              height: 30,
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: color.withValues(alpha: 0.25),
+                  width: 0.8,
+                ),
               ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
+              child: Icon(icon, color: color, size: 15),
+            ),
+            // Label pill — wraps text so it never overflows
+            Flexible(
+              child: Container(
+                margin: const EdgeInsets.only(left: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: _Glass.pill(tint: color),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Text(
           '$count',
           style: TextStyle(
@@ -830,6 +969,7 @@ class _DashCard extends StatelessWidget {
             fontSize: 32,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.5,
+            height: 1.0,
           ),
         ),
       ],

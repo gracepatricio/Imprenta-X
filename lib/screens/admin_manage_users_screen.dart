@@ -4,26 +4,33 @@ import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import 'app_theme.dart';
 
-// ── Liquid Glass Design Tokens ────────────────────────────────────────────────
+// ── Liquid Glass Design Tokens (mirrored from AdminInventoryScreen) ───────────
 class _Glass {
-  // Softer premium white glass
-  static const Color surface = Color.fromARGB(109, 255, 255, 255);
-  static const Color surfaceStrong = Color.fromARGB(125, 255, 255, 255);
+  static const Color surface = Color(0xEEFFFFFF);
+  static const Color surfaceMid = Color(0xCCFFFFFF);
+  static const Color surfaceThin = Color(0x99FFFFFF);
+  static const Color surfaceRow = Color(0xBBFFFFFF);
 
-  // Cleaner subtle borders
-  static const Color border = Color(0x50FFFFFF);
-  static const Color borderSubtle = Color(0x25FFFFFF);
+  static const Color borderTop = Color(0xEEFFFFFF);
+  static const Color borderMid = Color(0x55FFFFFF);
+  static const Color borderDim = Color(0x28FFFFFF);
 
-  // Typography
-  static const Color textPrimary = Color(0xFF1A1A2E);
-  static const Color textSecondary = Color(0xFF3A3A52);
-  static const Color textMuted = Color.fromARGB(255, 47, 47, 83);
+  static const Color textPrimary = Color(0xFF111827);
+  static const Color textSecondary = Color(0xBB111827);
+  static const Color textMuted = Color(0x77111827);
 
-  // Softer luxury gold
-  static const Color gold = Color(0xFFD4A94D);
-  static const Color goldGlow = Color(0x30D4A94D);
-  static const Color goldBorder = Color(0x55D4A94D);
-  static const Color goldBtnText = Color(0xFF1A1205);
+  static const BoxShadow elevatedShadow = BoxShadow(
+    color: Color(0x1A000000),
+    blurRadius: 20,
+    spreadRadius: -2,
+    offset: Offset(0, 6),
+  );
+  static const BoxShadow rowShadow = BoxShadow(
+    color: Color(0x0D000000),
+    blurRadius: 8,
+    spreadRadius: 0,
+    offset: Offset(0, 2),
+  );
 
   // Role palette
   static const Color adminFg = Color(0xFF5B21B6);
@@ -36,38 +43,34 @@ class _Glass {
   static const Color cusBg = Color(0x151D4ED8);
   static const Color cusBorder = Color(0x451D4ED8);
 
-  // Status
-  static const Color activeGreen = Color(0xFF22C55E);
-  static const Color activeGreenFg = Color(0xFF166534);
-  static const Color disabledAmber = Color(0xFFF59E0B);
-  static const Color disabledAmberFg = Color(0xFF92400E);
+  static BoxDecoration card({double radius = 14, bool elevated = false}) =>
+      BoxDecoration(
+        color: surfaceMid,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: borderMid, width: 0.8),
+        boxShadow: [elevated ? elevatedShadow : rowShadow],
+      );
 
-  static BoxDecoration panelDecoration({
-    double radius = 16,
-    Color bg = surface,
-    Color borderColor = border,
-  }) {
-    return BoxDecoration(
-      color: bg,
-      borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: borderColor, width: 1),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0A000000),
-          blurRadius: 16,
-          offset: Offset(0, 4),
-        ),
-        BoxShadow(
-          color: Color(0x20FFFFFF),
-          blurRadius: 1,
-          offset: Offset(0, 1),
-          spreadRadius: -1,
-        ),
-      ],
-    );
-  }
+  static BoxDecoration pill({Color? tint}) => BoxDecoration(
+    color: tint != null ? tint.withValues(alpha: 0.12) : surfaceThin,
+    borderRadius: BorderRadius.circular(99),
+    border: Border.all(
+      color: tint != null ? tint.withValues(alpha: 0.40) : borderMid,
+      width: 0.8,
+    ),
+    boxShadow: [rowShadow],
+  );
+
+  // Dialog card
+  static BoxDecoration dialog() => BoxDecoration(
+    color: surface,
+    borderRadius: BorderRadius.circular(20),
+    border: Border.all(color: borderMid, width: 0.8),
+    boxShadow: const [elevatedShadow],
+  );
 }
 
+// =============================================================================
 class ManageUsersScreen extends StatefulWidget {
   const ManageUsersScreen({super.key});
 
@@ -81,8 +84,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
   String _searchQuery = '';
   String _roleFilter = 'All';
-
-  final TextEditingController _searchController = TextEditingController();
+  final _searchController = TextEditingController();
   static const _roles = ['All', 'Admin', 'Employee', 'Customer'];
 
   int _sortColumnIndex = 0;
@@ -100,60 +102,55 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     var result = docs.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
       if (data['is_deleted'] == true) return false;
-
       final name = (data['full_name'] as String? ?? '').toLowerCase();
       final email = (data['email'] as String? ?? '').toLowerCase();
       final role = (data['user_role'] as String? ?? '').toLowerCase();
       final cusId = (data['customer_id'] as String? ?? '').toLowerCase();
       final empId = (data['employee_id'] as String? ?? '').toLowerCase();
-      final uid = doc.id.toLowerCase();
       final q = _searchQuery.toLowerCase();
-
       final matchesSearch =
           q.isEmpty ||
           name.contains(q) ||
           email.contains(q) ||
           cusId.contains(q) ||
-          empId.contains(q) ||
-          uid.contains(q);
+          empId.contains(q);
       final matchesRole =
           _roleFilter == 'All' || role == _roleFilter.toLowerCase();
       return matchesSearch && matchesRole;
     }).toList();
 
     result.sort((a, b) {
-      final aData = a.data() as Map<String, dynamic>;
-      final bData = b.data() as Map<String, dynamic>;
+      final aD = a.data() as Map<String, dynamic>;
+      final bD = b.data() as Map<String, dynamic>;
       String aVal = '', bVal = '';
       switch (_sortColumnIndex) {
         case 0:
-          aVal = (aData['full_name'] as String? ?? '').toLowerCase();
-          bVal = (bData['full_name'] as String? ?? '').toLowerCase();
+          aVal = (aD['full_name'] as String? ?? '').toLowerCase();
+          bVal = (bD['full_name'] as String? ?? '').toLowerCase();
           break;
         case 1:
-          aVal = (aData['user_role'] as String? ?? '').toLowerCase();
-          bVal = (bData['user_role'] as String? ?? '').toLowerCase();
+          aVal = (aD['user_role'] as String? ?? '').toLowerCase();
+          bVal = (bD['user_role'] as String? ?? '').toLowerCase();
           break;
         case 2:
-          aVal = _getDisplayIdFromData(aData).toLowerCase();
-          bVal = _getDisplayIdFromData(bData).toLowerCase();
+          aVal = _displayId(aD).toLowerCase();
+          bVal = _displayId(bD).toLowerCase();
           break;
         case 3:
-          aVal = (aData['email'] as String? ?? '').toLowerCase();
-          bVal = (bData['email'] as String? ?? '').toLowerCase();
+          aVal = (aD['email'] as String? ?? '').toLowerCase();
+          bVal = (bD['email'] as String? ?? '').toLowerCase();
           break;
         case 4:
-          aVal = (aData['is_disabled'] == true) ? 'disabled' : 'active';
-          bVal = (bData['is_disabled'] == true) ? 'disabled' : 'active';
+          aVal = (aD['is_disabled'] == true) ? 'disabled' : 'active';
+          bVal = (bD['is_disabled'] == true) ? 'disabled' : 'active';
           break;
       }
       return _sortAscending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
     });
-
     return result;
   }
 
-  // ── Create account helpers ────────────────────────────────────────────────
+  // ── Create helpers ─────────────────────────────────────────────────────────
 
   Future<void> _createEmployee() async {
     setState(() => _isCreating = true);
@@ -164,7 +161,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       _snack(result.error!, isError: true);
       return;
     }
-
     String employeeId = '';
     if (result.uid != null) {
       try {
@@ -202,6 +198,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       );
   }
 
+  // ── Dialogs ────────────────────────────────────────────────────────────────
+
   void _showCredentialsDialog({
     required String role,
     required String idLabel,
@@ -211,65 +209,74 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: const Color(0x801A1A2E),
+      barrierColor: Colors.black.withValues(alpha: 0.25),
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.transparent,
         elevation: 0,
         contentPadding: EdgeInsets.zero,
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-        content: _dialogCard(
+        content: Container(
           width: 400,
+          decoration: _Glass.dialog(),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _dialogHeader(
-                Icons.check_circle_outline,
-                const Color(0xFF166534),
-                const Color(0x1522C55E),
-                const Color(0x4522C55E),
-                '$role Account Created',
+              _DialogHeader(
+                icon: Icons.check_circle_outline,
+                iconBg: const Color(0xFF2E7D32),
+                title: '$role Account Created',
               ),
-              const Divider(height: 1, color: Color(0x18000000)),
+              Divider(height: 1, color: _Glass.borderMid),
               Padding(
-                padding: const EdgeInsets.fromLTRB(22, 18, 22, 4),
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       'Hand these credentials to the new user.\nThey will be required to change their password on first login.',
                       style: TextStyle(
-                        color: _Glass.textMuted,
+                        color: _Glass.textSecondary,
                         fontSize: 12,
                         height: 1.5,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _credentialRow(idLabel, idValue),
+                    _CredentialRow(
+                      label: idLabel,
+                      value: idValue,
+                      onCopy: () => _snack('$idLabel copied'),
+                    ),
                     const SizedBox(height: 10),
-                    _credentialRow('Temp Password', password),
-                    const SizedBox(height: 16),
+                    _CredentialRow(
+                      label: 'Temp Password',
+                      value: password,
+                      onCopy: () => _snack('Password copied'),
+                    ),
+                    const SizedBox(height: 14),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: _Glass.goldGlow,
+                        color: AppTheme.gold.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: _Glass.goldBorder),
+                        border: Border.all(
+                          color: AppTheme.gold.withValues(alpha: 0.30),
+                          width: 0.8,
+                        ),
                       ),
-                      child: const Row(
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Icon(
                             Icons.info_outline,
-                            color: Color(0xFF92620A),
-                            size: 14,
+                            color: AppTheme.gold,
+                            size: 13,
                           ),
-                          SizedBox(width: 8),
-                          Expanded(
+                          const SizedBox(width: 8),
+                          const Expanded(
                             child: Text(
                               'The password is also stored and can be retrieved from the user\'s record if needed.',
                               style: TextStyle(
-                                color: Color(0xFF78350F),
+                                color: _Glass.textSecondary,
                                 fontSize: 11,
                                 height: 1.4,
                               ),
@@ -279,17 +286,13 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                       ),
                     ),
                     const SizedBox(height: 18),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(22, 0, 22, 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    _GoldButton(
-                      label: 'Done',
-                      onPressed: () => Navigator.pop(ctx),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: _GlassButton(
+                        label: 'Done',
+                        isPrimary: true,
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
                     ),
                   ],
                 ),
@@ -300,131 +303,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       ),
     );
   }
-
-  Widget _dialogCard({required double width, required Widget child}) {
-    return Container(
-      width: width,
-      decoration: BoxDecoration(
-        color: const Color(0xF5FFFFFF),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0x70FFFFFF)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x22000000),
-            blurRadius: 32,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  Widget _dialogHeader(
-    IconData icon,
-    Color fg,
-    Color bg,
-    Color bdr,
-    String title,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: bdr),
-            ),
-            child: Icon(icon, color: fg, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              color: _Glass.textPrimary,
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _credentialRow(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      decoration: BoxDecoration(
-        color: const Color(0x25FFFFFF),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0x50FFFFFF)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label.toUpperCase(),
-                  style: const TextStyle(
-                    color: _Glass.textMuted,
-                    fontSize: 9,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: _Glass.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Tooltip(
-            message: 'Copy $label',
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: value));
-                  _snack('$label copied');
-                },
-                child: Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: _Glass.goldGlow,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _Glass.goldBorder),
-                  ),
-                  child: const Icon(
-                    Icons.copy_rounded,
-                    color: _Glass.gold,
-                    size: 14,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── User actions ──────────────────────────────────────────────────────────
 
   Future<void> _showTempPassword(
     String uid,
@@ -441,44 +319,48 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       _snack('No temporary password stored for this user.');
       return;
     }
-
     showDialog(
       context: context,
-      barrierColor: const Color(0x801A1A2E),
+      barrierColor: Colors.black.withValues(alpha: 0.25),
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.transparent,
         elevation: 0,
         contentPadding: EdgeInsets.zero,
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-        content: _dialogCard(
+        content: Container(
           width: 380,
+          decoration: _Glass.dialog(),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _dialogHeader(
-                Icons.key_rounded,
-                _Glass.gold,
-                _Glass.goldGlow,
-                _Glass.goldBorder,
-                'Temporary Password',
+              _DialogHeader(
+                icon: Icons.key_rounded,
+                iconBg: AppTheme.gold,
+                title: 'Temporary Password',
               ),
-              const Divider(height: 1, color: Color(0x18000000)),
+              Divider(height: 1, color: _Glass.borderMid),
               Padding(
                 padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
                 child: Column(
                   children: [
-                    _credentialRow('ID', displayId),
+                    _CredentialRow(
+                      label: 'ID',
+                      value: displayId,
+                      onCopy: () => _snack('ID copied'),
+                    ),
                     const SizedBox(height: 10),
-                    _credentialRow('Temp Password', tempPw),
+                    _CredentialRow(
+                      label: 'Temp Password',
+                      value: tempPw,
+                      onCopy: () => _snack('Password copied'),
+                    ),
                     const SizedBox(height: 16),
                     Align(
                       alignment: Alignment.centerRight,
-                      child: TextButton(
+                      child: _GlassButton(
+                        label: 'Close',
+                        isPrimary: false,
                         onPressed: () => Navigator.pop(ctx),
-                        child: const Text(
-                          'Close',
-                          style: TextStyle(color: _Glass.textMuted),
-                        ),
                       ),
                     ),
                   ],
@@ -494,33 +376,12 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   Future<void> _confirmDeleteUser(String uid, String name) async {
     final confirmed = await _showGlassConfirm(
       icon: Icons.warning_amber_rounded,
-      iconColor: Colors.redAccent,
+      iconBg: const Color(0xFFC62828),
       title: 'Delete User',
-      content: RichText(
-        text: TextSpan(
-          style: const TextStyle(
-            color: _Glass.textSecondary,
-            fontSize: 13,
-            height: 1.5,
-          ),
-          children: [
-            const TextSpan(text: 'Are you sure you want to delete '),
-            TextSpan(
-              text: '"$name"',
-              style: const TextStyle(
-                color: _Glass.textPrimary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const TextSpan(
-              text:
-                  '?\n\nThis will soft-delete the account. The user will no longer be able to sign in.',
-            ),
-          ],
-        ),
-      ),
+      body:
+          'Are you sure you want to delete "$name"?\n\nThis will soft-delete the account. The user will no longer be able to sign in.',
       confirmLabel: 'Delete',
-      confirmColor: Colors.redAccent,
+      confirmColor: const Color(0xFFC62828),
     );
     if (confirmed == true) {
       final err = await _authService.deleteUser(uid);
@@ -541,32 +402,13 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   ) async {
     final action = currentlyDisabled ? 'enable' : 'disable';
     final actionColor = currentlyDisabled
-        ? const Color(0xFF166534)
-        : Colors.orange.shade700;
+        ? const Color(0xFF2E7D32)
+        : const Color(0xFFF57F17);
     final confirmed = await _showGlassConfirm(
       icon: currentlyDisabled ? Icons.lock_open_rounded : Icons.block_rounded,
-      iconColor: actionColor,
+      iconBg: actionColor,
       title: '${action[0].toUpperCase()}${action.substring(1)} User',
-      content: RichText(
-        text: TextSpan(
-          style: const TextStyle(
-            color: _Glass.textSecondary,
-            fontSize: 13,
-            height: 1.5,
-          ),
-          children: [
-            TextSpan(text: 'Are you sure you want to $action '),
-            TextSpan(
-              text: '"$name"',
-              style: const TextStyle(
-                color: _Glass.textPrimary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const TextSpan(text: '?'),
-          ],
-        ),
-      ),
+      body: 'Are you sure you want to $action "$name"?',
       confirmLabel: '${action[0].toUpperCase()}${action.substring(1)}',
       confirmColor: actionColor,
     );
@@ -584,69 +426,56 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
   Future<bool?> _showGlassConfirm({
     required IconData icon,
-    required Color iconColor,
+    required Color iconBg,
     required String title,
-    required Widget content,
+    required String body,
     required String confirmLabel,
     required Color confirmColor,
   }) {
     return showDialog<bool>(
       context: context,
-      barrierColor: const Color(0x801A1A2E),
+      barrierColor: Colors.black.withValues(alpha: 0.25),
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.transparent,
         elevation: 0,
         contentPadding: EdgeInsets.zero,
         insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-        content: _dialogCard(
+        content: Container(
           width: 380,
+          decoration: _Glass.dialog(),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _dialogHeader(
-                icon,
-                iconColor,
-                iconColor.withValues(alpha: 0.10),
-                iconColor.withValues(alpha: 0.30),
-                title,
-              ),
-              const Divider(height: 1, color: Color(0x18000000)),
+              _DialogHeader(icon: icon, iconBg: iconBg, title: title),
+              Divider(height: 1, color: _Glass.borderMid),
               Padding(
                 padding: const EdgeInsets.fromLTRB(22, 16, 22, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    content,
+                    Text(
+                      body,
+                      style: const TextStyle(
+                        color: _Glass.textSecondary,
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
+                    ),
                     const SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        TextButton(
+                        _GlassButton(
+                          label: 'Cancel',
+                          isPrimary: false,
                           onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(color: _Glass.textMuted),
-                          ),
                         ),
                         const SizedBox(width: 8),
-                        ElevatedButton(
+                        _GlassButton(
+                          label: confirmLabel,
+                          isPrimary: true,
+                          tint: confirmColor,
                           onPressed: () => Navigator.pop(ctx, true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: confirmColor,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 10,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                          child: Text(
-                            confirmLabel,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
                         ),
                       ],
                     ),
@@ -662,20 +491,15 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  String _getDisplayIdFromData(Map<String, dynamic> data) {
-    if (data['customer_id'] != null &&
-        (data['customer_id'] as String).isNotEmpty)
+  String _displayId(Map<String, dynamic> data) {
+    if ((data['customer_id'] as String? ?? '').isNotEmpty)
       return data['customer_id'] as String;
-    if (data['employee_id'] != null &&
-        (data['employee_id'] as String).isNotEmpty)
+    if ((data['employee_id'] as String? ?? '').isNotEmpty)
       return data['employee_id'] as String;
     return data['uid'] as String? ?? '—';
   }
 
-  String _getDisplayId(Map<String, dynamic> data) =>
-      _getDisplayIdFromData(data);
-
-  Color _roleColor(String role) {
+  Color _roleFg(String role) {
     switch (role) {
       case 'admin':
         return _Glass.adminFg;
@@ -686,7 +510,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
   }
 
-  Color _roleBgColor(String role) {
+  Color _roleBg(String role) {
     switch (role) {
       case 'admin':
         return _Glass.adminBg;
@@ -697,7 +521,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
   }
 
-  Color _roleBorderColor(String role) {
+  Color _roleBorder(String role) {
     switch (role) {
       case 'admin':
         return _Glass.adminBorder;
@@ -719,7 +543,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
   }
 
-  String _getInitials(String name) {
+  String _initials(String name) {
     final parts = name.trim().split(' ').where((s) => s.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts[0][0].toUpperCase();
@@ -735,15 +559,15 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             Icon(
               isError ? Icons.error_outline : Icons.check_circle_outline,
               color: Colors.white,
-              size: 16,
+              size: 15,
             ),
             const SizedBox(width: 8),
             Expanded(child: Text(msg)),
           ],
         ),
         backgroundColor: isError
-            ? const Color(0xCCB41E1E)
-            : const Color(0xCC146B3A),
+            ? const Color(0xCCC62828)
+            : const Color(0xCC2E7D32),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -756,23 +580,26 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // No wrapping Container/background — this screen lives inside the parent's glass card
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildHeader(),
         const SizedBox(height: 16),
         _buildToolbar(),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance.collection('User').snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting)
-                return const Center(
-                  child: CircularProgressIndicator(color: _Glass.gold),
+                return Center(
+                  child: CircularProgressIndicator(
+                    color: _Glass.textMuted,
+                    strokeWidth: 2,
+                  ),
                 );
-              if (snapshot.hasError) return _errorState('${snapshot.error}');
+              if (snapshot.hasError)
+                return _emptyState('Error: ${snapshot.error}');
               final allDocs = snapshot.data?.docs ?? [];
               final filtered = _filtered(allDocs);
               if (allDocs.isEmpty) return _emptyState('No users found.');
@@ -786,139 +613,146 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     );
   }
 
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: _Glass.panelDecoration(radius: 12),
-          child: const Icon(
-            Icons.people_alt_rounded,
-            color: _Glass.gold,
-            size: 20,
-          ),
+  Widget _buildHeader() => Row(
+    children: [
+      Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: _Glass.surfaceThin,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: _Glass.borderMid, width: 0.8),
+          boxShadow: const [_Glass.rowShadow],
         ),
-        const SizedBox(width: 14),
-        const Column(
+        child: const Icon(
+          Icons.people_alt_rounded,
+          size: 16,
+          color: _Glass.textSecondary,
+        ),
+      ),
+      const SizedBox(width: 10),
+      const Expanded(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Manage Users',
               style: TextStyle(
                 color: _Glass.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4,
               ),
             ),
             Text(
               'User accounts & access control',
-              style: TextStyle(color: _Glass.textPrimary, fontSize: 11),
+              style: TextStyle(color: _Glass.textMuted, fontSize: 10.5),
             ),
           ],
         ),
-        const Spacer(),
-        if (_isCreating)
-          const Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: _Glass.gold,
-              ),
-            ),
-          ),
-        _CreateButton(
-          isCreating: _isCreating,
-          onCreateEmployee: _createEmployee,
-          onCreateAdmin: _createAdmin,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildToolbar() {
-    return Row(
-      children: [
-        Expanded(
+      ),
+      if (_isCreating)
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
           child: SizedBox(
-            height: 44,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (v) => setState(() => _searchQuery = v),
-              style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Search by name, email or ID…',
-                hintStyle: const TextStyle(
-                  color: _Glass.textMuted,
-                  fontSize: 13,
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: _Glass.textMuted,
+            ),
+          ),
+        ),
+      _CreateButton(
+        isCreating: _isCreating,
+        onCreateEmployee: _createEmployee,
+        onCreateAdmin: _createAdmin,
+      ),
+    ],
+  );
+
+  Widget _buildToolbar() => Row(
+    children: [
+      Expanded(
+        child: SizedBox(
+          height: 42,
+          child: TextField(
+            controller: _searchController,
+            onChanged: (v) => setState(() => _searchQuery = v),
+            style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Search by name, email or ID…',
+              hintStyle: const TextStyle(
+                color: _Glass.textMuted,
+                fontSize: 12.5,
+              ),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: _Glass.textMuted,
+                size: 17,
+              ),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: _Glass.textMuted,
+                        size: 15,
+                      ),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(vertical: 0),
+              filled: true,
+              fillColor: _Glass.surfaceThin,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: _Glass.borderMid,
+                  width: 0.8,
                 ),
-                prefixIcon: const Icon(
-                  Icons.search_rounded,
-                  color: _Glass.textMuted,
-                  size: 18,
-                ),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: _Glass.textMuted,
-                          size: 16,
-                        ),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                filled: true,
-                fillColor: _Glass.surface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(13),
-                  borderSide: const BorderSide(color: _Glass.border),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(13),
-                  borderSide: const BorderSide(color: _Glass.border),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(13),
-                  borderSide: const BorderSide(color: _Glass.gold, width: 1.5),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: AppTheme.gold.withValues(alpha: 0.7),
+                  width: 1.2,
                 ),
               ),
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        _RoleDropdown(
-          value: _roleFilter,
-          roles: _roles,
-          onChanged: (v) => setState(() => _roleFilter = v),
-        ),
-      ],
-    );
-  }
+      ),
+      const SizedBox(width: 10),
+      _RoleDropdown(
+        value: _roleFilter,
+        roles: _roles,
+        onChanged: (v) => setState(() => _roleFilter = v),
+      ),
+    ],
+  );
 
   Widget _buildTable(List<QueryDocumentSnapshot> docs, int totalCount) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.only(bottom: 8),
           child: Row(
             children: [
               Text(
                 '${docs.length} user${docs.length == 1 ? '' : 's'}',
-                style: const TextStyle(color: _Glass.textMuted, fontSize: 12),
+                style: const TextStyle(color: _Glass.textMuted, fontSize: 11.5),
               ),
               if (_searchQuery.isNotEmpty || _roleFilter != 'All') ...[
                 Text(
                   ' of $totalCount total',
-                  style: const TextStyle(color: _Glass.textMuted, fontSize: 12),
+                  style: const TextStyle(
+                    color: _Glass.textMuted,
+                    fontSize: 11.5,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
@@ -929,13 +763,13 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                       _roleFilter = 'All';
                     });
                   },
-                  child: const Text(
+                  child: Text(
                     'Clear filters',
                     style: TextStyle(
-                      color: _Glass.gold,
-                      fontSize: 12,
+                      color: AppTheme.gold,
+                      fontSize: 11.5,
                       decoration: TextDecoration.underline,
-                      decorationColor: _Glass.gold,
+                      decorationColor: AppTheme.gold,
                     ),
                   ),
                 ),
@@ -944,36 +778,32 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           ),
         ),
         Expanded(
-          child: Container(
-            decoration: _Glass.panelDecoration(
-              radius: 18,
-              bg: _Glass.surfaceStrong,
-              borderColor: _Glass.border,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              decoration: BoxDecoration(
+                color: _Glass.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _Glass.borderMid, width: 0.8),
+                boxShadow: const [_Glass.rowShadow],
+              ),
               child: Column(
                 children: [
                   _buildTableHeader(),
-                  Divider(
-                    height: 1,
-                    color: Colors.white.withValues(alpha: 0.40),
-                  ),
+                  Container(height: 0.8, color: _Glass.borderMid),
                   Expanded(
                     child: ListView.separated(
                       physics: const BouncingScrollPhysics(),
                       itemCount: docs.length,
-                      separatorBuilder: (_, __) => Divider(
-                        height: 1,
-                        color: Colors.white.withValues(alpha: 0.25),
-                      ),
-                      itemBuilder: (context, index) {
-                        final doc = docs[index];
+                      separatorBuilder: (_, __) =>
+                          Container(height: 0.8, color: _Glass.borderMid),
+                      itemBuilder: (_, i) {
+                        final doc = docs[i];
                         final data = Map<String, dynamic>.from(
                           doc.data() as Map<String, dynamic>,
                         );
                         data['uid'] = doc.id;
-                        return _buildTableRow(doc.id, data, index.isEven);
+                        return _buildTableRow(doc.id, data, i.isEven);
                       },
                     ),
                   ),
@@ -987,16 +817,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }
 
   Widget _buildTableHeader() {
-    Widget sortHeader(String label, int colIndex, {int flex = 1}) {
-      final isActive = _sortColumnIndex == colIndex;
+    Widget col(String label, int idx, {int flex = 1}) {
+      final active = _sortColumnIndex == idx;
       return Expanded(
         flex: flex,
         child: GestureDetector(
           onTap: () => setState(() {
-            if (_sortColumnIndex == colIndex)
+            if (_sortColumnIndex == idx)
               _sortAscending = !_sortAscending;
             else {
-              _sortColumnIndex = colIndex;
+              _sortColumnIndex = idx;
               _sortAscending = true;
             }
           }),
@@ -1006,21 +836,21 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
               Text(
                 label.toUpperCase(),
                 style: TextStyle(
-                  color: isActive ? _Glass.gold : _Glass.textMuted,
+                  color: active ? const Color(0xFF111827) : _Glass.textMuted,
                   fontSize: 10.5,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.9,
+                  letterSpacing: 0.8,
                 ),
               ),
               const SizedBox(width: 3),
               Icon(
-                isActive
+                active
                     ? (_sortAscending
                           ? Icons.arrow_upward_rounded
                           : Icons.arrow_downward_rounded)
                     : Icons.unfold_more_rounded,
-                size: 12,
-                color: isActive ? _Glass.gold : _Glass.textMuted,
+                size: 11,
+                color: active ? _Glass.textSecondary : _Glass.textMuted,
               ),
             ],
           ),
@@ -1029,17 +859,17 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
 
     return Container(
-      color: const Color(0x14FFFFFF),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+      color: const Color(0xF2F4F6F8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       child: Row(
         children: [
           const SizedBox(width: 40),
           const SizedBox(width: 12),
-          sortHeader('Name', 0, flex: 3),
-          sortHeader('Role', 1, flex: 2),
-          sortHeader('ID', 2, flex: 2),
-          sortHeader('Email', 3, flex: 3),
-          sortHeader('Status', 4, flex: 2),
+          col('Name', 0, flex: 3),
+          col('Role', 1, flex: 2),
+          col('ID', 2, flex: 2),
+          col('Email', 3, flex: 3),
+          col('Status', 4, flex: 2),
           const SizedBox(width: 48),
         ],
       ),
@@ -1047,22 +877,23 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }
 
   Widget _buildTableRow(String uid, Map<String, dynamic> data, bool isEven) {
-    final displayId = _getDisplayId(data);
+    final displayId = _displayId(data);
     final name = data['full_name'] as String? ?? '—';
-    final email = (data['email'] as String?)?.isNotEmpty == true
-        ? data['email'] as String
-        : '(not set)';
+    final email = (data['email'] as String? ?? '').isEmpty
+        ? '(not set)'
+        : data['email'] as String;
     final role = data['user_role'] as String? ?? '—';
     final isDisabled = data['is_disabled'] == true;
     final mustChange = data['must_change_password'] == true;
-    final roleColor = _roleColor(role);
-    final roleBg = _roleBgColor(role);
-    final roleBorder = _roleBorderColor(role);
-    final initials = _getInitials(name);
+    final roleColor = _roleFg(role);
+    final roleBg = _roleBg(role);
+    final roleBorder = _roleBorder(role);
 
     return Container(
-      color: isEven ? const Color(0x0AFFFFFF) : Colors.transparent,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+      color: isEven
+          ? _Glass.surfaceThin.withValues(alpha: 0.4)
+          : Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       child: Row(
         children: [
           // Avatar
@@ -1072,14 +903,14 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             decoration: BoxDecoration(
               color: roleBg,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: roleBorder, width: 1.5),
+              border: Border.all(color: roleBorder, width: 0.8),
             ),
             alignment: Alignment.center,
             child: Text(
-              initials,
+              _initials(name),
               style: TextStyle(
                 color: roleColor,
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1096,8 +927,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     name,
                     style: const TextStyle(
                       color: _Glass.textPrimary,
-                      fontWeight: FontWeight.w600,
                       fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1110,25 +941,28 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: _Glass.goldGlow,
+                      color: AppTheme.gold.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(5),
-                      border: Border.all(color: _Glass.goldBorder),
+                      border: Border.all(
+                        color: AppTheme.gold.withValues(alpha: 0.35),
+                        width: 0.8,
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           Icons.schedule_rounded,
-                          color: const Color.fromARGB(255, 194, 124, 2),
+                          color: AppTheme.gold,
                           size: 9,
                         ),
                         const SizedBox(width: 3),
                         Text(
                           'Pending',
                           style: TextStyle(
-                            color: const Color.fromARGB(255, 193, 110, 2),
+                            color: AppTheme.gold,
                             fontSize: 9,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
@@ -1154,7 +988,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(_roleIcon(role), color: roleColor, size: 11),
+                    Icon(_roleIcon(role), color: roleColor, size: 10),
                     const SizedBox(width: 4),
                     Text(
                       role.isNotEmpty
@@ -1162,7 +996,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                           : '—',
                       style: TextStyle(
                         color: roleColor,
-                        fontSize: 11,
+                        fontSize: 10.5,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1172,16 +1006,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             ),
           ),
 
-          // ID — slate, not gold
+          // ID
           Expanded(
             flex: 2,
             child: Text(
               displayId,
               style: const TextStyle(
-                color: _Glass.textSecondary,
+                color: _Glass.textMuted,
                 fontSize: 11,
                 fontFamily: 'monospace',
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -1215,8 +1049,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   height: 7,
                   decoration: BoxDecoration(
                     color: isDisabled
-                        ? _Glass.disabledAmber
-                        : _Glass.activeGreen,
+                        ? const Color(0xFFF57F17)
+                        : const Color(0xFF2E7D32),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -1225,9 +1059,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   isDisabled ? 'Disabled' : 'Active',
                   style: TextStyle(
                     color: isDisabled
-                        ? _Glass.disabledAmberFg
-                        : _Glass.activeGreenFg,
-                    fontSize: 12,
+                        ? const Color(0xFFF57F17)
+                        : const Color(0xFF2E7D32),
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1240,7 +1074,15 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             width: 48,
             child: Align(
               alignment: Alignment.centerRight,
-              child: _buildActionMenu(uid, data, displayId, name, isDisabled),
+              child: _buildActionMenu(
+                uid,
+                data,
+                displayId,
+                name,
+                isDisabled,
+                mustChange,
+                role,
+              ),
             ),
           ),
         ],
@@ -1254,18 +1096,22 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     String displayId,
     String name,
     bool isDisabled,
+    bool mustChange,
+    String role,
   ) {
-    final mustChange = data['must_change_password'] == true;
-    final role = data['user_role'] as String? ?? '';
-
     return PopupMenuButton<String>(
-      icon: Icon(Icons.more_vert_rounded, color: _Glass.textMuted, size: 18),
-      color: const Color(0xEEFFFFFF),
+      icon: const Icon(
+        Icons.more_vert_rounded,
+        color: _Glass.textMuted,
+        size: 18,
+      ),
+      color: _Glass.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Color(0x50FFFFFF)),
+        side: const BorderSide(color: _Glass.borderMid, width: 0.8),
       ),
       elevation: 16,
+      shadowColor: Colors.black.withValues(alpha: 0.15),
       offset: const Offset(0, 4),
       itemBuilder: (_) => [
         if (mustChange && (role == 'employee' || role == 'admin'))
@@ -1274,7 +1120,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             child: _menuItem(
               Icons.key_rounded,
               'View Temp Password',
-              _Glass.gold,
+              AppTheme.gold,
             ),
           ),
         PopupMenuItem(
@@ -1282,7 +1128,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           child: _menuItem(
             isDisabled ? Icons.lock_open_rounded : Icons.block_rounded,
             isDisabled ? 'Enable User' : 'Disable User',
-            isDisabled ? _Glass.activeGreenFg : _Glass.disabledAmberFg,
+            isDisabled ? const Color(0xFF2E7D32) : const Color(0xFFF57F17),
           ),
         ),
         PopupMenuItem(
@@ -1295,7 +1141,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           child: _menuItem(
             Icons.delete_outline_rounded,
             'Delete User',
-            Colors.redAccent,
+            const Color(0xFFC62828),
           ),
         ),
       ],
@@ -1319,124 +1165,255 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     );
   }
 
-  Widget _menuItem(IconData icon, String label, Color color) {
-    return Row(
+  Widget _menuItem(IconData icon, String label, Color color) => Row(
+    children: [
+      Icon(icon, color: color, size: 15),
+      const SizedBox(width: 10),
+      Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    ],
+  );
+
+  Widget _emptyState(String message) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: color, size: 16),
-        const SizedBox(width: 10),
-        Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
+        Container(
+          width: 64,
+          height: 64,
+          decoration: _Glass.card(radius: 20, elevated: true),
+          child: const Icon(
+            Icons.people_outline_rounded,
+            size: 28,
+            color: _Glass.textMuted,
           ),
         ),
+        const SizedBox(height: 16),
+        Text(
+          message,
+          style: const TextStyle(color: _Glass.textSecondary, fontSize: 13),
+        ),
+        if (_searchQuery.isNotEmpty || _roleFilter != 'All') ...[
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () {
+              _searchController.clear();
+              setState(() {
+                _searchQuery = '';
+                _roleFilter = 'All';
+              });
+            },
+            child: const Text(
+              'Clear filters',
+              style: TextStyle(
+                color: _Glass.textMuted,
+                fontSize: 12,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ],
       ],
-    );
-  }
-
-  Widget _emptyState(String message) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: _Glass.panelDecoration(radius: 100),
-            child: const Icon(
-              Icons.people_outline_rounded,
-              color: _Glass.textMuted,
-              size: 40,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            message,
-            style: const TextStyle(color: _Glass.textSecondary, fontSize: 14),
-          ),
-          if (_searchQuery.isNotEmpty || _roleFilter != 'All') ...[
-            const SizedBox(height: 10),
-            TextButton.icon(
-              onPressed: () {
-                _searchController.clear();
-                setState(() {
-                  _searchQuery = '';
-                  _roleFilter = 'All';
-                });
-              },
-              icon: const Icon(
-                Icons.refresh_rounded,
-                size: 15,
-                color: _Glass.gold,
-              ),
-              label: const Text(
-                'Clear filters',
-                style: TextStyle(color: _Glass.gold, fontSize: 12),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _errorState(String error) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.error_outline_rounded,
-            color: Colors.redAccent,
-            size: 40,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Error: $error',
-            style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
+    ),
+  );
 }
 
-// ── Gold Button — primary CTA only ────────────────────────────────────────────
+// =============================================================================
+// Shared glass widgets
+// =============================================================================
 
-class _GoldButton extends StatelessWidget {
+class _GlassButton extends StatelessWidget {
   final String label;
-  final VoidCallback onPressed;
-  const _GoldButton({required this.label, required this.onPressed});
+  final IconData? icon;
+  final bool isPrimary;
+  final bool isLoading;
+  final Color? tint;
+  final VoidCallback? onPressed;
+
+  const _GlassButton({
+    required this.label,
+    this.icon,
+    required this.isPrimary,
+    this.isLoading = false,
+    this.tint,
+    this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style:
-          ElevatedButton.styleFrom(
-            backgroundColor: _Glass.gold,
-            foregroundColor: _Glass.goldBtnText,
-            elevation: 0,
-            shadowColor: Colors.transparent,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 11),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
+    final bg = tint != null
+        ? tint!.withValues(alpha: 0.90)
+        : isPrimary
+        ? const Color(0xDD1A1A2E)
+        : _Glass.surfaceThin;
+    final fg = (isPrimary || tint != null)
+        ? Colors.white
+        : _Glass.textSecondary;
+    final border = isPrimary || tint != null
+        ? const Color(0x44FFFFFF)
+        : _Glass.borderMid;
+
+    return GestureDetector(
+      onTap: onPressed,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: border, width: 0.8),
+          boxShadow: const [_Glass.rowShadow],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isLoading)
+              SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2, color: fg),
+              )
+            else if (icon != null)
+              Icon(icon, size: 13, color: fg),
+            if (icon != null || isLoading) const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: fg,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ).copyWith(
-            overlayColor: WidgetStateProperty.all(const Color(0x22000000)),
-          ),
-      child: Text(
-        label,
-        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ── Role Dropdown ─────────────────────────────────────────────────────────────
+// ── Dialog header ──────────────────────────────────────────────────────────────
+class _DialogHeader extends StatelessWidget {
+  final IconData icon;
+  final Color iconBg;
+  final String title;
+  const _DialogHeader({
+    required this.icon,
+    required this.iconBg,
+    required this.title,
+  });
 
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+    child: Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: iconBg.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: iconBg.withValues(alpha: 0.35),
+              width: 0.8,
+            ),
+          ),
+          child: Icon(icon, color: iconBg, size: 17),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          title,
+          style: const TextStyle(
+            color: _Glass.textPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// ── Credential row ─────────────────────────────────────────────────────────────
+class _CredentialRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onCopy;
+  const _CredentialRow({
+    required this.label,
+    required this.value,
+    required this.onCopy,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+    decoration: BoxDecoration(
+      color: _Glass.surfaceThin,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: _Glass.borderMid, width: 0.8),
+      boxShadow: const [_Glass.rowShadow],
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: const TextStyle(
+                  color: _Glass.textMuted,
+                  fontSize: 9,
+                  letterSpacing: 1.2,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: _Glass.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
+          ),
+        ),
+        GestureDetector(
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: value));
+            onCopy();
+          },
+          child: Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: AppTheme.gold.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppTheme.gold.withValues(alpha: 0.35),
+                width: 0.8,
+              ),
+            ),
+            child: Icon(Icons.copy_rounded, color: AppTheme.gold, size: 13),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// ── Role dropdown ──────────────────────────────────────────────────────────────
 class _RoleDropdown extends StatelessWidget {
   final String value;
   final List<String> roles;
@@ -1447,7 +1424,7 @@ class _RoleDropdown extends StatelessWidget {
     required this.onChanged,
   });
 
-  Color _dotColor(String role) {
+  Color _dot(String role) {
     switch (role) {
       case 'Admin':
         return _Glass.adminFg;
@@ -1461,78 +1438,78 @@ class _RoleDropdown extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: _Glass.surface,
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: _Glass.border),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          dropdownColor: const Color(0xEEFFFFFF),
-          borderRadius: BorderRadius.circular(14),
-          style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: _Glass.textMuted,
-            size: 18,
-          ),
-          isDense: true,
-          items: roles.map((role) {
-            return DropdownMenuItem<String>(
-              value: role,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (role != 'All') ...[
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: _dotColor(role),
-                        shape: BoxShape.circle,
+  Widget build(BuildContext context) => Container(
+    height: 42,
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    decoration: BoxDecoration(
+      color: _Glass.surfaceThin,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: _Glass.borderMid, width: 0.8),
+      boxShadow: const [_Glass.rowShadow],
+    ),
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: value,
+        dropdownColor: _Glass.surface,
+        borderRadius: BorderRadius.circular(12),
+        style: const TextStyle(color: _Glass.textPrimary, fontSize: 12.5),
+        icon: const Icon(
+          Icons.keyboard_arrow_down_rounded,
+          color: _Glass.textMuted,
+          size: 17,
+        ),
+        isDense: true,
+        items: roles
+            .map(
+              (role) => DropdownMenuItem<String>(
+                value: role,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (role != 'All') ...[
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: _dot(role),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 7),
+                    ] else ...[
+                      const Icon(
+                        Icons.people_outline_rounded,
+                        color: _Glass.textMuted,
+                        size: 13,
+                      ),
+                      const SizedBox(width: 7),
+                    ],
+                    Text(
+                      role == 'All' ? 'All Roles' : role,
+                      style: TextStyle(
+                        color: role == 'All'
+                            ? _Glass.textSecondary
+                            : _dot(role),
+                        fontWeight: role == value
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        fontSize: 12.5,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                  ] else ...[
-                    Icon(
-                      Icons.people_outline_rounded,
-                      color: _Glass.textMuted,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 8),
                   ],
-                  Text(
-                    role == 'All' ? 'All Roles' : role,
-                    style: TextStyle(
-                      color: role == 'All'
-                          ? _Glass.textSecondary
-                          : _dotColor(role),
-                      fontWeight: role == value
-                          ? FontWeight.w700
-                          : FontWeight.normal,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            );
-          }).toList(),
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
-        ),
+            )
+            .toList(),
+        onChanged: (v) {
+          if (v != null) onChanged(v);
+        },
       ),
-    );
-  }
+    ),
+  );
 }
 
-// ── Create button with expandable sub-options ─────────────────────────────────
-
+// ── Create button ─────────────────────────────────────────────────────────────
 class _CreateButton extends StatefulWidget {
   final bool isCreating;
   final VoidCallback onCreateEmployee;
@@ -1597,42 +1574,36 @@ class _CreateButtonState extends State<_CreateButton>
               child: Material(
                 color: Colors.transparent,
                 child: Container(
-                  width: 218,
+                  width: 210,
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: const Color(0xEEFFFFFF),
+                    color: _Glass.surface,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0x60FFFFFF)),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x20000000),
-                        blurRadius: 20,
-                        offset: Offset(0, 8),
-                      ),
-                    ],
+                    border: Border.all(color: _Glass.borderMid, width: 0.8),
+                    boxShadow: const [_Glass.elevatedShadow],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _menuOption(
+                      _dropdownOption(
                         icon: Icons.admin_panel_settings_rounded,
                         label: 'Create Admin',
                         subtitle: 'Full system access',
                         color: _Glass.adminFg,
-                        bgColor: _Glass.adminBg,
+                        bg: _Glass.adminBg,
                         onTap: () {
                           _removeOverlay();
                           widget.onCreateAdmin();
                         },
                       ),
                       const SizedBox(height: 4),
-                      _menuOption(
+                      _dropdownOption(
                         icon: Icons.badge_rounded,
                         label: 'Create Employee',
                         subtitle: 'Staff-level access',
                         color: _Glass.empFg,
-                        bgColor: _Glass.empBg,
+                        bg: _Glass.empBg,
                         onTap: () {
                           _removeOverlay();
                           widget.onCreateEmployee();
@@ -1647,7 +1618,6 @@ class _CreateButtonState extends State<_CreateButton>
         ],
       ),
     );
-
     Overlay.of(context).insert(_overlay!);
     _ctrl.forward(from: 0);
   }
@@ -1658,83 +1628,89 @@ class _CreateButtonState extends State<_CreateButton>
     if (mounted) setState(() {});
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isOpen = _overlay != null;
-    return ElevatedButton.icon(
-      key: _key,
-      onPressed: widget.isCreating ? null : _toggle,
-      style:
-          ElevatedButton.styleFrom(
-            backgroundColor: const Color.fromARGB(255, 235, 188, 86),
-            foregroundColor: _Glass.goldBtnText,
-            elevation: 0,
-            shadowColor: Colors.transparent,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ).copyWith(
-            overlayColor: WidgetStateProperty.all(const Color(0x22000000)),
-          ),
-      icon: AnimatedRotation(
-        turns: isOpen ? 0.125 : 0,
-        duration: const Duration(milliseconds: 180),
-        child: const Icon(Icons.add_rounded, size: 18),
-      ),
-      label: const Text(
-        'Create User',
-        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-      ),
-    );
-  }
-
-  Widget _menuOption({
+  Widget _dropdownOption({
     required IconData icon,
     required String label,
     required String subtitle,
     required Color color,
-    required Color bgColor,
+    required Color bg,
     required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        child: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(9),
-              ),
-              alignment: Alignment.center,
-              child: Icon(icon, color: color, size: 15),
+  }) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(10),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
+            alignment: Alignment.center,
+            child: Icon(icon, color: color, size: 14),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
                   ),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: _Glass.textMuted,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
+                ),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: _Glass.textMuted, fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final isOpen = _overlay != null;
+    return GestureDetector(
+      key: _key,
+      onTap: widget.isCreating ? null : _toggle,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: const Color(0xDD1A1A2E),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: const Color(0x44FFFFFF), width: 0.8),
+          boxShadow: const [_Glass.rowShadow],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedRotation(
+              turns: isOpen ? 0.125 : 0,
+              duration: const Duration(milliseconds: 180),
+              child: const Icon(
+                Icons.add_rounded,
+                size: 14,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Text(
+              'Create User',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],

@@ -660,6 +660,8 @@ class _TopPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final totalCount = counts.values.fold(0, (a, b) => a + b);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
@@ -755,37 +757,24 @@ class _TopPanel extends StatelessWidget {
 
           const SizedBox(height: 14),
 
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: statuses
-                  .map(
-                    (s) => _SummaryCard(
-                      status: s,
-                      count: counts[s] ?? 0,
-                      color: statusColor(s),
-                      isActive: statusFilter == s,
-                      onTap: () => onFilterTap(s),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
+          // ── Summary cards (with "All" prepended) ─────────────────────────
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _StatusChip(
-                  label: 'All',
+                // "All" card
+                _SummaryCard(
+                  status: 'All',
+                  count: totalCount,
+                  color: _Glass.textSecondary,
                   isActive: statusFilter == null,
                   onTap: onClearFilter,
                 ),
+                // Per-status cards
                 ...statuses.map(
-                  (s) => _StatusChip(
-                    label: s,
+                  (s) => _SummaryCard(
+                    status: s,
+                    count: counts[s] ?? 0,
                     color: statusColor(s),
                     isActive: statusFilter == s,
                     onTap: () => onFilterTap(s),
@@ -822,8 +811,6 @@ class _TablePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ClipRRect ensures the horizontal scroll inside never bleeds past
-    // the rounded corners of the outer container at any screen width.
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: Container(
@@ -846,8 +833,6 @@ class _TablePanel extends StatelessWidget {
                   bottom: BorderSide(color: _Glass.borderMid, width: 0.8),
                 ),
               ),
-              // Use LayoutBuilder so the header width matches available space,
-              // expanding beyond _kTableMinWidth only when there is room.
               child: isNarrow
                   ? LayoutBuilder(
                       builder: (context, c) => SingleChildScrollView(
@@ -869,7 +854,9 @@ class _TablePanel extends StatelessWidget {
               child: filtered.isEmpty
                   ? Center(
                       child: Text(
-                        'No materials with status "$statusFilter"',
+                        statusFilter != null
+                            ? 'No materials with status "$statusFilter"'
+                            : 'No materials found',
                         style: const TextStyle(
                           color: _Glass.textMuted,
                           fontSize: 13,
@@ -877,8 +864,6 @@ class _TablePanel extends StatelessWidget {
                       ),
                     )
                   : isNarrow
-                  // On narrow screens: scroll horizontally with a minimum
-                  // width, but expand to fill if the viewport is wider.
                   ? LayoutBuilder(
                       builder: (context, c) => SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -1330,50 +1315,6 @@ class _SummaryCard extends StatelessWidget {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Status chip ───────────────────────────────────────────────────────────────
-class _StatusChip extends StatelessWidget {
-  final String label;
-  final bool isActive;
-  final Color? color;
-  final VoidCallback onTap;
-
-  const _StatusChip({
-    required this.label,
-    required this.isActive,
-    this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? const Color(0xEE1A1A2E) : _Glass.surfaceThin,
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(
-            color: isActive ? const Color(0x33FFFFFF) : _Glass.borderMid,
-            width: 0.8,
-          ),
-          boxShadow: [_Glass.rowShadow],
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? Colors.white : _Glass.textSecondary,
-            fontSize: 11,
-            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-          ),
         ),
       ),
     );
