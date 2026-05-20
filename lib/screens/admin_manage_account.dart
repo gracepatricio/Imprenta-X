@@ -1,83 +1,52 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/auth_service.dart';
 import 'app_theme.dart';
 
-// ── Liquid Glass Design Tokens ─────────────────────────────────────────────
-class _Glass {
-  static const Color surface = Color(0xF5FFFFFF);
-  static const Color surfaceMid = Color(0xD8FFFFFF);
-  static const Color surfaceThin = Color(0xA0FFFFFF);
-
-  static const Color borderMid = Color(0x60FFFFFF);
-  static const Color borderDim = Color(0x30FFFFFF);
-
-  static const Color textPrimary = Color(0xFF111827);
-  static const Color textSecondary = Color(0xC0111827);
-  static const Color textMuted = Color(0x80111827);
-
-  static const BoxShadow rowShadow = BoxShadow(
-    color: Color(0x0D000000),
-    blurRadius: 8,
-    offset: Offset(0, 2),
-  );
-  static const BoxShadow glowShadow = BoxShadow(
-    color: Color(0x14000000),
-    blurRadius: 16,
-    offset: Offset(0, 4),
-  );
-
-  static BoxDecoration section() => BoxDecoration(
-    color: surfaceThin,
-    borderRadius: BorderRadius.circular(14),
-    border: Border.all(color: borderMid, width: 0.8),
-    boxShadow: const [rowShadow],
-  );
-}
-
-// =============================================================================
 class AdminManageAccount extends StatefulWidget {
   final void Function(String newName)? onNameUpdated;
-  const AdminManageAccount({super.key, this.onNameUpdated});
+  final void Function(String newEmail)? onEmailUpdated;
+  const AdminManageAccount({super.key, this.onNameUpdated, this.onEmailUpdated});
 
   @override
   State<AdminManageAccount> createState() => _AdminManageAccountState();
 }
 
 class _AdminManageAccountState extends State<AdminManageAccount> {
-  // Personal info
-  final _nameCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController(); // read-only display
+  // ── Personal Info ──────────────────────────────────────────────
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
   bool _savingInfo = false;
-  String? _infoMessage;
-  String? _infoError;
 
-  // Email change flow
-  // States: 'idle' | 'confirming' | 'sent'
-  String _emailChangeState = 'idle';
-  final _newEmailCtrl = TextEditingController();
-  final _emailPwCtrl = TextEditingController();
-  bool _showEmailPw = false;
-  bool _sendingEmail = false;
+  // ── Email change ───────────────────────────────────────────────
+  bool _editingEmail        = false;
+  bool _savingEmail         = false;
+  String _originalEmail     = '';
+  final _emailPasswordCtrl  = TextEditingController();
+  bool _showEmailPassword   = false;
+  String? _emailMessage;
   String? _emailError;
-  Timer? _emailPollTimer;
-  bool _usedMigrationPath = false;
-  final AuthService _authService = AuthService();
 
-  // Password change
-  final _currentPasswordCtrl = TextEditingController();
-  final _newPasswordCtrl = TextEditingController();
-  final _confirmPasswordCtrl = TextEditingController();
+  bool   _verificationPending  = false;
+  String _pendingNewEmail      = '';
+  String _pendingPassword      = '';
+  bool   _checkingVerification = false;
+
+  // ── Password ───────────────────────────────────────────────────
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _showCurrent = false;
   bool _showNew = false;
   bool _showConfirm = false;
   bool _savingPassword = false;
+
+  // ── State ──────────────────────────────────────────────────────
+  bool _loading = true;
+  String? _infoMessage;
+  String? _infoError;
   String? _pwMessage;
   String? _pwError;
-
-  bool _loading = true;
 
   @override
   void initState() {
@@ -87,14 +56,12 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _emailCtrl.dispose();
-    _newEmailCtrl.dispose();
-    _emailPwCtrl.dispose();
-    _currentPasswordCtrl.dispose();
-    _newPasswordCtrl.dispose();
-    _confirmPasswordCtrl.dispose();
-    _emailPollTimer?.cancel();
+    _nameController.dispose();
+    _emailController.dispose();
+    _emailPasswordCtrl.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -107,18 +74,18 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
         .get();
     if (mounted) {
       setState(() {
-        _nameCtrl.text = doc.data()?['full_name'] ?? user.displayName ?? '';
-        _emailCtrl.text = doc.data()?['email'] ?? user.email ?? '';
+        _nameController.text  = doc.data()?['full_name'] ?? user.displayName ?? '';
+        _emailController.text = doc.data()?['email'] ?? user.email ?? '';
+        _originalEmail        = _emailController.text;
         _loading = false;
       });
     }
   }
 
-  // ── Save name ──────────────────────────────────────────────────────────────
   Future<void> _savePersonalInfo() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final name = _nameCtrl.text.trim();
+    final name = _nameController.text.trim();
     if (name.isEmpty) {
       setState(() {
         _infoError = 'Full name cannot be empty.';
@@ -132,11 +99,14 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
       _infoMessage = null;
     });
     try {
-      await FirebaseFirestore.instance.collection('User').doc(user.uid).update({
-        'full_name': name,
+      await Future.microtask(() async {
+        await FirebaseFirestore.instance
+            .collection('User')
+            .doc(user.uid)
+            .update({'full_name': name});
+        await user.updateDisplayName(name);
+        await user.reload();
       });
-      await user.updateDisplayName(name);
-      await user.reload();
       if (mounted) {
         widget.onNameUpdated?.call(name);
         setState(() {
@@ -145,129 +115,247 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
-          _infoError = 'Failed to update: $e';
+          _infoError = 'Failed to update: ${e.toString()}';
           _infoMessage = null;
         });
+      }
     } finally {
       if (mounted) setState(() => _savingInfo = false);
     }
   }
 
-  // ── Email change flow ──────────────────────────────────────────────────────
-  /// Step 1: user clicks "Edit" → show the confirmation sub-form.
-  void _beginEmailEdit() {
-    setState(() {
-      _emailChangeState = 'confirming';
-      _newEmailCtrl.clear();
-      _emailPwCtrl.clear();
-      _emailError = null;
-    });
-  }
+  Future<void> _changeEmail() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-  void _cancelEmailEdit() {
-    _emailPollTimer?.cancel();
-    setState(() {
-      _emailChangeState = 'idle';
-      _emailError = null;
-    });
-  }
+    final newEmail = _emailController.text.trim();
+    final password = _emailPasswordCtrl.text;
 
-  /// Step 2: validate inputs then call addEmail (same service used in AddEmailScreen).
-  Future<void> _sendEmailVerification() async {
-    final newEmail = _newEmailCtrl.text.trim();
-    if (newEmail.isEmpty || !newEmail.contains('@')) {
-      setState(() => _emailError = 'Please enter a valid email address.');
+    if (newEmail.isEmpty) {
+      setState(() { _emailError = 'Email cannot be empty.'; _emailMessage = null; });
       return;
     }
-    if (_emailPwCtrl.text.isEmpty) {
-      setState(
-        () => _emailError = 'Please enter your current password to confirm.',
-      );
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(newEmail)) {
+      setState(() { _emailError = 'Enter a valid email address.'; _emailMessage = null; });
+      return;
+    }
+    if (newEmail == _originalEmail) {
+      setState(() { _emailError = 'This is already your current email.'; _emailMessage = null; });
+      return;
+    }
+    if (password.isEmpty) {
+      setState(() { _emailError = 'Enter your current password to confirm.'; _emailMessage = null; });
       return;
     }
 
-    setState(() {
-      _sendingEmail = true;
-      _emailError = null;
-    });
+    setState(() { _savingEmail = true; _emailError = null; _emailMessage = null; });
 
-    final result = await _authService.addEmail(
-      newEmail,
-      currentPassword: _emailPwCtrl.text,
-    );
+    try {
+      final db = FirebaseFirestore.instance;
 
-    if (!mounted) return;
-    setState(() => _sendingEmail = false);
-
-    if (result == 'migration_sent' || result == 'verification_sent') {
-      setState(() {
-        _emailChangeState = 'sent';
-        _usedMigrationPath = result == 'migration_sent';
-      });
-      _startEmailPolling(newEmail);
-    } else {
-      setState(
-        () => _emailError = result ?? 'Failed to send verification email.',
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: password,
       );
-    }
-  }
+      await user.reauthenticateWithCredential(credential);
 
-  void _startEmailPolling(String targetEmail) {
-    _emailPollTimer?.cancel();
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    _emailPollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      if (!mounted) {
-        _emailPollTimer?.cancel();
+      final existing = await db
+          .collection('User')
+          .where('email', isEqualTo: newEmail)
+          .limit(1)
+          .get();
+      if (existing.docs.isNotEmpty && existing.docs.first.id != user.uid) {
+        setState(() { _emailError = 'That email is already linked to another account.'; _savingEmail = false; });
         return;
       }
-      try {
-        if (_usedMigrationPath) {
-          final currentUid = FirebaseAuth.instance.currentUser?.uid ?? uid;
-          final migratedEmail = await _authService.checkAndFinalizeMigration(
-            currentUid,
+
+      await user.verifyBeforeUpdateEmail(newEmail);
+
+      if (!mounted) return;
+      final savedPassword = _emailPasswordCtrl.text;
+      setState(() {
+        _verificationPending = true;
+        _pendingNewEmail     = newEmail;
+        _pendingPassword     = savedPassword;
+        _savingEmail         = false;
+        _editingEmail        = false;
+        _emailError          = null;
+        _emailMessage        = null;
+        _emailPasswordCtrl.clear();
+        _showEmailPassword   = false;
+      });
+    } on FirebaseAuthException catch (e) {
+      String msg;
+      switch (e.code) {
+        case 'wrong-password':
+        case 'invalid-credential':
+          msg = 'Incorrect password.';
+          break;
+        case 'requires-recent-login':
+          msg = 'Session expired. Please log out and log back in.';
+          break;
+        case 'too-many-requests':
+          msg = 'Too many attempts. Please wait and try again.';
+          break;
+        default:
+          msg = 'Error (${e.code}): ${e.message ?? 'Please try again.'}';
+      }
+      if (mounted) setState(() { _emailError = msg; _savingEmail = false; });
+    } catch (e) {
+      if (mounted) setState(() { _emailError = 'Unexpected error: $e'; _savingEmail = false; });
+    }
+  }
+
+  Future<void> _checkVerification() async {
+    setState(() { _checkingVerification = true; _emailError = null; });
+
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+
+      if (user == null || user.email == _pendingNewEmail) {
+        final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: _pendingNewEmail,
+          password: _pendingPassword,
+        );
+        user = cred.user;
+      } else {
+        await user.reload();
+        user = FirebaseAuth.instance.currentUser;
+      }
+
+      if (user == null) {
+        if (mounted) setState(() {
+          _emailError = 'Session lost. Please log in again.';
+          _checkingVerification = false;
+        });
+        return;
+      }
+
+      final authEmailNow = user.email ?? '';
+      final isVerified = authEmailNow == _pendingNewEmail;
+
+      if (!isVerified) {
+        if (mounted) {
+          setState(() {
+            _emailError           = 'Email not verified yet. Please check your inbox and click the link, then try again.';
+            _checkingVerification = false;
+          });
+        }
+        return;
+      }
+
+      await _finalizeEmailChange(_pendingNewEmail);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-token-expired' ||
+          e.code == 'invalid-user-token' ||
+          e.code == 'user-not-found') {
+        try {
+          final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+            email: _pendingNewEmail,
+            password: _pendingPassword,
           );
-          if (migratedEmail != null) {
-            _emailPollTimer?.cancel();
-            if (mounted) _onEmailVerified(migratedEmail);
+          final user = cred.user;
+          if (user != null && user.email == _pendingNewEmail) {
+            await _finalizeEmailChange(_pendingNewEmail);
+            return;
           }
-        } else {
-          await FirebaseAuth.instance.currentUser?.reload();
-          final user = FirebaseAuth.instance.currentUser;
-          if (user?.email == targetEmail) {
-            _emailPollTimer?.cancel();
-            await _authService.finalizeEmailUpdate(targetEmail);
-            if (mounted) _onEmailVerified(targetEmail);
-          }
+        } catch (reAuthErr) {
+          if (mounted) setState(() {
+            _emailError = 'Could not re-authenticate: $reAuthErr';
+            _checkingVerification = false;
+          });
+          return;
+        }
+      }
+      if (mounted) setState(() {
+        _emailError = 'Verification check failed: ${e.message ?? e.code}';
+        _checkingVerification = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _emailError           = 'Verification check failed: $e';
+          _checkingVerification = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _finalizeEmailChange(String newEmail) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final db = FirebaseFirestore.instance;
+    final emailToDelete = _originalEmail;
+
+    try {
+      final batch = db.batch();
+
+      batch.update(db.collection('User').doc(user.uid), {'email': newEmail});
+
+      if (emailToDelete.isNotEmpty && emailToDelete != newEmail) {
+        batch.delete(db.collection('email_index').doc(emailToDelete));
+      }
+
+      batch.set(db.collection('email_index').doc(newEmail), {
+        'uid':    user.uid,
+        'status': 'active',
+      });
+
+      batch.set(
+        db.collection('AuthIndex').doc(user.uid),
+        {'placeholder_email': newEmail},
+      );
+
+      await batch.commit();
+
+      try {
+        final staleIndexDocs = await db
+            .collection('email_index')
+            .where('uid', isEqualTo: user.uid)
+            .get();
+        for (final doc in staleIndexDocs.docs) {
+          if (doc.id != newEmail) await doc.reference.delete();
         }
       } catch (_) {}
-    });
+
+      if (!mounted) return;
+      _originalEmail = newEmail;
+      widget.onEmailUpdated?.call(newEmail);
+      setState(() {
+        _verificationPending  = false;
+        _pendingNewEmail      = '';
+        _pendingPassword      = '';
+        _checkingVerification = false;
+        _emailController.text = newEmail;
+        _emailMessage         = 'Email updated successfully.';
+        _emailError           = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _emailError           = 'Failed to save email change: $e';
+          _checkingVerification = false;
+        });
+      }
+    }
   }
 
-  void _onEmailVerified(String newEmail) {
-    setState(() {
-      _emailCtrl.text = newEmail;
-      _emailChangeState = 'idle';
-      _infoMessage = 'Email updated to $newEmail successfully.';
-    });
-  }
-
-  // ── Change password ────────────────────────────────────────────────────────
   Future<void> _changePassword() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       setState(() {
-        _pwError = 'No user session found.';
+        _pwError = 'No user session found. Please log in again.';
         _pwMessage = null;
       });
       return;
     }
-    final current = _currentPasswordCtrl.text;
-    final newPw = _newPasswordCtrl.text;
-    final confirm = _confirmPasswordCtrl.text;
+
+    final current = _currentPasswordController.text;
+    final newPw = _newPasswordController.text;
+    final confirm = _confirmPasswordController.text;
 
     if (current.isEmpty || newPw.isEmpty || confirm.isEmpty) {
       setState(() {
@@ -296,35 +384,51 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
       _pwError = null;
       _pwMessage = null;
     });
+
     String? errorMsg;
+
     try {
+      debugPrint('[PW] Step 1: reauthenticating ${user.email}');
       final credential = EmailAuthProvider.credential(
         email: user.email!,
         password: current,
       );
       await user.reauthenticateWithCredential(credential);
+      debugPrint('[PW] Step 2: updating password');
       await user.updatePassword(newPw);
+      debugPrint('[PW] Step 3: reloading user');
       await user.reload();
+      debugPrint('[PW] Done!');
     } on FirebaseAuthException catch (e) {
+      debugPrint('[PW] FirebaseAuthException — code: ${e.code}, message: ${e.message}');
       switch (e.code) {
         case 'wrong-password':
         case 'invalid-credential':
+        case 'invalid-password':
           errorMsg = 'Current password is incorrect.';
           break;
         case 'weak-password':
-          errorMsg = 'New password is too weak.';
+          errorMsg = 'New password is too weak. Use at least 8 characters.';
           break;
         case 'requires-recent-login':
-          errorMsg = 'Session expired. Please log out and back in.';
+          errorMsg = 'Session expired. Please log out and log back in.';
+          break;
+        case 'too-many-requests':
+          errorMsg = 'Too many attempts. Please wait and try again.';
+          break;
+        case 'network-request-failed':
+          errorMsg = 'Network error. Please check your connection.';
           break;
         default:
-          errorMsg = 'Error (${e.code}): ${e.message ?? 'Try again.'}';
+          errorMsg = 'Error (${e.code}): ${e.message ?? 'Please try again.'}';
       }
     } catch (e) {
-      errorMsg = 'Unexpected error: $e';
+      debugPrint('[PW] Unknown error: $e');
+      errorMsg = 'Unexpected error: ${e.toString()}';
     }
 
     if (!mounted) return;
+
     if (errorMsg != null) {
       setState(() {
         _pwError = errorMsg;
@@ -336,643 +440,608 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
         _pwMessage = 'Password changed successfully.';
         _pwError = null;
         _savingPassword = false;
-        _currentPasswordCtrl.clear();
-        _newPasswordCtrl.clear();
-        _confirmPasswordCtrl.clear();
+        _currentPasswordController.clear();
+        _newPasswordController.clear();
+        _confirmPasswordController.clear();
       });
     }
   }
 
-  // ── Build ──────────────────────────────────────────────────────────────────
+  BoxDecoration get _sectionCard => BoxDecoration(
+    color: const Color.fromARGB(109, 255, 255, 255),
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: const Color(0x50FFFFFF)),
+    boxShadow: const [
+      BoxShadow(color: Color(0x0A000000), blurRadius: 16, offset: Offset(0, 4)),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(
         child: CircularProgressIndicator(
-          color: _Glass.textMuted,
-          strokeWidth: 2,
+          color: Color(0xFFD4A94D),
         ),
       );
     }
-    // Wrap in an IntrinsicHeight + SizedBox.expand so the panel fills the card
-    return SizedBox.expand(
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Page title
-            Row(
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.manage_accounts_rounded,
+                color: const Color(0xFFD4A94D),
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'Manage Account',
+                style: TextStyle(
+                  color: Color(0xFF1A1A2E),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // ── Personal Information ─────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(22),
+            decoration: _sectionCard,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: _Glass.surfaceThin,
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(color: _Glass.borderMid, width: 0.8),
-                    boxShadow: const [_Glass.rowShadow],
-                  ),
-                  child: const Icon(
-                    Icons.manage_accounts_rounded,
-                    size: 16,
-                    color: _Glass.textSecondary,
-                  ),
+                _SectionHeader(
+                  label: 'Personal Information',
+                  icon: Icons.person_outline_rounded,
                 ),
-                const SizedBox(width: 10),
-                const Text(
-                  'Manage Account',
-                  style: TextStyle(
-                    color: _Glass.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.4,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-
-            // ── Personal Information ───────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: _Glass.section(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SectionHeader(
-                    label: 'Personal Information',
-                    icon: Icons.person_outline_rounded,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Responsive row: wraps on narrow screens
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final wide = constraints.maxWidth >= 520;
-                      final nameField = _GlassField(
-                        controller: _nameCtrl,
-                        label: 'Full Name',
-                        icon: Icons.person_outline_rounded,
-                      );
-                      final emailField = _buildEmailField();
-                      final saveBtn = Padding(
-                        padding: EdgeInsets.only(top: wide ? 20 : 0),
-                        child: _GlassButton(
-                          label: 'Save Changes',
-                          isPrimary: true,
-                          isLoading: _savingInfo,
-                          onPressed: _savingInfo ? null : _savePersonalInfo,
-                        ),
-                      );
-
-                      if (wide) {
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: nameField),
-                            const SizedBox(width: 14),
-                            Expanded(child: emailField),
-                            const SizedBox(width: 14),
-                            saveBtn,
-                          ],
-                        );
-                      }
-                      return Column(
+                const SizedBox(height: 18),
+                LayoutBuilder(builder: (context, constraints) {
+                  final wide = constraints.maxWidth > 520;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      wide
+                          ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _buildField(
+                              label: 'Full Name',
+                              controller: _nameController,
+                              hint: 'Edit your full name',
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(child: _buildEmailColumn()),
+                        ],
+                      )
+                          : Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          nameField,
-                          const SizedBox(height: 14),
-                          emailField,
-                          const SizedBox(height: 14),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: saveBtn,
+                          _buildField(
+                            label: 'Full Name',
+                            controller: _nameController,
+                            hint: 'Edit your full name',
                           ),
+                          const SizedBox(height: 14),
+                          _buildEmailColumn(),
                         ],
-                      );
-                    },
-                  ),
-
-                  if (_infoMessage != null) ...[
-                    const SizedBox(height: 12),
-                    _FeedbackBanner(message: _infoMessage!, isError: false),
-                  ],
-                  if (_infoError != null) ...[
-                    const SizedBox(height: 12),
-                    _FeedbackBanner(message: _infoError!, isError: true),
-                  ],
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 14),
-
-            // ── Change Password ────────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: _Glass.section(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SectionHeader(
-                    label: 'Change Password',
-                    icon: Icons.lock_outline_rounded,
-                  ),
-                  const SizedBox(height: 16),
-                  _GlassPasswordField(
-                    controller: _currentPasswordCtrl,
-                    label: 'Current Password',
-                    hint: 'Enter your current password',
-                    visible: _showCurrent,
-                    onToggle: () =>
-                        setState(() => _showCurrent = !_showCurrent),
-                  ),
-                  const SizedBox(height: 12),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final wide = constraints.maxWidth >= 400;
-                      final newPwField = _GlassPasswordField(
-                        controller: _newPasswordCtrl,
-                        label: 'New Password',
-                        hint: 'Enter your new password',
-                        visible: _showNew,
-                        onToggle: () => setState(() => _showNew = !_showNew),
-                      );
-                      final confirmField = _GlassPasswordField(
-                        controller: _confirmPasswordCtrl,
-                        label: 'Confirm New Password',
-                        hint: 'Re-enter your new password',
-                        visible: _showConfirm,
-                        onToggle: () =>
-                            setState(() => _showConfirm = !_showConfirm),
-                      );
-                      if (wide) {
-                        return Row(
-                          children: [
-                            Expanded(child: newPwField),
-                            const SizedBox(width: 14),
-                            Expanded(child: confirmField),
-                          ],
-                        );
-                      }
-                      return Column(
-                        children: [
-                          newPwField,
-                          const SizedBox(height: 12),
-                          confirmField,
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: const [
-                      Icon(
-                        Icons.info_outline,
-                        size: 10,
-                        color: _Glass.textMuted,
                       ),
-                      SizedBox(width: 4),
-                      Text(
-                        'Minimum 8 characters recommended.',
-                        style: TextStyle(
-                          color: _Glass.textMuted,
-                          fontSize: 10.5,
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: SizedBox(
+                          height: 46,
+                          child: ElevatedButton(
+                            onPressed: _savingInfo ? null : _savePersonalInfo,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFD4A94D),
+                              foregroundColor: Colors.black,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 28),
+                            ),
+                            child: _savingInfo
+                                ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.black54,
+                              ),
+                            )
+                                : const Text(
+                              'Save Changes',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                  if (_pwMessage != null) ...[
-                    const SizedBox(height: 12),
-                    _FeedbackBanner(message: _pwMessage!, isError: false),
+                  );
+                }),
+                if (_infoMessage != null) ...[
+                  const SizedBox(height: 14),
+                  _FeedbackBanner(message: _infoMessage!, isError: false),
+                ],
+                if (_infoError != null) ...[
+                  const SizedBox(height: 14),
+                  _FeedbackBanner(message: _infoError!, isError: true),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Change Password ──────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(22),
+            decoration: _sectionCard,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SectionHeader(
+                  label: 'Change Password',
+                  icon: Icons.lock_outline_rounded,
+                ),
+                const SizedBox(height: 18),
+                _buildPasswordField(
+                  label: 'Current Password',
+                  controller: _currentPasswordController,
+                  hint: 'Enter your current password',
+                  visible: _showCurrent,
+                  onToggle: () => setState(() => _showCurrent = !_showCurrent),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildPasswordField(
+                        label: 'New Password',
+                        controller: _newPasswordController,
+                        hint: 'Enter your new password',
+                        visible: _showNew,
+                        onToggle: () => setState(() => _showNew = !_showNew),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildPasswordField(
+                        label: 'Confirm New Password',
+                        controller: _confirmPasswordController,
+                        hint: 'Re-enter your new password',
+                        visible: _showConfirm,
+                        onToggle: () => setState(() => _showConfirm = !_showConfirm),
+                      ),
+                    ),
                   ],
-                  if (_pwError != null) ...[
-                    const SizedBox(height: 12),
-                    _FeedbackBanner(message: _pwError!, isError: true),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline,
+                      size: 11,
+                      color: Color.fromARGB(255, 47, 47, 83),
+                    ),
+                    const SizedBox(width: 5),
+                    const Text(
+                      'Minimum 8 characters recommended.',
+                      style: TextStyle(
+                        color: Color.fromARGB(255, 47, 47, 83),
+                        fontSize: 11.5,
+                      ),
+                    ),
                   ],
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: _GlassButton(
-                      label: 'Update Password',
-                      isPrimary: true,
-                      isLoading: _savingPassword,
+                ),
+                if (_pwMessage != null) ...[
+                  const SizedBox(height: 14),
+                  _FeedbackBanner(message: _pwMessage!, isError: false),
+                ],
+                if (_pwError != null) ...[
+                  const SizedBox(height: 14),
+                  _FeedbackBanner(message: _pwError!, isError: true),
+                ],
+                const SizedBox(height: 18),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: SizedBox(
+                    height: 46,
+                    child: ElevatedButton(
                       onPressed: _savingPassword ? null : _changePassword,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.gold,
+                        foregroundColor: Colors.black,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 28),
+                      ),
+                      child: _savingPassword
+                          ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.black54,
+                        ),
+                      )
+                          : const Text(
+                        'Update Password',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // ── Email field widget (handles all 3 states) ─────────────────────────────
-  Widget _buildEmailField() {
-    switch (_emailChangeState) {
-      // ── idle: read-only display + Edit button ──────────────────────────
-      case 'idle':
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _GlassField(
-              controller: _emailCtrl,
-              label: 'Email Address',
-              icon: Icons.email_outlined,
-              readOnly: true,
-              suffixIcon: TextButton(
-                onPressed: _beginEmailEdit,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  foregroundColor: AppTheme.gold,
-                ),
-                child: const Text(
-                  'Edit',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-            const SizedBox(height: 5),
-            Row(
-              children: const [
-                Icon(Icons.info_outline, size: 10, color: _Glass.textMuted),
-                SizedBox(width: 4),
+  Widget _buildEmailColumn() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildField(
+          label: 'Email Address',
+          controller: _emailController,
+          hint: 'Enter new email',
+          readOnly: !_editingEmail || _verificationPending,
+        ),
+        const SizedBox(height: 6),
+
+        // ── idle ──────────────────────────────────────────────────
+        if (!_editingEmail && !_verificationPending)
+          GestureDetector(
+            onTap: () => setState(() {
+              _editingEmail = true;
+              _emailError   = null;
+              _emailMessage = null;
+            }),
+            child: const Row(
+              children: [
+                Icon(Icons.edit_outlined, size: 11, color: Color(0xFFD4A94D)),
+                SizedBox(width: 5),
                 Text(
-                  'Click Edit to change your email.',
-                  style: TextStyle(color: _Glass.textMuted, fontSize: 10.5),
+                  'Change email',
+                  style: TextStyle(
+                    color: Color(0xFFD4A94D),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
-          ],
-        );
-
-      // ── confirming: new email + password inputs ────────────────────────
-      case 'confirming':
-        return Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _Glass.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _Glass.borderMid, width: 0.8),
-            boxShadow: const [_Glass.rowShadow],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+
+        // ── editing ───────────────────────────────────────────────
+        if (_editingEmail && !_verificationPending) ...[
+          const SizedBox(height: 10),
+          _buildPasswordField(
+            label: 'Confirm with current password',
+            controller: _emailPasswordCtrl,
+            hint: 'Enter your password',
+            visible: _showEmailPassword,
+            onToggle: () => setState(() => _showEmailPassword = !_showEmailPassword),
+          ),
+          const SizedBox(height: 10),
+          Row(
             children: [
-              const Text(
-                'Enter your new email and current password.\nWe\'ll send a verification link.',
-                style: TextStyle(
-                  color: _Glass.textSecondary,
-                  fontSize: 12,
-                  height: 1.5,
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: ElevatedButton(
+                    onPressed: _savingEmail ? null : _changeEmail,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD4A94D),
+                      foregroundColor: Colors.black,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: _savingEmail
+                        ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.black54,
+                      ),
+                    )
+                        : const Text(
+                      'Send Verification',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
-              _GlassField(
-                controller: _newEmailCtrl,
-                label: 'New Email Address',
-                icon: Icons.email_outlined,
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 10),
-              _GlassPasswordField(
-                controller: _emailPwCtrl,
-                label: 'Current Password',
-                hint: 'Confirm with your current password',
-                visible: _showEmailPw,
-                onToggle: () => setState(() => _showEmailPw = !_showEmailPw),
-              ),
-              if (_emailError != null) ...[
-                const SizedBox(height: 10),
-                _FeedbackBanner(message: _emailError!, isError: true),
-              ],
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _GlassButton(
-                    label: 'Cancel',
-                    isPrimary: false,
-                    onPressed: _cancelEmailEdit,
-                  ),
-                  const SizedBox(width: 8),
-                  _GlassButton(
-                    label: 'Send Verification',
-                    isPrimary: true,
-                    isLoading: _sendingEmail,
-                    onPressed: _sendingEmail ? null : _sendEmailVerification,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-
-      // ── sent: waiting for the user to click the link ───────────────────
-      case 'sent':
-      default:
-        return Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2E7D32).withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: const Color(0xFF2E7D32).withValues(alpha: 0.22),
-              width: 0.8,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: const [
-                  Icon(
-                    Icons.mark_email_read_outlined,
-                    color: Color(0xFF2E7D32),
-                    size: 18,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Verification email sent!',
-                    style: TextStyle(
-                      color: Color(0xFF2E7D32),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'We sent a link to ${_newEmailCtrl.text.trim()}.\n'
-                'Click it to confirm — this screen will update automatically.',
-                style: const TextStyle(
-                  color: _Glass.textSecondary,
-                  fontSize: 12,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFF2E7D32),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  TextButton(
-                    onPressed: _cancelEmailEdit,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      foregroundColor: _Glass.textMuted,
-                    ),
-                    child: const Text(
-                      'Cancel / use a different email',
-                      style: TextStyle(fontSize: 11.5),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-    }
-  }
-}
-
-// =============================================================================
-// Shared glass widgets
-// =============================================================================
-
-class _GlassButton extends StatelessWidget {
-  final String label;
-  final IconData? icon;
-  final bool isPrimary;
-  final bool isLoading;
-  final VoidCallback? onPressed;
-
-  const _GlassButton({
-    required this.label,
-    this.icon,
-    required this.isPrimary,
-    this.isLoading = false,
-    this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        decoration: BoxDecoration(
-          color: isPrimary ? const Color(0xDD1A1A2E) : _Glass.surfaceThin,
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(
-            color: isPrimary ? const Color(0x44FFFFFF) : _Glass.borderMid,
-            width: 0.8,
-          ),
-          boxShadow: const [_Glass.rowShadow],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isLoading)
+              const SizedBox(width: 8),
               SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: isPrimary ? Colors.white : _Glass.textSecondary,
+                height: 40,
+                child: OutlinedButton(
+                  onPressed: _savingEmail
+                      ? null
+                      : () => setState(() {
+                    _editingEmail      = false;
+                    _emailError        = null;
+                    _emailMessage      = null;
+                    _emailPasswordCtrl.clear();
+                    _showEmailPassword = false;
+                    _emailController.text = _originalEmail;
+                  }),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF3A3A52),
+                    side: const BorderSide(color: Color(0x40000000)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Cancel', style: TextStyle(fontSize: 12)),
                 ),
-              )
-            else if (icon != null)
-              Icon(
-                icon,
-                size: 13,
-                color: isPrimary ? Colors.white : _Glass.textSecondary,
               ),
-            if (icon != null || isLoading) const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isPrimary ? Colors.white : _Glass.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            ],
+          ),
+          if (_emailError != null) ...[
+            const SizedBox(height: 8),
+            _FeedbackBanner(message: _emailError!, isError: true),
           ],
-        ),
-      ),
+        ],
+
+        // ── pending verification ───────────────────────────────────
+        if (_verificationPending) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0x12B45309),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0x40B45309)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 1),
+                      child: Icon(
+                        Icons.mark_email_unread_outlined,
+                        color: Color(0xFF92400E),
+                        size: 15,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Verification email sent to $_pendingNewEmail',
+                        style: const TextStyle(
+                          color: Color(0xFF78350F),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  "Click the link in the email, then tap \"I've verified\" to complete the change.",
+                  style: TextStyle(
+                    color: Color(0xFF92400E),
+                    fontSize: 11.5,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 40,
+                        child: ElevatedButton.icon(
+                          onPressed: _checkingVerification ? null : _checkVerification,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD4A94D),
+                            foregroundColor: Colors.black,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          icon: _checkingVerification
+                              ? const SizedBox(
+                            width: 13,
+                            height: 13,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.black54,
+                            ),
+                          )
+                              : const Icon(Icons.verified_outlined, size: 14),
+                          label: Text(
+                            _checkingVerification ? 'Checking...' : "I've verified",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      height: 40,
+                      child: OutlinedButton(
+                        onPressed: _checkingVerification
+                            ? null
+                            : () => setState(() {
+                          _verificationPending  = false;
+                          _pendingNewEmail      = '';
+                          _pendingPassword      = '';
+                          _emailError           = null;
+                          _emailController.text = _originalEmail;
+                        }),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF3A3A52),
+                          side: const BorderSide(color: Color(0x40000000)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text('Cancel', style: TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_emailError != null) ...[
+                  const SizedBox(height: 8),
+                  _FeedbackBanner(message: _emailError!, isError: true),
+                ],
+              ],
+            ),
+          ),
+        ],
+
+        // ── success banner ─────────────────────────────────────────
+        if (_emailMessage != null) ...[
+          const SizedBox(height: 8),
+          _FeedbackBanner(message: _emailMessage!, isError: false),
+        ],
+      ],
     );
   }
-}
 
-class _GlassField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final IconData? icon;
-  final bool readOnly;
-  final Widget? suffixIcon;
-  final TextInputType? keyboardType;
-  final String? Function(String?)? validator;
-
-  const _GlassField({
-    required this.controller,
-    required this.label,
-    this.icon,
-    this.readOnly = false,
-    this.suffixIcon,
-    this.keyboardType,
-    this.validator,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildField({
+    required String label,
+    required TextEditingController controller,
+    required String hint,
+    bool readOnly = false,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: const TextStyle(
-            color: _Glass.textSecondary,
-            fontSize: 11.5,
+            color: Color(0xFF3A3A52),
+            fontSize: 12.5,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.1,
+            letterSpacing: 0.2,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 7),
         TextFormField(
           controller: controller,
           readOnly: readOnly,
-          validator: validator,
-          keyboardType: keyboardType,
           style: TextStyle(
-            color: readOnly ? _Glass.textMuted : _Glass.textPrimary,
-            fontSize: 13,
+            color: readOnly ? const Color(0xFF3A3A52) : const Color(0xFF1A1A2E),
+            fontSize: 14,
           ),
           decoration: InputDecoration(
-            prefixIcon: icon != null
-                ? Icon(icon, size: 15, color: _Glass.textMuted)
-                : null,
-            suffixIcon: suffixIcon,
+            hintText: hint,
+            hintStyle: const TextStyle(
+              color: Color.fromARGB(255, 47, 47, 83),
+              fontSize: 13.5,
+            ),
             filled: true,
-            fillColor: readOnly
-                ? _Glass.surfaceThin.withAlpha(80)
-                : _Glass.surfaceThin,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 11,
+            fillColor: readOnly ? const Color(0x18000000) : const Color(0x0F000000),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0x40000000)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: _Glass.borderMid, width: 0.8),
+              borderSide: const BorderSide(color: Color(0x30000000)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                color: AppTheme.gold.withValues(alpha: 0.7),
-                width: 1.2,
-              ),
+              borderSide: const BorderSide(color: Color(0xFFD4A94D), width: 1.5),
             ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: Color(0xFFE53935),
-                width: 0.8,
-              ),
-            ),
-            focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFE53935)),
-            ),
-            errorStyle: const TextStyle(fontSize: 10),
           ),
         ),
       ],
     );
   }
-}
 
-class _GlassPasswordField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final String hint;
-  final bool visible;
-  final VoidCallback onToggle;
-
-  const _GlassPasswordField({
-    required this.controller,
-    required this.label,
-    required this.hint,
-    required this.visible,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildPasswordField({
+    required String label,
+    required TextEditingController controller,
+    required String hint,
+    required bool visible,
+    required VoidCallback onToggle,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: const TextStyle(
-            color: _Glass.textSecondary,
-            fontSize: 11.5,
+            color: Color(0xFF3A3A52),
+            fontSize: 12.5,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.1,
+            letterSpacing: 0.2,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 7),
         TextFormField(
           controller: controller,
           obscureText: !visible,
-          style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+          style: const TextStyle(color: Color(0xFF1A1A2E), fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: const TextStyle(color: _Glass.textMuted, fontSize: 12.5),
-            filled: true,
-            fillColor: _Glass.surfaceThin,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 11,
+            hintStyle: const TextStyle(
+              color: Color.fromARGB(255, 47, 47, 83),
+              fontSize: 13.5,
             ),
+            filled: true,
+            fillColor: const Color(0x0F000000),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             suffixIcon: IconButton(
               onPressed: onToggle,
               icon: Icon(
-                visible
-                    ? Icons.visibility_rounded
-                    : Icons.visibility_off_rounded,
-                color: _Glass.textMuted,
-                size: 17,
+                visible ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                color: const Color(0xFF3A3A52),
+                size: 19,
               ),
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0x40000000)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: _Glass.borderMid, width: 0.8),
+              borderSide: const BorderSide(color: Color(0x30000000)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                color: AppTheme.gold.withValues(alpha: 0.7),
-                width: 1.2,
-              ),
+              borderSide: const BorderSide(color: Color(0xFFD4A94D), width: 1.5),
             ),
           ),
         ),
@@ -981,42 +1050,37 @@ class _GlassPasswordField extends StatelessWidget {
   }
 }
 
-// ── Section header with divider ───────────────────────────────────────────────
+// ── Reusable Widgets ──────────────────────────────────────────────────────────
+
 class _SectionHeader extends StatelessWidget {
   final String label;
   final IconData icon;
   const _SectionHeader({required this.label, required this.icon});
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Container(
-        width: 28,
-        height: 28,
-        decoration: BoxDecoration(
-          color: _Glass.surfaceThin,
-          borderRadius: BorderRadius.circular(7),
-          border: Border.all(color: _Glass.borderMid, width: 0.8),
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: const Color(0xFFD4A94D), size: 17),
+        const SizedBox(width: 9),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF1A1A2E),
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
         ),
-        child: Icon(icon, size: 14, color: _Glass.textSecondary),
-      ),
-      const SizedBox(width: 9),
-      Text(
-        label,
-        style: const TextStyle(
-          color: _Glass.textPrimary,
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.1,
+        const SizedBox(width: 14),
+        const Expanded(
+          child: Divider(color: Color(0x25000000), thickness: 1),
         ),
-      ),
-      const SizedBox(width: 12),
-      Expanded(child: Divider(color: _Glass.borderMid, thickness: 0.8)),
-    ],
-  );
+      ],
+    );
+  }
 }
 
-// ── Feedback banner ───────────────────────────────────────────────────────────
 class _FeedbackBanner extends StatelessWidget {
   final String message;
   final bool isError;
@@ -1024,23 +1088,23 @@ class _FeedbackBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isError ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
+    final color       = isError ? const Color(0xFFDC2626) : const Color(0xFF166534);
+    final bgColor     = isError ? const Color(0x10DC2626) : const Color(0x10166534);
+    final borderColor = isError ? const Color(0x40DC2626) : const Color(0x40166534);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.07),
+        color: bgColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.30), width: 0.8),
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         children: [
           Icon(
-            isError
-                ? Icons.error_outline_rounded
-                : Icons.check_circle_outline_rounded,
+            isError ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded,
             color: color,
-            size: 15,
+            size: 16,
           ),
           const SizedBox(width: 10),
           Expanded(
