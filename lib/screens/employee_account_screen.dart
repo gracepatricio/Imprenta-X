@@ -21,11 +21,12 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
   String selectedMenu = "dashboard";
   String fullName = "";
   String email = "";
+  String employeeId = "";
 
   static const _menus = [
     ('dashboard', 'Dashboard',      Icons.dashboard_outlined),
     ('messages',  'Messages',       Icons.chat_bubble_outline),
-    ('manage',    'Manage Account', Icons.manage_accounts_outlined),
+    ('manage',    'Profile',        Icons.manage_accounts_outlined),
   ];
 
   @override
@@ -43,8 +44,9 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
         .get();
     if (doc.exists && mounted) {
       setState(() {
-        fullName = doc.data()?['full_name'] ?? user.displayName ?? 'Employee';
-        email    = doc.data()?['email']     ?? user.email ?? '';
+        fullName   = doc.data()?['full_name']   ?? user.displayName ?? 'Employee';
+        email      = doc.data()?['email']       ?? user.email ?? '';
+        employeeId = doc.data()?['employee_id'] ?? '';
       });
     }
   }
@@ -99,6 +101,20 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                   Text(
                     email,
                     style: const TextStyle(color: Colors.white70, fontSize: 11),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (employeeId.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    employeeId,
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                      letterSpacing: 0.3,
+                    ),
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -174,6 +190,15 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                           Text(email,
                               style: const TextStyle(
                                   color: Colors.white70, fontSize: 11),
+                              overflow: TextOverflow.ellipsis),
+                        if (employeeId.isNotEmpty)
+                          Text(employeeId,
+                              style: const TextStyle(
+                                color: Colors.white38,
+                                fontSize: 10,
+                                fontFamily: 'monospace',
+                                letterSpacing: 0.3,
+                              ),
                               overflow: TextOverflow.ellipsis),
                       ],
                     ),

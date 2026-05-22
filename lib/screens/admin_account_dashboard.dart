@@ -80,6 +80,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
   String _selectedMenu = 'dashboard';
   String _fullName = '';
   String _email = '';
+  String _uid = '';
 
   @override
   void initState() {
@@ -98,6 +99,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
       setState(() {
         _fullName = doc.data()?['full_name'] ?? user.displayName ?? 'Admin';
         _email = doc.data()?['email'] ?? user.email ?? '';
+        _uid = user.uid;
       });
     }
   }
@@ -134,6 +136,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
                     _Sidebar(
                       fullName: _fullName,
                       email: _email,
+                      uid: _uid,
                       selectedMenu: _selectedMenu,
                       onMenuTap: (key) => setState(() => _selectedMenu = key),
                       onLogout: _logout,
@@ -162,6 +165,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
 class _Sidebar extends StatelessWidget {
   final String fullName;
   final String email;
+  final String uid;
   final String selectedMenu;
   final ValueChanged<String> onMenuTap;
   final VoidCallback onLogout;
@@ -169,6 +173,7 @@ class _Sidebar extends StatelessWidget {
   const _Sidebar({
     required this.fullName,
     required this.email,
+    required this.uid,
     required this.selectedMenu,
     required this.onMenuTap,
     required this.onLogout,
@@ -231,6 +236,21 @@ class _Sidebar extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          if (uid.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              uid,
+              style: const TextStyle(
+                color: _Glass.textMuted,
+                fontSize: 8.5,
+                fontFamily: 'monospace',
+                letterSpacing: 0.2,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
 
           const SizedBox(height: 18),
           Divider(color: _Glass.borderMid, thickness: 0.8),
