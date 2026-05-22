@@ -208,23 +208,15 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
           final total     = (orderSnap.data()?['total_price'] as num?)?.toDouble() ?? 0;
           final remaining = total - newPaid;
 
-<<<<<<< HEAD
           // Update order — payment completion alone does NOT advance status.
           // The order status (pending → in_production → ready → completed) is
           // controlled exclusively by employees, not by payment events.
-=======
-          // Update order — fully paid does NOT mean completed;
-          // the employee must mark it completed from Ready for Pickup.
->>>>>>> a41aa53 (matt)
           await _db.collection('Orders').doc(orderId).update({
             'amount_paid':       newPaid,
             'remaining_balance': remaining.clamp(0, double.infinity),
             'payment_status':    wasFullyPaid ? 'paid' : 'partial',
-<<<<<<< HEAD
             // NOTE: 'status' is intentionally NOT updated here.
             // Only an employee action (marking "In Production") may advance it.
-=======
->>>>>>> a41aa53 (matt)
           });
 
           // Keep the Invoice in sync with the new payment amounts
