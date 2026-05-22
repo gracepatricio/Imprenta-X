@@ -2181,8 +2181,8 @@ class _CustomerFeedbackTab extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('Feedback')
-            .orderBy('createdAt', descending: true)
+            .collection('OrderReviews') // ← was 'Feedback'
+            .orderBy('created_at', descending: true)
             .limit(200)
             .snapshots(),
         builder: (context, snapshot) {
@@ -2225,7 +2225,7 @@ class _CustomerFeedbackTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Feedback submitted by customers will appear here',
+                    'Order reviews submitted by customers will appear here',
                     style: TextStyle(color: _Glass.textSecondary, fontSize: 13),
                   ),
                 ],
@@ -2276,28 +2276,31 @@ class _CustomerFeedbackTab extends StatelessWidget {
                   itemCount: docs.length,
                   itemBuilder: (_, i) {
                     final data = docs[i].data() as Map<String, dynamic>;
-                    final customer =
-                        data['customerName']?.toString() ??
-                        data['userName']?.toString() ??
-                        '—';
-                    final message =
-                        data['message']?.toString() ??
-                        data['feedback']?.toString() ??
-                        '—';
+
+                    // OrderReviews fields
+                    final customer = data['customer_name']?.toString() ?? '—';
+                    final message = data['message']?.toString() ?? '';
                     final rating = (data['rating'] as num?)?.toInt();
-                    final ts = data['createdAt'] as Timestamp?;
+                    final orderId = data['order_id']?.toString() ?? '';
+                    final productName = data['product_name']?.toString() ?? '';
+                    final ts = data['created_at'] as Timestamp?;
                     final timeStr = ts != null
                         ? DateFormat('MMM dd, yyyy hh:mm a').format(ts.toDate())
                         : '—';
+                    final isRead = data['read'] == true;
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: const Color(0xE0F7F7F7),
+                        color: isRead
+                            ? const Color(0xE0F7F7F7)
+                            : const Color(0xFFFFFBEB),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: const Color(0xFFE5E7EB),
+                          color: isRead
+                              ? const Color(0xFFE5E7EB)
+                              : const Color(0xFFFDE68A),
                           width: 1,
                         ),
                       ),
@@ -2323,14 +2326,35 @@ class _CustomerFeedbackTab extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(width: 10),
+                              // Replace the Expanded Column inside the Row (after the avatar):
                               Expanded(
-                                child: Text(
-                                  customer,
-                                  style: const TextStyle(
-                                    color: _Glass.textPrimary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      customer,
+                                      style: const TextStyle(
+                                        color: _Glass.textPrimary,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    if (orderId.isNotEmpty ||
+                                        productName.isNotEmpty)
+                                      Text(
+                                        [
+                                          if (orderId.isNotEmpty) orderId,
+                                          if (productName.isNotEmpty)
+                                            productName,
+                                        ].join(' · '),
+                                        style: TextStyle(
+                                          color: AppTheme.gold,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    _CustomerIdText(data: data), // ← add this
+                                  ],
                                 ),
                               ),
                               if (rating != null) ...[
@@ -2348,24 +2372,54 @@ class _CustomerFeedbackTab extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 8),
                               ],
-                              Text(
-                                timeStr,
-                                style: const TextStyle(
-                                  color: _Glass.textMuted,
-                                  fontSize: 11,
+                              // Mark as read button (mirrors admin dashboard)
+                              if (!isRead)
+                                GestureDetector(
+                                  onTap: () => FirebaseFirestore.instance
+                                      .collection('OrderReviews')
+                                      .doc(docs[i].id)
+                                      .update({'read': true}),
+                                  child: Tooltip(
+                                    message: 'Mark as read',
+                                    child: const Icon(
+                                      Icons.check_circle_outline,
+                                      color: _Glass.textMuted,
+                                      size: 17,
+                                    ),
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 6),
                           Text(
-                            message,
+                            timeStr,
                             style: const TextStyle(
-                              color: _Glass.textSecondary,
-                              fontSize: 13,
-                              height: 1.5,
+                              color: _Glass.textMuted,
+                              fontSize: 11,
                             ),
                           ),
+                          if (message.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFFE5E7EB),
+                                ),
+                              ),
+                              child: Text(
+                                message,
+                                style: const TextStyle(
+                                  color: _Glass.textSecondary,
+                                  fontSize: 13,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     );
@@ -2569,4 +2623,46 @@ class _LogRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Resolves a customer_uid to a CUS-XXX id via the User collection.
+/// Shows the stored customer_id field directly if already present on the doc.
+class _CustomerIdText extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _CustomerIdText({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    // If already stored on the review doc, use it directly
+    final stored = data['customer_id']?.toString() ?? '';
+    if (stored.isNotEmpty) {
+      return _label(stored);
+    }
+
+    // Otherwise look it up from the User collection
+    final uid = data['customer_uid']?.toString() ?? '';
+    if (uid.isEmpty) return const SizedBox.shrink();
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('User').doc(uid).get(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final cid =
+            (snap.data?.data() as Map<String, dynamic>?)?['customer_id']
+                ?.toString() ??
+            '';
+        if (cid.isEmpty) return const SizedBox.shrink();
+        return _label(cid);
+      },
+    );
+  }
+
+  Widget _label(String id) => Text(
+    'ID: $id',
+    style: const TextStyle(
+      color: Color(0xFF9CA3AF), // matches _Glass.textMuted
+      fontSize: 11,
+      fontFamily: 'monospace',
+    ),
+  );
 }

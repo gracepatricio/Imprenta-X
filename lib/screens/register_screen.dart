@@ -9,14 +9,14 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final fullNameController        = TextEditingController();
-  final emailController           = TextEditingController();
-  final passwordController        = TextEditingController();
+  final fullNameController = TextEditingController();
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
-  final AuthService _authService  = AuthService();
-  bool isLoading        = false;
-  bool obscurePassword  = true;
-  bool obscureConfirm   = true;
+  final AuthService _authService = AuthService();
+  bool isLoading = false;
+  bool obscurePassword = true;
+  bool obscureConfirm = true;
 
   @override
   void dispose() {
@@ -27,11 +27,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  /// Returns null if valid, or an error message string if invalid.
+  String? _validatePassword(String password) {
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(password)) {
+      return 'Password must contain at least one uppercase letter.';
+    }
+    if (!RegExp(r'[a-z]').hasMatch(password)) {
+      return 'Password must contain at least one lowercase letter.';
+    }
+    if (!RegExp(r'[0-9]').hasMatch(password)) {
+      return 'Password must contain at least one number.';
+    }
+    if (!RegExp(
+      r'[!@#$%^&*()\-_=+\[\]{};:,.<>?/\\|`~'
+      "'\"]",
+    ).hasMatch(password)) {
+      return 'Password must contain at least one special character.';
+    }
+    return null;
+  }
+
   // Validates form, creates the Firebase Auth account, sends verification email.
   Future<void> _createAccount() async {
-    final fullName        = fullNameController.text.trim();
-    final email           = emailController.text.trim();
-    final password        = passwordController.text.trim();
+    final fullName = fullNameController.text.trim();
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
     final confirmPassword = confirmPasswordController.text.trim();
 
     if (fullName.isEmpty || email.isEmpty || password.isEmpty) {
@@ -42,8 +65,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _snack('Passwords do not match.');
       return;
     }
-    if (password.length < 6) {
-      _snack('Password must be at least 6 characters.');
+
+    final pwError = _validatePassword(password);
+    if (pwError != null) {
+      _snack(pwError);
       return;
     }
 
@@ -67,7 +92,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           email: email,
           onVerified: () async {
             final err = await _authService.finalizeRegistration(
-                user.uid, email, fullName);
+              user.uid,
+              email,
+              fullName,
+            );
             if (!mounted) return;
             if (err == 'success') {
               _snack('Account created successfully!');
@@ -192,11 +220,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   size: 18,
                                 ),
                                 onPressed: () => setState(
-                                    () => obscurePassword = !obscurePassword),
+                                  () => obscurePassword = !obscurePassword,
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Min. 8 chars with uppercase, lowercase, number & special character',
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
 
                           // Confirm Password
                           TextField(
@@ -217,7 +254,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   size: 18,
                                 ),
                                 onPressed: () => setState(
-                                    () => obscureConfirm = !obscureConfirm),
+                                  () => obscureConfirm = !obscureConfirm,
+                                ),
                               ),
                             ),
                           ),
@@ -247,7 +285,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               const Text(
                                 'Already have an account?',
                                 style: TextStyle(
-                                    color: Colors.white54, fontSize: 13),
+                                  color: Colors.white54,
+                                  fontSize: 13,
+                                ),
                               ),
                               const SizedBox(width: 6),
                               GestureDetector(

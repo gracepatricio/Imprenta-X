@@ -28,8 +28,6 @@ class AppTheme {
   );
 
   // ── Frosted glass card ─────────────────────────────────────────────────────
-  // Increased border opacity & slightly stronger fill so content is always
-  // clearly separated from the background image.
   static BoxDecoration glassCard({double opacity = 0.30, double radius = 20}) {
     return BoxDecoration(
       color: Colors.white.withValues(alpha: opacity),
@@ -72,11 +70,11 @@ class AppTheme {
   }
 
   // ── Colors ─────────────────────────────────────────────────────────────────
+  // Updated: clean saturated amber-gold, uniform across all screens
   static const Color gold = Color(0xFFFFE9AD);
   static const Color accent = Color(0xFF00b89c);
 
   // ── Text styles ────────────────────────────────────────────────────────────
-  // Using stronger opacity so text is never "blending" into the background.
   static const TextStyle titleStyle = TextStyle(
     color: Colors.white,
     fontSize: 30,
@@ -90,13 +88,11 @@ class AppTheme {
     fontWeight: FontWeight.w400,
   );
 
-  // "Subtle" is now white80 instead of white60 so it stays readable on glass.
   static const TextStyle subtleStyle = TextStyle(
-    color: Color(0xCCFFFFFF), // ~80% white
+    color: Color(0xCCFFFFFF),
     fontSize: 13,
   );
 
-  // Section heading used inside glass cards
   static const TextStyle sectionHeading = TextStyle(
     color: Colors.white,
     fontSize: 15,
@@ -112,7 +108,6 @@ class AppTheme {
   }) {
     return InputDecoration(
       labelText: label,
-      // Raised from white60 → white80 for legibility
       labelStyle: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 14),
       prefixIcon: icon != null
           ? Icon(icon, color: Colors.white70, size: 18)
@@ -137,7 +132,6 @@ class AppTheme {
   }
 
   // ── Primary button (gold, full pill) ──────────────────────────────────────
-  // Added a subtle inner shadow / border so the pill "pops" off the glass.
   static ButtonStyle primaryButton({Color? color}) {
     return ElevatedButton.styleFrom(
       backgroundColor: color ?? AppTheme.gold,
@@ -162,7 +156,6 @@ class AppTheme {
   }
 
   // ── Glass button (for sidebar / secondary actions) ────────────────────────
-  // A rounded-rectangle glass pill to emphasise secondary buttons.
   static ButtonStyle glassButton({bool isActive = false}) {
     return ElevatedButton.styleFrom(
       backgroundColor: isActive

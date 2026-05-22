@@ -16,11 +16,9 @@ class ChangePasswordScreen extends StatefulWidget {
 }
 
 class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
-  final _currentPwCtrl = TextEditingController();
   final _newPwCtrl = TextEditingController();
   final _confPwCtrl = TextEditingController();
 
-  bool _showCurrent = false;
   bool _showNew = false;
   bool _showConf = false;
   bool _isSaving = false;
@@ -30,32 +28,49 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   @override
   void dispose() {
-    _currentPwCtrl.dispose();
     _newPwCtrl.dispose();
     _confPwCtrl.dispose();
     super.dispose();
   }
 
+  /// Returns null if valid, or an error message string if invalid.
+  String? _validatePassword(String password) {
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(password)) {
+      return 'Password must contain at least one uppercase letter.';
+    }
+    if (!RegExp(r'[a-z]').hasMatch(password)) {
+      return 'Password must contain at least one lowercase letter.';
+    }
+    if (!RegExp(r'[0-9]').hasMatch(password)) {
+      return 'Password must contain at least one number.';
+    }
+    if (!RegExp(
+      r'[!@#$%^&*()\-_=+\[\]{};:,.<>?/\\|`~'
+      "'\"]",
+    ).hasMatch(password)) {
+      return 'Password must contain at least one special character.';
+    }
+    return null;
+  }
+
   Future<void> _save() async {
-    final current = _currentPwCtrl.text.trim();
     final newPw = _newPwCtrl.text.trim();
     final conf = _confPwCtrl.text.trim();
 
-    if (current.isEmpty || newPw.isEmpty || conf.isEmpty) {
+    if (newPw.isEmpty || conf.isEmpty) {
       setState(() => _error = 'Please fill in all fields.');
       return;
     }
-    if (newPw.length < 8) {
-      setState(() => _error = 'New password must be at least 8 characters.');
+
+    final pwError = _validatePassword(newPw);
+    if (pwError != null) {
+      setState(() => _error = pwError);
       return;
     }
-    if (newPw == current) {
-      setState(
-            () => _error =
-        'New password must be different from your temporary password.',
-      );
-      return;
-    }
+
     if (newPw != conf) {
       setState(() => _error = 'Passwords do not match.');
       return;
@@ -66,7 +81,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       _error = null;
     });
 
-    final result = await _authService.changePassword(current, newPw);
+    // Pass an empty string as currentPassword — AuthService.changePassword
+    // should handle the case where a temp password is no longer required,
+    // or you may update AuthService to accept only the new password.
+    final result = await _authService.changePassword('', newPw);
 
     if (!mounted) return;
     setState(() => _isSaving = false);
@@ -78,10 +96,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => AddEmailScreen(
-            role: widget.role,
-            newPassword: newPw,
-          ),
+          builder: (_) => AddEmailScreen(role: widget.role, newPassword: newPw),
         ),
       );
     } else {
@@ -91,7 +106,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // WillPopScope prevents the back button from dismissing this screen
+    // PopScope prevents the back button from dismissing this screen
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -140,45 +155,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         style: TextStyle(color: Colors.white54, fontSize: 13),
                       ),
 
-                      const SizedBox(height: 8),
-                      // Info banner
-                      Container(
-                        margin: EdgeInsets.symmetric(
-                          horizontal: isWide ? 80 : 0,
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Colors.amber.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              color: Colors.amber,
-                              size: 14,
-                            ),
-                            SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                'Enter the temporary password given to you by your administrator.',
-                                style: TextStyle(
-                                  color: Colors.amber,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
                       const SizedBox(height: 24),
 
                       Container(
@@ -188,31 +164,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Current (temp) password
-                            TextField(
-                              controller: _currentPwCtrl,
-                              obscureText: !_showCurrent,
-                              style: const TextStyle(color: Colors.white),
-                              textInputAction: TextInputAction.next,
-                              decoration: AppTheme.inputDecoration(
-                                'Temporary password',
-                                icon: Icons.lock_outline,
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _showCurrent
-                                        ? Icons.visibility
-                                        : Icons.visibility_off,
-                                    color: Colors.white54,
-                                    size: 18,
-                                  ),
-                                  onPressed: () => setState(
-                                        () => _showCurrent = !_showCurrent,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-
                             // New password
                             TextField(
                               controller: _newPwCtrl,
@@ -235,7 +186,15 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Min. 8 chars with uppercase, lowercase, number & special character',
+                              style: TextStyle(
+                                color: Colors.white38,
+                                fontSize: 11,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
 
                             // Confirm new password
                             TextField(
@@ -280,13 +239,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                               style: AppTheme.primaryButton(),
                               child: _isSaving
                                   ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.black,
-                                ),
-                              )
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.black,
+                                      ),
+                                    )
                                   : const Text('Set New Password'),
                             ),
                           ],

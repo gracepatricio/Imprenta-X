@@ -13,10 +13,32 @@ class AuthService {
 
   static String generateTemporaryPassword() {
     const adjectives = [
-      'Amber', 'Brisk', 'Coral', 'Dusky', 'Ember', 'Flair', 'Glint', 'Haven',
-      'Ivory', 'Jade', 'Karma', 'Lunar', 'Mango', 'Noble', 'Opal', 'Prism',
-      'Quest', 'Raven', 'Solar', 'Terra', 'Ultra', 'Vivid', 'Wheat', 'Xenon',
-      'Yield', 'Zonal',
+      'Amber',
+      'Brisk',
+      'Coral',
+      'Dusky',
+      'Ember',
+      'Flair',
+      'Glint',
+      'Haven',
+      'Ivory',
+      'Jade',
+      'Karma',
+      'Lunar',
+      'Mango',
+      'Noble',
+      'Opal',
+      'Prism',
+      'Quest',
+      'Raven',
+      'Solar',
+      'Terra',
+      'Ultra',
+      'Vivid',
+      'Wheat',
+      'Xenon',
+      'Yield',
+      'Zonal',
     ];
     const symbols = ['@', '#', '!', r'$', '%', '&'];
     final rng = Random.secure();
@@ -75,9 +97,17 @@ class AuthService {
       await secondaryAuth.signOut();
       return (uid: uid, placeholderEmail: placeholderEmail, error: null);
     } on FirebaseAuthException catch (e) {
-      return (uid: null, placeholderEmail: null, error: e.message ?? 'Failed to create auth user.');
+      return (
+        uid: null,
+        placeholderEmail: null,
+        error: e.message ?? 'Failed to create auth user.',
+      );
     } catch (e) {
-      return (uid: null, placeholderEmail: null, error: 'Failed to create auth user: $e');
+      return (
+        uid: null,
+        placeholderEmail: null,
+        error: 'Failed to create auth user: $e',
+      );
     } finally {
       await secondaryApp?.delete();
     }
@@ -86,10 +116,10 @@ class AuthService {
   // ── Register (customer self-registration) ─────────────────────────────────
 
   Future<({User? user, String? error})> createAccount(
-      String email,
-      String password,
-      String fullName,
-      ) async {
+    String email,
+    String password,
+    String fullName,
+  ) async {
     try {
       final cred = await _auth.createUserWithEmailAndPassword(
         email: email,
@@ -116,7 +146,10 @@ class AuthService {
             return (user: null, error: e2.message ?? 'Registration failed.');
           }
         }
-        return (user: null, error: 'An account with this email already exists. Please sign in.');
+        return (
+          user: null,
+          error: 'An account with this email already exists. Please sign in.',
+        );
       }
       return (user: null, error: e.message);
     } catch (e) {
@@ -129,9 +162,7 @@ class AuthService {
   Future<bool> _tryFreeEmail(String email) async {
     try {
       final fnRes = await http.post(
-        Uri.parse(
-          'https://freeemail-xjzzjpgy5a-uc.a.run.app',
-        ),
+        Uri.parse('https://freeemail-xjzzjpgy5a-uc.a.run.app'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email}),
       );
@@ -142,10 +173,10 @@ class AuthService {
   }
 
   Future<String?> finalizeRegistration(
-      String uid,
-      String email,
-      String fullName,
-      ) async {
+    String uid,
+    String email,
+    String fullName,
+  ) async {
     try {
       final customerId = await generateCustomerId();
       await _firestore.collection('User').doc(uid).set({
@@ -173,7 +204,12 @@ class AuthService {
     final tempPassword = generateTemporaryPassword();
     final authResult = await _createAuthUserSecondary(password: tempPassword);
     if (authResult.error != null) {
-      return (password: null, uid: null, employeeId: null, error: authResult.error);
+      return (
+        password: null,
+        uid: null,
+        employeeId: null,
+        error: authResult.error,
+      );
     }
 
     final uid = authResult.uid!;
@@ -196,9 +232,19 @@ class AuthService {
         'is_deleted': false,
         'is_disabled': false,
       });
-      return (password: tempPassword, uid: uid, employeeId: employeeId, error: null);
+      return (
+        password: tempPassword,
+        uid: uid,
+        employeeId: employeeId,
+        error: null,
+      );
     } catch (e) {
-      return (password: null, uid: null, employeeId: null, error: 'Account created in Auth but Firestore write failed: $e');
+      return (
+        password: null,
+        uid: null,
+        employeeId: null,
+        error: 'Account created in Auth but Firestore write failed: $e',
+      );
     }
   }
 
@@ -231,7 +277,11 @@ class AuthService {
       });
       return (uid: uid, password: tempPassword, error: null);
     } catch (e) {
-      return (uid: null, password: null, error: 'Account created in Auth but Firestore write failed: $e');
+      return (
+        uid: null,
+        password: null,
+        error: 'Account created in Auth but Firestore write failed: $e',
+      );
     }
   }
 
@@ -299,11 +349,6 @@ class AuthService {
     if (identifier.contains('@')) {
       print('DEBUG: plain email branch');
 
-      // FIX: Before resolving, check email_index for this email.
-      // If it exists but is NOT 'active', it was invalidated by an email
-      // change — reject it so the old email cannot be used to log in.
-      // This blocks the fallthrough path where the identifier is returned
-      // as-is and Firebase Auth still accepts the old credential.
       try {
         final indexDoc = await _firestore
             .collection('email_index')
@@ -312,11 +357,11 @@ class AuthService {
         if (indexDoc.exists) {
           final status = indexDoc.data()?['status'] as String? ?? '';
           if (status != 'active') {
-            // Email was disabled/deleted — do not resolve it.
-            print('DEBUG: email_index status="$status" for "$identifier" — rejecting');
+            print(
+              'DEBUG: email_index status="$status" for "$identifier" — rejecting',
+            );
             return null;
           }
-          // Active entry found — resolve uid to auth email
           final uid = indexDoc.data()?['uid'] as String?;
           if (uid != null) {
             final userDoc = await _firestore.collection('User').doc(uid).get();
@@ -326,7 +371,6 @@ class AuthService {
               print('DEBUG: email_index → employee/admin authEmail=$authEmail');
               return authEmail ?? identifier;
             }
-            // Customer: Firebase Auth email == real email
             return identifier;
           }
         }
@@ -334,9 +378,6 @@ class AuthService {
         print('DEBUG: email_index check threw: $e');
       }
 
-      // No email_index entry — fall back to querying User collection directly.
-      // This handles customers who registered before email_index was written,
-      // or accounts where email_index was never created.
       try {
         final snap = await _firestore
             .collection('User')
@@ -352,7 +393,6 @@ class AuthService {
             print('DEBUG: User query → employee/admin authEmail=$authEmail');
             return authEmail ?? identifier;
           }
-          // Customer account found in User doc — return email directly.
           print('DEBUG: User query → customer, returning identifier');
           return identifier;
         }
@@ -360,11 +400,6 @@ class AuthService {
         print('DEBUG: User query threw: $e');
       }
 
-      // FIX: Do NOT fall through and return identifier here.
-      // The original code did `return identifier` unconditionally, which
-      // allowed any email — including ones invalidated by an email change —
-      // to attempt Firebase Auth sign-in directly. This was the root cause
-      // of being able to log in with the old email after changing it.
       print('DEBUG: no User doc found for "$identifier" — returning null');
       return null;
     }
@@ -435,7 +470,9 @@ class AuthService {
     print('DEBUG _getPlaceholderEmail uid=$uid');
     try {
       final doc = await _firestore.collection('AuthIndex').doc(uid).get();
-      print('DEBUG _getPlaceholderEmail doc exists=${doc.exists} data=${doc.data()}');
+      print(
+        'DEBUG _getPlaceholderEmail doc exists=${doc.exists} data=${doc.data()}',
+      );
       return doc.data()?['placeholder_email'] as String?;
     } catch (e) {
       print('DEBUG _getPlaceholderEmail threw: $e');
@@ -445,16 +482,36 @@ class AuthService {
 
   // ── Password management ───────────────────────────────────────────────────
 
+  /// Changes the current user's password.
+  ///
+  /// For admin/employee accounts on first login, [currentPassword] may be
+  /// empty — in that case the temp password is fetched from Firestore and
+  /// used to reauthenticate automatically.
   Future<String?> changePassword(
-      String currentPassword,
-      String newPassword,
-      ) async {
+    String currentPassword,
+    String newPassword,
+  ) async {
     try {
       final user = _auth.currentUser;
       if (user == null) return 'Not logged in.';
+
+      // Determine the password to use for reauthentication.
+      String reAuthPassword = currentPassword;
+
+      if (reAuthPassword.isEmpty) {
+        // No current password provided — fetch the stored temp password
+        // from Firestore (set by admin when the account was created).
+        final doc = await _firestore.collection('User').doc(user.uid).get();
+        final tempPassword = doc.data()?['temp_password'] as String?;
+        if (tempPassword == null || tempPassword.isEmpty) {
+          return 'Unable to verify your identity. Please sign out and sign back in.';
+        }
+        reAuthPassword = tempPassword;
+      }
+
       final cred = EmailAuthProvider.credential(
         email: user.email!,
-        password: currentPassword,
+        password: reAuthPassword,
       );
       await user.reauthenticateWithCredential(cred);
       await user.updatePassword(newPassword);
@@ -465,7 +522,9 @@ class AuthService {
       print('DEBUG changePassword() success for uid=${user.uid}');
       return 'success';
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'wrong-password') return 'Current password is incorrect.';
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        return 'Could not verify your identity. Please sign out and sign back in.';
+      }
       return e.message ?? 'Failed to change password.';
     } catch (e) {
       return 'Failed to change password: $e';
@@ -499,7 +558,8 @@ class AuthService {
         secondaryApp = await _createSecondaryApp();
         final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
 
-        final passwordToUse = (currentPassword != null && currentPassword.isNotEmpty)
+        final passwordToUse =
+            (currentPassword != null && currentPassword.isNotEmpty)
             ? currentPassword
             : generateTemporaryPassword();
 
@@ -523,12 +583,12 @@ class AuthService {
             .collection('PendingEmailVerification')
             .doc(user.uid)
             .set({
-          'new_email': newEmail,
-          'new_uid': newUid,
-          'password': passwordToUse,
-          'old_uid': user.uid,
-          'created_at': FieldValue.serverTimestamp(),
-        });
+              'new_email': newEmail,
+              'new_uid': newUid,
+              'password': passwordToUse,
+              'old_uid': user.uid,
+              'created_at': FieldValue.serverTimestamp(),
+            });
 
         await secondaryAuth.signOut();
         return 'migration_sent';
@@ -553,10 +613,10 @@ class AuthService {
           .get();
       if (!pendingDoc.exists) return null;
 
-      final data     = pendingDoc.data()!;
+      final data = pendingDoc.data()!;
       final newEmail = data['new_email'] as String;
-      final newUid   = data['new_uid']   as String;
-      final password = data['password']  as String;
+      final newUid = data['new_uid'] as String;
+      final password = data['password'] as String;
 
       FirebaseApp? secondaryApp;
       bool verified = false;
@@ -635,30 +695,21 @@ class AuthService {
 
   Future<String?> deleteUser(String uid) async {
     try {
-      // Fetch user data first so we can clean up related records
       final userDoc = await _firestore.collection('User').doc(uid).get();
       final email = userDoc.data()?['email'] as String?;
 
-      // Write FreedEmails marker FIRST — this is the safety net that lets
-      // freeEmail (called during registration) clean up the Firebase Auth
-      // account even if deleteAuthUser below fails.
       if (email != null && email.isNotEmpty) {
-        await _firestore
-            .collection('FreedEmails')
-            .doc(email)
-            .set({'uid': uid, 'freed_at': FieldValue.serverTimestamp()});
+        await _firestore.collection('FreedEmails').doc(email).set({
+          'uid': uid,
+          'freed_at': FieldValue.serverTimestamp(),
+        });
       }
 
-      // Best-effort: try to delete Firebase Auth account immediately via
-      // Cloud Function. If this succeeds, registration works instantly.
-      // If it fails, freeEmail called during registration will finish the job.
       try {
         final idToken = await _auth.currentUser?.getIdToken();
         if (idToken != null) {
           await http.post(
-            Uri.parse(
-              'https://deleteauthuser-xjzzjpgy5a-uc.a.run.app',
-            ),
+            Uri.parse('https://deleteauthuser-xjzzjpgy5a-uc.a.run.app'),
             headers: {
               'Content-Type': 'application/json',
               'Authorization': 'Bearer $idToken',
@@ -666,18 +717,13 @@ class AuthService {
             body: jsonEncode({'uid': uid}),
           );
         }
-      } catch (_) {
-        // Non-fatal — FreedEmails marker ensures the email is freed on next
-        // registration attempt.
-      }
+      } catch (_) {}
 
-      // Atomically delete User + AuthIndex from Firestore
       final batch = _firestore.batch();
       batch.delete(_firestore.collection('User').doc(uid));
       batch.delete(_firestore.collection('AuthIndex').doc(uid));
       await batch.commit();
 
-      // Best-effort cleanup of ancillary records
       await Future.wait([
         if (email != null && email.isNotEmpty)
           _firestore
@@ -692,7 +738,6 @@ class AuthService {
             .catchError((_) {}),
       ]);
 
-      // Delete the user's orders
       try {
         final ordersSnap = await _firestore
             .collection('Orders')
@@ -775,18 +820,17 @@ class AuthService {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-
   Future<String> _restoreAsCustomer(
-      String uid,
-      String email,
-      User? firebaseUser, {
-        DocumentReference? existingDocRef,
-      }) async {
+    String uid,
+    String email,
+    User? firebaseUser, {
+    DocumentReference? existingDocRef,
+  }) async {
     final customerId = await generateCustomerId();
     final name =
         firebaseUser?.displayName ??
-            firebaseUser?.email?.split('@')[0] ??
-            'Customer';
+        firebaseUser?.email?.split('@')[0] ??
+        'Customer';
     final data = {
       'email': email,
       'full_name': name,

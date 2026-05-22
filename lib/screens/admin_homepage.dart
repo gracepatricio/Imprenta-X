@@ -187,7 +187,7 @@ class _AdminHomeContent extends StatelessWidget {
             // ── Logo + brand block ──────────────────────────────────
             Column(
               children: [
-                // Logo with ring
+                // Logo with shadow
                 Container(
                   width: 96,
                   height: 96,
@@ -202,21 +202,18 @@ class _AdminHomeContent extends StatelessWidget {
                     ],
                   ),
                   child: ClipOval(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-                      child: Image.asset(
-                        'assets/images/imprentalogo.jpg',
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.30),
-                          ),
-                          child: Icon(
-                            Icons.local_print_shop_rounded,
-                            color: Colors.white.withValues(alpha: 0.80),
-                            size: 44,
-                          ),
+                    child: Image.asset(
+                      'assets/images/imprentalogo.jpg',
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.30),
+                        ),
+                        child: Icon(
+                          Icons.local_print_shop_rounded,
+                          color: Colors.white.withValues(alpha: 0.80),
+                          size: 44,
                         ),
                       ),
                     ),
@@ -224,12 +221,12 @@ class _AdminHomeContent extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // Brand name — plain text, no card behind it
+                // Brand name
                 ShaderMask(
                   shaderCallback: (bounds) => LinearGradient(
                     colors: [
                       Colors.white,
-                      AppTheme.gold.withValues(alpha: 0.95),
+                      const Color(0xFFFFE9AD).withValues(alpha: 0.95),
                       Colors.white.withValues(alpha: 0.85),
                     ],
                     stops: const [0.0, 0.5, 1.0],
@@ -262,11 +259,11 @@ class _AdminHomeContent extends StatelessWidget {
 
             const SizedBox(height: 36),
 
-            // ── Greeting pill ───────────────────────────────────────
+            // ── Greeting card — aligned to navbar (blur 18, alpha 0.72, border 0.45) ──
             ClipRRect(
               borderRadius: BorderRadius.circular(20),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
@@ -274,12 +271,19 @@ class _AdminHomeContent extends StatelessWidget {
                     vertical: 22,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
+                    color: Colors.white.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: Colors.white.withValues(alpha: 0.30),
-                      width: 1,
+                      width: 1.2,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.14),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
@@ -289,9 +293,9 @@ class _AdminHomeContent extends StatelessWidget {
                           children: [
                             Text(
                               greeting,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 12,
-                                color: Colors.white.withValues(alpha: 0.55),
+                                color: Color(0xAAFFFFFF), // soft white muted
                                 fontWeight: FontWeight.w400,
                                 letterSpacing: 0.3,
                               ),
@@ -310,45 +314,39 @@ class _AdminHomeContent extends StatelessWidget {
                         ),
                       ),
 
-                      // Admin badge
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(99),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
+                      // Admin badge — same dark pill as active navbar item
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.gold.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(
+                            color: AppTheme.gold.withValues(alpha: 0.55),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.admin_panel_settings_outlined,
+                              color: AppTheme.gold,
+                              size: 14,
                             ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.gold.withValues(alpha: 0.18),
-                              borderRadius: BorderRadius.circular(99),
-                              border: Border.all(
-                                color: AppTheme.gold.withValues(alpha: 0.55),
-                                width: 1,
+                            const SizedBox(width: 6),
+                            Text(
+                              'Admin',
+                              style: TextStyle(
+                                color: AppTheme.gold,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
                               ),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.admin_panel_settings_outlined,
-                                  color: AppTheme.gold,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Admin',
-                                  style: TextStyle(
-                                    color: AppTheme.gold,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          ],
                         ),
                       ),
                     ],

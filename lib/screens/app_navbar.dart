@@ -1,5 +1,12 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
+
+// Darker gold for the logo text — more visible on a light/translucent navbar
+const Color _navLogoGold = Color(0xFFFFE9AD);
+
+// Dark pill — matches the "Logs & History" active pill and "Order History" button
+const Color _navActiveDark = Color(0xFF1A1A2E);
 
 class AppNavBar extends StatelessWidget {
   final String activeItem;
@@ -24,62 +31,62 @@ class AppNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        // ── Dark translucent glass — original style, slightly more see-through ──
-        decoration: BoxDecoration(
-          color: const Color.fromARGB(
-            255,
-            228,
-            228,
-            228,
-          ).withValues(alpha: 0.30),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.13),
-            width: 1.2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.10),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 680;
-            final navItems = items ?? _defaultItems;
-            return Row(
-              children: [
-                _Logo(),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: isWide
-                        ? navItems
-                              .map(
-                                (item) => _NavItem(
-                                  label: item,
-                                  isActive: item == activeItem,
-                                  onTap: () => onTap(item),
-                                ),
-                              )
-                              .toList()
-                        : [
-                            _CompactMenu(
-                              items: navItems,
-                              activeItem: activeItem,
-                              onTap: onTap,
-                            ),
-                          ],
-                  ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.45),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.14),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
                 ),
               ],
-            );
-          },
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 680;
+                final navItems = items ?? _defaultItems;
+                return Row(
+                  children: [
+                    _Logo(),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: isWide
+                            ? navItems
+                                  .map(
+                                    (item) => _NavItem(
+                                      label: item,
+                                      isActive: item == activeItem,
+                                      onTap: () => onTap(item),
+                                    ),
+                                  )
+                                  .toList()
+                            : [
+                                _CompactMenu(
+                                  items: navItems,
+                                  activeItem: activeItem,
+                                  onTap: onTap,
+                                ),
+                              ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -99,7 +106,7 @@ class _Logo extends StatelessWidget {
           height: 32,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: 0.15),
+            color: Colors.black.withValues(alpha: 0.08),
           ),
           child: ClipOval(
             child: Image.asset(
@@ -107,7 +114,7 @@ class _Logo extends StatelessWidget {
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => const Icon(
                 Icons.local_print_shop,
-                color: Colors.white,
+                color: Colors.black87,
                 size: 18,
               ),
             ),
@@ -187,11 +194,6 @@ class _NavItemState extends State<_NavItem>
 
   @override
   Widget build(BuildContext context) {
-    // Dark navbar — white text like the original
-    final activeColor = Colors.white;
-    final inactiveColor = Colors.white.withValues(alpha: 0.75);
-    final hoveredColor = Colors.white;
-
     return MouseRegion(
       onEnter: _onEnter,
       onExit: _onExit,
@@ -210,18 +212,22 @@ class _NavItemState extends State<_NavItem>
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
+                  // Active: gold pill — matches IMPRENTA INC. branding
+                  // Hover: faint gold tint
                   color: widget.isActive
-                      ? Colors.white.withValues(alpha: 0.22)
-                      : Colors.white.withValues(alpha: 0.09 * _bgOpacity.value),
+                      ? AppTheme.gold
+                      : AppTheme.gold.withValues(
+                          alpha: 0.10 * _bgOpacity.value,
+                        ),
                   borderRadius: BorderRadius.circular(20),
                   border: widget.isActive
                       ? Border.all(
-                          color: Colors.white.withValues(alpha: 0.20),
+                          color: AppTheme.gold.withValues(alpha: 0.60),
                           width: 1,
                         )
                       : Border.all(
-                          color: Colors.white.withValues(
-                            alpha: 0.18 * _bgOpacity.value,
+                          color: AppTheme.gold.withValues(
+                            alpha: 0.20 * _bgOpacity.value,
                           ),
                           width: 1,
                         ),
@@ -230,10 +236,11 @@ class _NavItemState extends State<_NavItem>
                   widget.label,
                   style: TextStyle(
                     color: widget.isActive
-                        ? activeColor
+                        ? Colors
+                              .black87 // dark text on gold pill
                         : _hovered
-                        ? hoveredColor
-                        : inactiveColor,
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.75),
                     fontSize: 14,
                     fontWeight: widget.isActive
                         ? FontWeight.w700
@@ -269,18 +276,18 @@ class _CompactMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
       onSelected: onTap,
-      color: const Color(0xFF1a1a2e),
+      color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+        side: BorderSide(color: Colors.black.withValues(alpha: 0.1)),
       ),
       icon: Container(
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.12),
+          color: Colors.black.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Icon(Icons.menu, color: Colors.white, size: 20),
+        child: const Icon(Icons.menu, color: Colors.black87, size: 20),
       ),
       itemBuilder: (_) => items
           .map(
@@ -289,7 +296,7 @@ class _CompactMenu extends StatelessWidget {
               child: Text(
                 item,
                 style: TextStyle(
-                  color: item == activeItem ? AppTheme.gold : Colors.white,
+                  color: item == activeItem ? AppTheme.gold : Colors.black87,
                   fontWeight: item == activeItem
                       ? FontWeight.bold
                       : FontWeight.normal,

@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
 import 'app_navbar.dart';
 import 'admin_manage_users_screen.dart';
-import 'admin_manage_account.dart';
+import 'admin_profile.dart';
 
 // ── Liquid Glass Design Tokens ────────────────────────────────────────────────
 class _Glass {
@@ -174,9 +174,10 @@ class _Sidebar extends StatelessWidget {
     required this.onLogout,
   });
 
+  // ── 'manage' key renamed to 'profile', label changed to 'Profile' ──────────
   static const _items = [
     ('dashboard', 'Dashboard', Icons.dashboard_rounded),
-    ('manage', 'Manage Account', Icons.manage_accounts_rounded),
+    ('profile', 'Profile', Icons.person_rounded),
     ('roles', 'Manage Users', Icons.admin_panel_settings_rounded),
   ];
 
@@ -360,7 +361,6 @@ class _ContentPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      // Fill remaining height so all tabs look consistent
       constraints: const BoxConstraints(minHeight: double.infinity),
       decoration: BoxDecoration(
         color: _Glass.surface,
@@ -377,8 +377,9 @@ class _ContentPanel extends StatelessWidget {
     switch (selectedMenu) {
       case 'dashboard':
         return const _AdminDashboardContent();
-      case 'manage':
-        return AdminManageAccount(onNameUpdated: onNameUpdated);
+      case 'profile':
+        // ── updated key + widget name ──────────────────────────────
+        return AdminProfile(onNameUpdated: onNameUpdated);
       case 'roles':
         return const ManageUsersScreen();
       default:
@@ -471,7 +472,6 @@ class _AdminDashboardContent extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
 
-                  // ── Responsive order cards ──────────────────────────────
                   LayoutBuilder(
                     builder: (_, c) {
                       final cards = [
@@ -495,7 +495,6 @@ class _AdminDashboardContent extends StatelessWidget {
                         ),
                       ];
 
-                      // Wide enough for 3 columns
                       if (c.maxWidth >= 480) {
                         return IntrinsicHeight(
                           child: Row(
@@ -509,7 +508,6 @@ class _AdminDashboardContent extends StatelessWidget {
                           ),
                         );
                       }
-                      // Medium: 2 + 1 row
                       if (c.maxWidth >= 280) {
                         return Column(
                           children: [
@@ -527,7 +525,6 @@ class _AdminDashboardContent extends StatelessWidget {
                           ],
                         );
                       }
-                      // Narrow: single column
                       return Column(
                         children: [
                           cards[0],
@@ -740,13 +737,20 @@ class _AdminDashboardContent extends StatelessWidget {
                               Row(
                                 children: [
                                   Expanded(
-                                    child: Text(
-                                      customer,
-                                      style: const TextStyle(
-                                        color: _Glass.textPrimary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          customer,
+                                          style: const TextStyle(
+                                            color: _Glass.textPrimary,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        _CustomerIdText(data: data),
+                                      ],
                                     ),
                                   ),
                                   Row(
@@ -770,9 +774,9 @@ class _AdminDashboardContent extends StatelessWidget {
                                         .collection('OrderReviews')
                                         .doc(d.id)
                                         .update({'read': true}),
-                                    child: Tooltip(
+                                    child: const Tooltip(
                                       message: 'Mark as read',
-                                      child: const Icon(
+                                      child: Icon(
                                         Icons.check_circle_outline,
                                         color: _Glass.textMuted,
                                         size: 17,
@@ -940,7 +944,6 @@ class _DashCard extends StatelessWidget {
               ),
               child: Icon(icon, color: color, size: 15),
             ),
-            // Label pill — wraps text so it never overflows
             Flexible(
               child: Container(
                 margin: const EdgeInsets.only(left: 6),
@@ -973,6 +976,43 @@ class _DashCard extends StatelessWidget {
           ),
         ),
       ],
+    ),
+  );
+}
+
+/// Resolves a customer_uid to a CUS-XXX id via the User collection.
+class _CustomerIdText extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _CustomerIdText({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final stored = data['customer_id']?.toString() ?? '';
+    if (stored.isNotEmpty) return _label(stored);
+
+    final uid = data['customer_uid']?.toString() ?? '';
+    if (uid.isEmpty) return const SizedBox.shrink();
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('User').doc(uid).get(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final cid =
+            (snap.data?.data() as Map<String, dynamic>?)?['customer_id']
+                ?.toString() ??
+            '';
+        if (cid.isEmpty) return const SizedBox.shrink();
+        return _label(cid);
+      },
+    );
+  }
+
+  Widget _label(String id) => Text(
+    'ID: $id',
+    style: const TextStyle(
+      color: Color(0xFF9CA3AF),
+      fontSize: 11,
+      fontFamily: 'monospace',
     ),
   );
 }

@@ -11,12 +11,12 @@ class ResetPasswordScreen extends StatefulWidget {
 }
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
-  final _newPwCtrl  = TextEditingController();
+  final _newPwCtrl = TextEditingController();
   final _confPwCtrl = TextEditingController();
-  bool _showNew     = false;
-  bool _showConf    = false;
-  bool _isSaving    = false;
-  bool _success     = false;
+  bool _showNew = false;
+  bool _showConf = false;
+  bool _isSaving = false;
+  bool _success = false;
   String? _error;
 
   @override
@@ -26,39 +26,72 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     super.dispose();
   }
 
+  /// Returns null if valid, or an error message string if invalid.
+  String? _validatePassword(String password) {
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(password)) {
+      return 'Password must contain at least one uppercase letter.';
+    }
+    if (!RegExp(r'[a-z]').hasMatch(password)) {
+      return 'Password must contain at least one lowercase letter.';
+    }
+    if (!RegExp(r'[0-9]').hasMatch(password)) {
+      return 'Password must contain at least one number.';
+    }
+    if (!RegExp(
+      r'[!@#$%^&*()\-_=+\[\]{};:,.<>?/\\|`~'
+      "'\"]",
+    ).hasMatch(password)) {
+      return 'Password must contain at least one special character.';
+    }
+    return null;
+  }
+
   Future<void> _save() async {
-    final pw   = _newPwCtrl.text.trim();
+    final pw = _newPwCtrl.text.trim();
     final conf = _confPwCtrl.text.trim();
 
     if (pw.isEmpty || conf.isEmpty) {
       setState(() => _error = 'Please fill in both fields.');
       return;
     }
-    if (pw.length < 6) {
-      setState(() => _error = 'Password must be at least 6 characters.');
+
+    final pwError = _validatePassword(pw);
+    if (pwError != null) {
+      setState(() => _error = pwError);
       return;
     }
+
     if (pw != conf) {
       setState(() => _error = 'Passwords do not match.');
       return;
     }
 
-    setState(() { _isSaving = true; _error = null; });
+    setState(() {
+      _isSaving = true;
+      _error = null;
+    });
 
     try {
       await FirebaseAuth.instance.confirmPasswordReset(
         code: widget.oobCode,
         newPassword: pw,
       );
-      if (mounted) setState(() { _success = true; _isSaving = false; });
+      if (mounted)
+        setState(() {
+          _success = true;
+          _isSaving = false;
+        });
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         setState(() {
           _error = e.code == 'expired-action-code'
               ? 'This reset link has expired. Please request a new one.'
               : e.code == 'invalid-action-code'
-                  ? 'Invalid reset link. Please request a new one.'
-                  : (e.message ?? 'Failed to reset password. Try again.');
+              ? 'Invalid reset link. Please request a new one.'
+              : (e.message ?? 'Failed to reset password. Try again.');
           _isSaving = false;
         });
       }
@@ -93,20 +126,25 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                         shape: BoxShape.circle,
                         color: AppTheme.gold.withValues(alpha: 0.15),
                         border: Border.all(
-                            color: AppTheme.gold.withValues(alpha: 0.4),
-                            width: 1.5),
+                          color: AppTheme.gold.withValues(alpha: 0.4),
+                          width: 1.5,
+                        ),
                       ),
-                      child: const Icon(Icons.lock_outline,
-                          color: AppTheme.gold, size: 30),
+                      child: const Icon(
+                        Icons.lock_outline,
+                        color: AppTheme.gold,
+                        size: 30,
+                      ),
                     ),
                     const SizedBox(height: 18),
 
                     Text(
                       _success ? 'Password updated!' : 'Set new password',
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold),
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -115,7 +153,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           : 'Enter and confirm your new password.',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                          color: Colors.white54, fontSize: 13),
+                        color: Colors.white54,
+                        fontSize: 13,
+                      ),
                     ),
                     const SizedBox(height: 28),
 
@@ -157,7 +197,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 4),
+        const Text(
+          'Min. 8 chars with uppercase, lowercase, number & special character',
+          style: TextStyle(color: Colors.white38, fontSize: 11),
+        ),
+        const SizedBox(height: 10),
 
         TextField(
           controller: _confPwCtrl,
@@ -181,8 +226,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
         if (_error != null) ...[
           const SizedBox(height: 10),
-          Text(_error!,
-              style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+          Text(
+            _error!,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+          ),
         ],
 
         const SizedBox(height: 24),
@@ -195,7 +242,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.black),
+                    strokeWidth: 2,
+                    color: Colors.black,
+                  ),
                 )
               : const Text('Save Password'),
         ),
@@ -206,8 +255,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   Widget _buildSuccess() {
     return Column(
       children: [
-        const Icon(Icons.check_circle_outline,
-            color: Colors.greenAccent, size: 52),
+        const Icon(
+          Icons.check_circle_outline,
+          color: Colors.greenAccent,
+          size: 52,
+        ),
         const SizedBox(height: 20),
         SizedBox(
           width: double.infinity,
