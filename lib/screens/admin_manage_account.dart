@@ -246,7 +246,65 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
         return;
       }
 
-      await _finalizeEmailChange(_pendingNewEmail);
+      // Capture pending email before any state changes wipe it
+      final emailToFinalize = _pendingNewEmail;
+
+      if (mounted) {
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          useRootNavigator: true,
+          builder: (ctx) => PopScope(
+            canPop: false,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              backgroundColor: Colors.white,
+              title: Row(
+                children: const [
+                  Icon(Icons.verified_outlined, color: Color(0xFF166534), size: 22),
+                  SizedBox(width: 10),
+                  Text(
+                    'Email Verified',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                  ),
+                ],
+              ),
+              content: const Text(
+                'Your email has been changed successfully. Tap "Log Out Now" to sign back in with your new email address.',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: Color(0xFF3A3A52),
+                  height: 1.5,
+                ),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.of(ctx, rootNavigator: true).pop();
+                    await _finalizeEmailChange(emailToFinalize);
+                    await FirebaseAuth.instance.signOut();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD4A94D),
+                    foregroundColor: Colors.black,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  ),
+                  child: const Text(
+                    'Log Out Now',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
     } on FirebaseAuthException catch (e) {
       if (e.code == 'user-token-expired' ||
           e.code == 'invalid-user-token' ||
@@ -478,7 +536,7 @@ class _AdminManageAccountState extends State<AdminManageAccount> {
               ),
               const SizedBox(width: 10),
               const Text(
-                'Manage Account',
+                'Manage Profile',
                 style: TextStyle(
                   color: Color(0xFF1A1A2E),
                   fontSize: 20,

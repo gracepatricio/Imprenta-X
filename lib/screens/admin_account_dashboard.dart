@@ -80,6 +80,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
   String _selectedMenu = 'dashboard';
   String _fullName = '';
   String _email = '';
+  String _uid = '';
 
   @override
   void initState() {
@@ -98,6 +99,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
       setState(() {
         _fullName = doc.data()?['full_name'] ?? user.displayName ?? 'Admin';
         _email = doc.data()?['email'] ?? user.email ?? '';
+        _uid = user.uid;
       });
     }
   }
@@ -134,6 +136,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
                     _Sidebar(
                       fullName: _fullName,
                       email: _email,
+                      uid: _uid,
                       selectedMenu: _selectedMenu,
                       onMenuTap: (key) => setState(() => _selectedMenu = key),
                       onLogout: _logout,
@@ -162,6 +165,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
 class _Sidebar extends StatelessWidget {
   final String fullName;
   final String email;
+  final String uid;
   final String selectedMenu;
   final ValueChanged<String> onMenuTap;
   final VoidCallback onLogout;
@@ -169,15 +173,16 @@ class _Sidebar extends StatelessWidget {
   const _Sidebar({
     required this.fullName,
     required this.email,
+    required this.uid,
     required this.selectedMenu,
     required this.onMenuTap,
     required this.onLogout,
   });
 
   static const _items = [
-    ('dashboard', 'Dashboard', Icons.dashboard_rounded),
-    ('manage', 'Manage Account', Icons.manage_accounts_rounded),
-    ('roles', 'Manage Users', Icons.admin_panel_settings_rounded),
+    ('dashboard', 'Dashboard',  Icons.dashboard_rounded),
+    ('manage',    'Profile',    Icons.manage_accounts_rounded),
+    ('roles',     'Manage Users', Icons.admin_panel_settings_rounded),
   ];
 
   @override
@@ -230,6 +235,21 @@ class _Sidebar extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          if (uid.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              uid,
+              style: const TextStyle(
+                color: _Glass.textMuted,
+                fontSize: 8.5,
+                fontFamily: 'monospace',
+                letterSpacing: 0.2,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
 
           const SizedBox(height: 18),
           Divider(color: _Glass.borderMid, thickness: 0.8),
@@ -237,7 +257,7 @@ class _Sidebar extends StatelessWidget {
 
           // Nav items
           ..._items.map(
-            (item) => _SidebarItem(
+                (item) => _SidebarItem(
               label: item.$2,
               icon: item.$3,
               isActive: selectedMenu == item.$1,
@@ -553,34 +573,34 @@ class _AdminDashboardContent extends StatelessWidget {
                 .snapshots(),
             builder: (_, snap) {
               final items =
-                  (snap.data?.docs ?? []).where((d) {
-                    final data = d.data() as Map<String, dynamic>;
-                    return _status(
-                          (data['current_stock'] as num?) ?? 0,
-                          (data['restock_level'] as num?) ?? 1,
-                        ) !=
-                        'In Stock';
-                  }).toList()..sort((a, b) {
-                    const ord = {
-                      'Out of Stock': 0,
-                      'Critical': 1,
-                      'Low Stock': 2,
-                    };
-                    final aD = a.data() as Map;
-                    final bD = b.data() as Map;
-                    return (ord[_status(
-                              (aD['current_stock'] as num?) ?? 0,
-                              (aD['restock_level'] as num?) ?? 1,
-                            )] ??
-                            3)
-                        .compareTo(
-                          ord[_status(
-                                (bD['current_stock'] as num?) ?? 0,
-                                (bD['restock_level'] as num?) ?? 1,
-                              )] ??
-                              3,
-                        );
-                  });
+              (snap.data?.docs ?? []).where((d) {
+                final data = d.data() as Map<String, dynamic>;
+                return _status(
+                  (data['current_stock'] as num?) ?? 0,
+                  (data['restock_level'] as num?) ?? 1,
+                ) !=
+                    'In Stock';
+              }).toList()..sort((a, b) {
+                const ord = {
+                  'Out of Stock': 0,
+                  'Critical': 1,
+                  'Low Stock': 2,
+                };
+                final aD = a.data() as Map;
+                final bD = b.data() as Map;
+                return (ord[_status(
+                  (aD['current_stock'] as num?) ?? 0,
+                  (aD['restock_level'] as num?) ?? 1,
+                )] ??
+                    3)
+                    .compareTo(
+                  ord[_status(
+                    (bD['current_stock'] as num?) ?? 0,
+                    (bD['restock_level'] as num?) ?? 1,
+                  )] ??
+                      3,
+                );
+              });
 
               return Container(
                 padding: const EdgeInsets.all(18),
@@ -680,15 +700,15 @@ class _AdminDashboardContent extends StatelessWidget {
                 .snapshots(),
             builder: (_, snap) {
               final unread =
-                  (snap.data?.docs ?? [])
-                      .where((d) => (d.data() as Map)['read'] != true)
-                      .toList()
-                    ..sort((a, b) {
-                      final at = (a.data() as Map)['created_at'];
-                      final bt = (b.data() as Map)['created_at'];
-                      if (at == null || bt == null) return 0;
-                      return (bt as dynamic).compareTo(at);
-                    });
+              (snap.data?.docs ?? [])
+                  .where((d) => (d.data() as Map)['read'] != true)
+                  .toList()
+                ..sort((a, b) {
+                  final at = (a.data() as Map)['created_at'];
+                  final bt = (b.data() as Map)['created_at'];
+                  if (at == null || bt == null) return 0;
+                  return (bt as dynamic).compareTo(at);
+                });
 
               return Container(
                 padding: const EdgeInsets.all(18),
@@ -753,7 +773,7 @@ class _AdminDashboardContent extends StatelessWidget {
                                     mainAxisSize: MainAxisSize.min,
                                     children: List.generate(
                                       5,
-                                      (i) => Icon(
+                                          (i) => Icon(
                                         i < rating
                                             ? Icons.star_rounded
                                             : Icons.star_outline_rounded,
