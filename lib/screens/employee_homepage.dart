@@ -1,13 +1,32 @@
+// employee_homepage.dart
+// ---------------------------------------------------------------------------
+// Platform-aware shell for the employee section.
+//
+//  ┌──────────────────────────────────────────────────────┐
+//  │  Platform   │  Nav items shown                       │
+//  ├──────────────────────────────────────────────────────┤
+//  │  Web        │  Home · Inventory · Job Queue ·        │
+//  │             │  Accounting · Account                  │
+//  ├──────────────────────────────────────────────────────┤
+//  │  Mobile     │  Job Queue · Account           (only)  │
+//  │  (Android/  │  • Job Queue → read-only view          │
+//  │   iOS)      │  • Accounting tab → hidden             │
+//  │             │  • POS / Sales → hidden                │
+//  └──────────────────────────────────────────────────────┘
+// ---------------------------------------------------------------------------
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
 import 'app_navbar.dart';
+import 'platform_utils.dart';
 import 'employee_home_screen.dart';
 import 'employee_inventory_screen.dart';
 import 'employee_inventory_forecast_screen.dart';
-import 'employee_logs_screen.dart';
+import 'employee_logs_screen.dart';               // full web version
+import 'employee_job_queue_mobile_screen.dart';   // read-only mobile version
 import 'employee_account_screen.dart';
 
 class EmployeeHomepage extends StatefulWidget {
@@ -18,16 +37,36 @@ class EmployeeHomepage extends StatefulWidget {
 }
 
 class _EmployeeHomepageState extends State<EmployeeHomepage> {
-  static const _items = ['Home', 'Inventory', 'Job Queue', 'Accounting', 'Account'];
-  String _active = 'Home';
+  // Nav items differ by platform.
+  static const _webItems = [
+    'Home',
+    'Inventory',
+    'Job Queue',
+    'Accounting',
+    'Account',
+  ];
+
+  static const _mobileItems = [
+    'Job Queue',
+    'Account',
+  ];
+
+  List<String> get _navItems =>
+      PlatformUtils.isMobileDevice ? _mobileItems : _webItems;
+
+  late String _active;
 
   StreamSubscription<DocumentSnapshot>? _deletionSub;
 
   @override
   void initState() {
     super.initState();
+    // Start on the first available tab for this platform.
+    _active = _navItems.first;
     _listenForDeletion();
   }
+
+  // ── Account-deletion listener ────────────────────────────────────────────
 
   void _listenForDeletion() {
     final user = FirebaseAuth.instance.currentUser;
@@ -49,7 +88,7 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
         }
       },
       onError: (_) {
-        // Network unavailable — ignore, listener will resume when reconnected
+        // Network unavailable — ignore, listener resumes on reconnect.
       },
     );
   }
@@ -60,7 +99,25 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
     super.dispose();
   }
 
+  // ── Screen routing ───────────────────────────────────────────────────────
+
   Widget get _screen {
+    // Mobile employees only reach Job Queue and Account.
+    if (PlatformUtils.isMobileDevice) {
+      switch (_active) {
+        case 'Account':
+          return EmployeeAccountScreen(
+            // Mobile: "view logs" shortcut still goes to Job Queue tab.
+            onNavigateToLogs: (_) =>
+                setState(() => _active = 'Job Queue'),
+          );
+        case 'Job Queue':
+        default:
+          return const EmployeeMobileJobQueueScreen();
+      }
+    }
+
+    // Web / desktop: full feature set.
     switch (_active) {
       case 'Inventory':
         return const _InventoryTabContainer();
@@ -77,6 +134,8 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
     }
   }
 
+  // ── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -85,7 +144,7 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
         child: Column(
           children: [
             AppNavBar(
-              items: _items,
+              items: _navItems,
               activeItem: _active,
               onTap: (item) => setState(() => _active = item),
             ),
@@ -97,13 +156,14 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
   }
 }
 
-// ── Inventory tab container (Inventory | Forecast) ────────────────────────────
+// ── Inventory tab container (web only) ────────────────────────────────────
 
 class _InventoryTabContainer extends StatefulWidget {
   const _InventoryTabContainer();
 
   @override
-  State<_InventoryTabContainer> createState() => _InventoryTabContainerState();
+  State<_InventoryTabContainer> createState() =>
+      _InventoryTabContainerState();
 }
 
 class _InventoryTabContainerState extends State<_InventoryTabContainer> {
@@ -113,7 +173,6 @@ class _InventoryTabContainerState extends State<_InventoryTabContainer> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Pill tab bar — matches the pattern used throughout the app
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
           child: Row(
@@ -164,7 +223,8 @@ class _InventoryPillTab extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        padding:
+        const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
         decoration: BoxDecoration(
           color: isActive
               ? AppTheme.gold
