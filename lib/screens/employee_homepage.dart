@@ -18,9 +18,8 @@ class EmployeeHomepage extends StatefulWidget {
 }
 
 class _EmployeeHomepageState extends State<EmployeeHomepage> {
-  static const _items = ['Home', 'Inventory', 'Logs & History', 'Account'];
-  String _active          = 'Home';
-  int    _logsInitialTab  = 0; // 0=pending queue, 1=active queue, 2=ready for pickup
+  static const _items = ['Home', 'Inventory', 'Job Queue', 'Accounting', 'Account'];
+  String _active = 'Home';
 
   StreamSubscription<DocumentSnapshot>? _deletionSub;
 
@@ -65,14 +64,13 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
     switch (_active) {
       case 'Inventory':
         return const _InventoryTabContainer();
-      case 'Logs & History':
-        return EmployeeLogsScreen(initialJobQueueTab: _logsInitialTab);
+      case 'Job Queue':
+        return const EmployeeJobQueueScreen();
+      case 'Accounting':
+        return const EmployeeLogsScreen();
       case 'Account':
         return EmployeeAccountScreen(
-          onNavigateToLogs: (tab) => setState(() {
-            _logsInitialTab = tab;
-            _active         = 'Logs & History';
-          }),
+          onNavigateToLogs: (_) => setState(() => _active = 'Job Queue'),
         );
       default:
         return const EmployeeHomeScreen();

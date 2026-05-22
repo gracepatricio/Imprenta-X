@@ -26,6 +26,8 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
   void initState() {
     super.initState();
     _searchCtrl.addListener(_onSearchChanged);
+    // Show all customers immediately before any search is performed
+    _loadAllCustomers();
   }
 
   @override
@@ -42,14 +44,43 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
     if (q == _searchQuery) return;
     _searchQuery = q;
     if (q.isEmpty) {
+      // Show all customers when the search field is cleared
       setState(() {
-        _customers = [];
         _selectedCustomer = null;
         _activeOrders = [];
       });
+      _loadAllCustomers();
       return;
     }
     _searchCustomers(q);
+  }
+
+  Future<void> _loadAllCustomers() async {
+    setState(() => _loadingCustomers = true);
+    try {
+      final snap = await _db
+          .collection('User')
+          .where('role', isEqualTo: 'customer')
+          .limit(100)
+          .get()
+          .catchError((_) => null);
+      final results = <Map<String, dynamic>>[];
+      if (snap != null) {
+        for (final doc in snap.docs) {
+          results.add({'uid': doc.id, ...doc.data()});
+        }
+        results.sort((a, b) {
+          final na = (a['full_name'] as String? ?? '').toLowerCase();
+          final nb = (b['full_name'] as String? ?? '').toLowerCase();
+          return na.compareTo(nb);
+        });
+      }
+      if (mounted) setState(() => _customers = results);
+    } catch (e) {
+      _showSnack('Could not load customers: $e');
+    } finally {
+      if (mounted) setState(() => _loadingCustomers = false);
+    }
   }
 
   Future<void> _searchCustomers(String query) async {
@@ -408,14 +439,16 @@ class _CustomerResultsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (query.isEmpty) {
+    if (loading && customers.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (query.isEmpty && customers.isEmpty) {
       return _EmptyHint(
         icon: Icons.person_search_outlined,
-        title: 'Search for a customer',
-        subtitle: 'Enter a name or customer ID above to begin',
+        title: 'No customers found',
+        subtitle: 'Could not load customer list',
       );
     }
-    if (loading) return const Center(child: CircularProgressIndicator());
     if (customers.isEmpty) {
       return _EmptyHint(
         icon: Icons.search_off_rounded,
