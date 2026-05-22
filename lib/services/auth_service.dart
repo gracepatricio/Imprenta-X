@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:http/http.dart' as http;
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -98,12 +100,44 @@ class AuthService {
       return (user: cred.user, error: null);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'email-already-in-use') {
-        final msg = await _handleExistingEmail(email);
-        return (user: null, error: msg);
+        // Check if admin freed this email — if so, remove the old Firebase
+        // Auth account and retry so the user gets a clean fresh account.
+        final freed = await _tryFreeEmail(email);
+        if (freed) {
+          try {
+            final cred = await _auth.createUserWithEmailAndPassword(
+              email: email,
+              password: password,
+            );
+            await cred.user!.updateDisplayName(fullName);
+            await cred.user!.sendEmailVerification();
+            return (user: cred.user, error: null);
+          } on FirebaseAuthException catch (e2) {
+            return (user: null, error: e2.message ?? 'Registration failed.');
+          }
+        }
+        return (user: null, error: 'An account with this email already exists. Please sign in.');
       }
       return (user: null, error: e.message);
     } catch (e) {
       return (user: null, error: 'Registration failed: $e');
+    }
+  }
+
+  /// Returns true if the Firebase Auth account for [email] was freed via the
+  /// Cloud Function (i.e. the admin had deleted that account).
+  Future<bool> _tryFreeEmail(String email) async {
+    try {
+      final fnRes = await http.post(
+        Uri.parse(
+          'https://freeemail-xjzzjpgy5a-uc.a.run.app',
+        ),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+      return fnRes.statusCode == 200;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -232,37 +266,15 @@ class AuthService {
         'DEBUG login() role=${data['user_role']} is_disabled=${data['is_disabled']} must_change=${data['must_change_password']}',
       );
 
-      if (data['is_disabled'] == true) {
+      // Legacy soft-deleted accounts (before hard-delete was introduced)
+      if (data['is_deleted'] == true) {
         await _auth.signOut();
-        return 'This account has been disabled. Please contact an administrator.';
+        return 'This account no longer exists. Please contact support.';
       }
 
-      if (data['is_deleted'] == true) {
-        bool canRestore = false;
-        try {
-          final indexDoc = await _firestore
-              .collection('email_index')
-              .doc(emailToUse)
-              .get();
-          canRestore = (indexDoc.data()?['status'] as String?) == 'reclaiming';
-        } catch (_) {}
-
-        if (canRestore) {
-          _firestore
-              .collection('email_index')
-              .doc(emailToUse)
-              .delete()
-              .catchError((_) {});
-          return await _restoreAsCustomer(
-            uid,
-            emailToUse,
-            cred.user,
-            existingDocRef: doc.reference,
-          );
-        }
-
+      if (data['is_disabled'] == true) {
         await _auth.signOut();
-        return 'This account has been deactivated. Please contact support.';
+        return 'This account was disabled by the admin.';
       }
 
       if (data['must_change_password'] == true) {
@@ -623,10 +635,78 @@ class AuthService {
 
   Future<String?> deleteUser(String uid) async {
     try {
-      await _firestore.collection('User').doc(uid).update({
-        'is_deleted': true,
-        'deleted_at': FieldValue.serverTimestamp(),
-      });
+      // Fetch user data first so we can clean up related records
+      final userDoc = await _firestore.collection('User').doc(uid).get();
+      final email = userDoc.data()?['email'] as String?;
+
+      // Write FreedEmails marker FIRST — this is the safety net that lets
+      // freeEmail (called during registration) clean up the Firebase Auth
+      // account even if deleteAuthUser below fails.
+      if (email != null && email.isNotEmpty) {
+        await _firestore
+            .collection('FreedEmails')
+            .doc(email)
+            .set({'uid': uid, 'freed_at': FieldValue.serverTimestamp()});
+      }
+
+      // Best-effort: try to delete Firebase Auth account immediately via
+      // Cloud Function. If this succeeds, registration works instantly.
+      // If it fails, freeEmail called during registration will finish the job.
+      try {
+        final idToken = await _auth.currentUser?.getIdToken();
+        if (idToken != null) {
+          await http.post(
+            Uri.parse(
+              'https://deleteauthuser-xjzzjpgy5a-uc.a.run.app',
+            ),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $idToken',
+            },
+            body: jsonEncode({'uid': uid}),
+          );
+        }
+      } catch (_) {
+        // Non-fatal — FreedEmails marker ensures the email is freed on next
+        // registration attempt.
+      }
+
+      // Atomically delete User + AuthIndex from Firestore
+      final batch = _firestore.batch();
+      batch.delete(_firestore.collection('User').doc(uid));
+      batch.delete(_firestore.collection('AuthIndex').doc(uid));
+      await batch.commit();
+
+      // Best-effort cleanup of ancillary records
+      await Future.wait([
+        if (email != null && email.isNotEmpty)
+          _firestore
+              .collection('email_index')
+              .doc(email)
+              .delete()
+              .catchError((_) {}),
+        _firestore
+            .collection('PendingEmailVerification')
+            .doc(uid)
+            .delete()
+            .catchError((_) {}),
+      ]);
+
+      // Delete the user's orders
+      try {
+        final ordersSnap = await _firestore
+            .collection('Orders')
+            .where('uid', isEqualTo: uid)
+            .get();
+        if (ordersSnap.docs.isNotEmpty) {
+          final ob = _firestore.batch();
+          for (final d in ordersSnap.docs) {
+            ob.delete(d.reference);
+          }
+          await ob.commit();
+        }
+      } catch (_) {}
+
       return 'success';
     } catch (e) {
       return 'Failed to delete user: $e';
@@ -695,29 +775,6 @@ class AuthService {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  Future<String?> _handleExistingEmail(String email) async {
-    try {
-      final indexDoc = await _firestore
-          .collection('email_index')
-          .doc(email)
-          .get();
-      if (indexDoc.exists) {
-        final status = indexDoc.data()?['status'] as String? ?? '';
-        if (status == 'deleted' || status == 'reclaiming') {
-          _firestore
-              .collection('email_index')
-              .doc(email)
-              .set({'status': 'reclaiming'})
-              .catchError((_) {});
-          try {
-            await _auth.sendPasswordResetEmail(email: email);
-          } catch (_) {}
-          return 'account_reclaim_needed';
-        }
-      }
-    } catch (_) {}
-    return 'An account with this email already exists. Please sign in.';
-  }
 
   Future<String> _restoreAsCustomer(
       String uid,

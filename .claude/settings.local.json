@@ -9,7 +9,13 @@
       "Bash(findstr \"error:\")",
       "Bash(findstr /i \"error:\")",
       "Bash(Select-String \"error\")",
-      "Bash(firebase deploy *)"
+      "Bash(firebase deploy *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\ADMIN\\\\AndroidStudioProjects\\\\Imprenta-X-main\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(xargs grep -l \"^class.*{$\")",
+      "Bash(dart analyze *)",
+      "Bash(firebase functions:delete deleteAuthUser --project imprenta-x-system --force)",
+      "Bash(curl *)"
     ]
   }
 }

@@ -1270,16 +1270,6 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
             ),
           ],
 
-          // QR Code
-          if (remaining > 0.009 || _status == 'awaiting_payment') ...[
-            const SizedBox(height: 20),
-            _AccountQrSection(
-              docId:    widget.docId,
-              order:    widget.data,
-              status:   _status,
-              remaining: remaining,
-            ),
-          ],
 
           // Pay button
           if (showPayBtn) ...[
@@ -1370,12 +1360,41 @@ class _AccountQrSection extends StatefulWidget {
 class _AccountQrSectionState extends State<_AccountQrSection> {
   String? _localUrl;
   bool    _generating = false;
+  bool    _stale      = false;
 
-  String? get _url =>
-      _localUrl ??
-          (widget.status == 'awaiting_payment'
-              ? widget.order['paymongo_checkout_url'] as String?
-              : widget.order['balance_checkout_url']  as String?);
+  @override
+  void initState() {
+    super.initState();
+    if (widget.status != 'awaiting_payment') {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _validateStoredLink());
+    }
+  }
+
+  Future<void> _validateStoredLink() async {
+    final linkId = widget.order['balance_link_id'] as String?;
+    if (linkId == null || !mounted) return;
+    try {
+      await PayMongoService.getLinkStatus(linkId);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _stale = true);
+      final orderId = widget.order['order_id']?.toString() ?? widget.docId;
+      FirebaseFirestore.instance.collection('Orders').doc(orderId).update({
+        'balance_link_id':      FieldValue.delete(),
+        'balance_checkout_url': FieldValue.delete(),
+        'balance_link_amount':  FieldValue.delete(),
+      }).catchError((_) {});
+      if (mounted) await _generate();
+    }
+  }
+
+  String? get _url {
+    if (_stale) return _localUrl;
+    return _localUrl ??
+        (widget.status == 'awaiting_payment'
+            ? widget.order['paymongo_checkout_url'] as String?
+            : widget.order['balance_checkout_url']  as String?);
+  }
 
   Future<void> _generate() async {
     setState(() => _generating = true);

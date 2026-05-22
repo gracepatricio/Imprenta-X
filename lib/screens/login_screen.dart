@@ -42,7 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      _snack('Login failed: $e');
+      _snack('An unexpected error occurred. Please try again.', isError: true);
       return;
     }
 
@@ -50,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     if (result == null) {
-      _snack('Login failed. Please try again.');
+      _snack('Login failed. Please try again.', isError: true);
       return;
     }
 
@@ -93,13 +93,32 @@ class _LoginScreenState extends State<LoginScreen> {
 
       default:
       // Any other string is an error message from AuthService
-        _snack(result);
+        _snack(result, isError: true);
     }
   }
 
-  void _snack(String msg) {
+  void _snack(String msg, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          msg,
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+        ),
+        backgroundColor: isError ? const Color(0xFFB00020) : Colors.black87,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'OK',
+          textColor: Colors.white,
+          onPressed: () => messenger.hideCurrentSnackBar(),
+        ),
+      ),
+    );
   }
 
   @override

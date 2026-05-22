@@ -5,6 +5,7 @@ import 'app_theme.dart';
 import 'sales_widgets.dart';
 import 'employee_pos_screen.dart';
 import 'invoice_screen.dart';
+import '../services/inventory_service.dart';
 
 class EmployeeLogsScreen extends StatefulWidget {
   // 0 = Job Queue Pending, 1 = Job Queue Active, 2 = Ready for Pickup
@@ -2362,6 +2363,24 @@ class _ReadyOrderCard extends StatelessWidget {
     }
   }
 
+  Future<void> _viewInvoice(BuildContext context) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('Orders')
+        .doc(orderId)
+        .get();
+    final invId = snap.data()?['invoice_id']?.toString();
+    if (!context.mounted) return;
+    if (invId != null && invId.isNotEmpty) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => InvoiceScreen(invoiceId: invId)),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No invoice yet for this order')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final orderLabel = data['order_id']?.toString() ?? orderId;
@@ -2471,6 +2490,25 @@ class _ReadyOrderCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
+                // Invoice button — always visible in Ready for Pickup
+                OutlinedButton(
+                  onPressed: () => _viewInvoice(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.gold,
+                    side: BorderSide(
+                      color: AppTheme.gold.withValues(alpha: 0.5),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Icon(Icons.receipt_long_rounded, size: 18),
+                ),
+                const SizedBox(width: 8),
                 if (!fullyPaid)
                   Expanded(
                     child: Container(
@@ -2708,6 +2746,50 @@ class _QueueCard extends StatelessWidget {
       'status': 'in_production',
     });
     await batch.commit();
+
+    // Automatically deduct raw materials from inventory for each product
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      String employeeName = user.displayName ?? user.email ?? 'Employee';
+      try {
+        final userDoc = await db.collection('User').doc(user.uid).get();
+        if (userDoc.exists) {
+          employeeName = userDoc.data()?['full_name'] ?? employeeName;
+        }
+      } catch (_) {}
+
+      final products = List<Map<String, dynamic>>.from(
+        ((data['products'] as List?) ?? [])
+            .map((e) => Map<String, dynamic>.from(e as Map)),
+      );
+
+      for (final p in products) {
+        final productId = p['product_id']?.toString() ?? '';
+        if (productId.isEmpty) continue;
+        final qty = (p['qty'] as num?)?.toDouble() ?? 1.0;
+        final widthFt = (p['width_ft'] as num?)?.toDouble();
+        final heightFt = (p['height_ft'] as num?)?.toDouble();
+        final selectedMaterial = p['material']?.toString();
+        // For area-based products pass total sqft; for piece-based pass qty
+        final effectiveQty = (widthFt != null && heightFt != null)
+            ? widthFt * heightFt * qty
+            : qty;
+        try {
+          await InventoryService.deductForOrder(
+            orderId: orderId,
+            productId: productId,
+            productName: p['name']?.toString() ?? '',
+            orderQuantity: effectiveQty,
+            processedByUid: user.uid,
+            processedByName: employeeName,
+            selectedMaterial: selectedMaterial,
+          );
+        } catch (e) {
+          // Non-critical: log and continue — production must not be blocked
+          debugPrint('Inventory deduction failed for $productId: $e');
+        }
+      }
+    }
 
     if (customerUid != null && customerUid.isNotEmpty) {
       final threadRef = db.collection('Messages').doc('chat_$customerUid');

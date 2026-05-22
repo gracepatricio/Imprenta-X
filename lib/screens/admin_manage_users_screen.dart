@@ -379,7 +379,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       iconBg: const Color(0xFFC62828),
       title: 'Delete User',
       body:
-          'Are you sure you want to delete "$name"?\n\nThis will soft-delete the account. The user will no longer be able to sign in.',
+          'Are you sure you want to permanently delete "$name"?\n\nThis will remove their account, profile, and all associated data. This cannot be undone.',
       confirmLabel: 'Delete',
       confirmColor: const Color(0xFFC62828),
     );
@@ -671,148 +671,344 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     ],
   );
 
-  Widget _buildToolbar() => Row(
-    children: [
-      Expanded(
-        child: SizedBox(
-          height: 42,
-          child: TextField(
-            controller: _searchController,
-            onChanged: (v) => setState(() => _searchQuery = v),
-            style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
-            decoration: InputDecoration(
-              hintText: 'Search by name, email or ID…',
-              hintStyle: const TextStyle(
-                color: _Glass.textMuted,
-                fontSize: 12.5,
-              ),
-              prefixIcon: const Icon(
-                Icons.search_rounded,
-                color: _Glass.textMuted,
-                size: 17,
-              ),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: _Glass.textMuted,
-                        size: 15,
-                      ),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() => _searchQuery = '');
-                      },
-                    )
-                  : null,
-              contentPadding: const EdgeInsets.symmetric(vertical: 0),
-              filled: true,
-              fillColor: _Glass.surfaceThin,
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                  color: _Glass.borderMid,
-                  width: 0.8,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: AppTheme.gold.withValues(alpha: 0.7),
-                  width: 1.2,
-                ),
+  Widget _buildToolbar() => LayoutBuilder(
+    builder: (context, constraints) {
+      final searchField = SizedBox(
+        height: 42,
+        child: TextField(
+          controller: _searchController,
+          onChanged: (v) => setState(() => _searchQuery = v),
+          style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+          decoration: InputDecoration(
+            hintText: 'Search by name, email or ID…',
+            hintStyle: const TextStyle(color: _Glass.textMuted, fontSize: 12.5),
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              color: _Glass.textMuted,
+              size: 17,
+            ),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: _Glass.textMuted,
+                      size: 15,
+                    ),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                  )
+                : null,
+            contentPadding: const EdgeInsets.symmetric(vertical: 0),
+            filled: true,
+            fillColor: _Glass.surfaceThin,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: _Glass.borderMid, width: 0.8),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: AppTheme.gold.withValues(alpha: 0.7),
+                width: 1.2,
               ),
             ),
           ),
         ),
-      ),
-      const SizedBox(width: 10),
-      _RoleDropdown(
+      );
+
+      final dropdown = _RoleDropdown(
         value: _roleFilter,
         roles: _roles,
         onChanged: (v) => setState(() => _roleFilter = v),
-      ),
-    ],
+      );
+
+      if (constraints.maxWidth < 400) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            searchField,
+            const SizedBox(height: 8),
+            dropdown,
+          ],
+        );
+      }
+
+      return Row(
+        children: [
+          Expanded(child: searchField),
+          const SizedBox(width: 10),
+          dropdown,
+        ],
+      );
+    },
   );
 
   Widget _buildTable(List<QueryDocumentSnapshot> docs, int totalCount) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: [
-              Text(
-                '${docs.length} user${docs.length == 1 ? '' : 's'}',
-                style: const TextStyle(color: _Glass.textMuted, fontSize: 11.5),
-              ),
-              if (_searchQuery.isNotEmpty || _roleFilter != 'All') ...[
-                Text(
-                  ' of $totalCount total',
-                  style: const TextStyle(
-                    color: _Glass.textMuted,
-                    fontSize: 11.5,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () {
-                    _searchController.clear();
-                    setState(() {
-                      _searchQuery = '';
-                      _roleFilter = 'All';
-                    });
-                  },
-                  child: Text(
-                    'Clear filters',
-                    style: TextStyle(
-                      color: AppTheme.gold,
-                      fontSize: 11.5,
-                      decoration: TextDecoration.underline,
-                      decorationColor: AppTheme.gold,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: Container(
-              decoration: BoxDecoration(
-                color: _Glass.surface,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: _Glass.borderMid, width: 0.8),
-                boxShadow: const [_Glass.rowShadow],
-              ),
-              child: Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
                 children: [
-                  _buildTableHeader(),
-                  Container(height: 0.8, color: _Glass.borderMid),
-                  Expanded(
-                    child: ListView.separated(
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: docs.length,
-                      separatorBuilder: (_, __) =>
-                          Container(height: 0.8, color: _Glass.borderMid),
-                      itemBuilder: (_, i) {
-                        final doc = docs[i];
-                        final data = Map<String, dynamic>.from(
-                          doc.data() as Map<String, dynamic>,
-                        );
-                        data['uid'] = doc.id;
-                        return _buildTableRow(doc.id, data, i.isEven);
-                      },
+                  Text(
+                    '${docs.length} user${docs.length == 1 ? '' : 's'}',
+                    style: const TextStyle(
+                      color: _Glass.textMuted,
+                      fontSize: 11.5,
                     ),
                   ),
+                  if (_searchQuery.isNotEmpty || _roleFilter != 'All') ...[
+                    Text(
+                      ' of $totalCount total',
+                      style: const TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        _searchController.clear();
+                        setState(() {
+                          _searchQuery = '';
+                          _roleFilter = 'All';
+                        });
+                      },
+                      child: Text(
+                        'Clear filters',
+                        style: TextStyle(
+                          color: AppTheme.gold,
+                          fontSize: 11.5,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppTheme.gold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
+            Expanded(
+              child: isMobile
+                  ? _buildCardList(docs)
+                  : _buildDesktopTable(docs),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCardList(List<QueryDocumentSnapshot> docs) {
+    return ListView.separated(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: 16),
+      itemCount: docs.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (_, i) {
+        final doc = docs[i];
+        final data = Map<String, dynamic>.from(
+          doc.data() as Map<String, dynamic>,
+        );
+        data['uid'] = doc.id;
+        return _buildUserCard(doc.id, data);
+      },
+    );
+  }
+
+  Widget _buildUserCard(String uid, Map<String, dynamic> data) {
+    final displayId = _displayId(data);
+    final name = data['full_name'] as String? ?? '—';
+    final email = (data['email'] as String? ?? '').isEmpty
+        ? '(not set)'
+        : data['email'] as String;
+    final role = data['user_role'] as String? ?? '—';
+    final isDisabled = data['is_disabled'] == true;
+    final mustChange = data['must_change_password'] == true;
+    final roleColor = _roleFg(role);
+    final roleBg = _roleBg(role);
+    final roleBorder = _roleBorder(role);
+
+    return Container(
+      decoration: _Glass.card(radius: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          // Avatar
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: roleBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: roleBorder, width: 0.8),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              _initials(name),
+              style: TextStyle(
+                color: roleColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
+          const SizedBox(width: 12),
+          // Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: const TextStyle(
+                          color: _Glass.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (mustChange) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.gold.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: AppTheme.gold.withValues(alpha: 0.35),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          'Pending',
+                          style: TextStyle(
+                            color: AppTheme.gold,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(width: 6),
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: isDisabled
+                            ? const Color(0xFFF57F17)
+                            : const Color(0xFF2E7D32),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: roleBg,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: roleBorder, width: 0.8),
+                      ),
+                      child: Text(
+                        role.isNotEmpty
+                            ? role[0].toUpperCase() + role.substring(1)
+                            : '—',
+                        style: TextStyle(
+                          color: roleColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      displayId,
+                      style: const TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  email,
+                  style: TextStyle(
+                    color: email == '(not set)'
+                        ? _Glass.textMuted
+                        : _Glass.textSecondary,
+                    fontSize: 11.5,
+                    fontStyle: email == '(not set)'
+                        ? FontStyle.italic
+                        : FontStyle.normal,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          // Actions
+          _buildActionMenu(uid, data, displayId, name, isDisabled, mustChange, role),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopTable(List<QueryDocumentSnapshot> docs) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _Glass.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _Glass.borderMid, width: 0.8),
+          boxShadow: const [_Glass.rowShadow],
         ),
-      ],
+        child: Column(
+          children: [
+            _buildTableHeader(),
+            Container(height: 0.8, color: _Glass.borderMid),
+            Expanded(
+              child: ListView.separated(
+                physics: const BouncingScrollPhysics(),
+                itemCount: docs.length,
+                separatorBuilder: (_, __) =>
+                    Container(height: 0.8, color: _Glass.borderMid),
+                itemBuilder: (_, i) {
+                  final doc = docs[i];
+                  final data = Map<String, dynamic>.from(
+                    doc.data() as Map<String, dynamic>,
+                  );
+                  data['uid'] = doc.id;
+                  return _buildTableRow(doc.id, data, i.isEven);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

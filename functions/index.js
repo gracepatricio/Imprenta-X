@@ -13,6 +13,7 @@
 const { onRequest } = require('firebase-functions/v2/https');
 const { initializeApp }  = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 
 initializeApp();
 const db = getFirestore();
@@ -305,5 +306,132 @@ exports.paymongoWebhook = onRequest(
       console.error('[paymongoWebhook] Error:', err);
       return res.status(500).json({ error: 'internal_error' });
     }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// deleteAuthUser – hard-delete a Firebase Auth account (Admin SDK only).
+// Called by the admin panel. Also writes a FreedEmails marker so that
+// freeEmail can clean up if this call ever fails.
+// ---------------------------------------------------------------------------
+
+exports.deleteAuthUser = onRequest(
+  { cors: true, invoker: 'public' },
+  async (req, res) => {
+    if (req.method === 'OPTIONS') return res.status(204).send('');
+    if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+    const authHeader = req.headers.authorization ?? '';
+    const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!idToken) return res.status(401).json({ error: 'Missing auth token' });
+
+    let decoded;
+    try {
+      decoded = await getAuth().verifyIdToken(idToken);
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid auth token' });
+    }
+
+    const callerDoc = await db.collection('User').doc(decoded.uid).get();
+    if (callerDoc.data()?.user_role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const uid = req.body?.uid;
+    if (!uid || typeof uid !== 'string') {
+      return res.status(400).json({ error: 'uid is required' });
+    }
+
+    try {
+      const userRecord = await getAuth().getUser(uid);
+      const email = userRecord.email;
+      await getAuth().deleteUser(uid);
+      // Clean up the FreedEmails marker now that auth is truly deleted
+      if (email) await db.collection('FreedEmails').doc(email).delete().catch(() => {});
+      return res.status(200).json({ success: true });
+    } catch (e) {
+      if (e.code === 'auth/user-not-found') {
+        return res.status(200).json({ success: true, note: 'already_deleted' });
+      }
+      console.error('deleteAuthUser error:', e);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// freeEmail – called during registration when "email-already-in-use" is
+// detected for an email that an admin deleted. Looks up the FreedEmails
+// marker (written by the Flutter deleteUser flow) to confirm the email was
+// legitimately freed, then removes the Firebase Auth account so the caller
+// can complete registration. No user auth required — the Firestore marker
+// is the proof.
+// ---------------------------------------------------------------------------
+
+exports.freeEmail = onRequest(
+  { cors: true, invoker: 'public' },
+  async (req, res) => {
+    if (req.method === 'OPTIONS') return res.status(204).send('');
+    if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+    const email = req.body?.email;
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'email is required' });
+    }
+
+    // Confirm this email was legitimately freed before touching Firebase Auth.
+    // Any one of these three conditions is sufficient:
+    //   (a) explicit FreedEmails marker written by the Flutter deleteUser flow
+    //   (b) a User doc with is_deleted: true (old soft-delete)
+    //   (c) Firebase Auth has the email but no Firestore User doc exists
+    //       (manual deletion directly from Firebase Console)
+    const marker = await db.collection('FreedEmails').doc(email).get();
+    if (!marker.exists) {
+      const oldSnap = await db.collection('User')
+        .where('email', '==', email)
+        .where('is_deleted', '==', true)
+        .limit(1)
+        .get();
+      if (oldSnap.empty) {
+        // Check case (c): Firebase Auth account exists but Firestore doc is gone
+        try {
+          const authUser = await getAuth().getUserByEmail(email);
+          const userDoc = await db.collection('User').doc(authUser.uid).get();
+          if (userDoc.exists) {
+            // Firestore doc is still there and not deleted — block this request
+            return res.status(403).json({ error: 'Email is in use by an active account' });
+          }
+          // No Firestore doc → account was cleaned up externally, allow freeing
+        } catch (lookupErr) {
+          if (lookupErr.code !== 'auth/user-not-found') {
+            return res.status(403).json({ error: 'Email was not freed by admin' });
+          }
+          // auth/user-not-found means Firebase Auth is already clean — nothing to do
+          return res.status(200).json({ success: true, note: 'already_clean' });
+        }
+      }
+    }
+
+    try {
+      const userRecord = await getAuth().getUserByEmail(email);
+      await getAuth().deleteUser(userRecord.uid);
+    } catch (e) {
+      if (e.code !== 'auth/user-not-found') {
+        // Fallback: rename email to a placeholder so the real email is freed
+        try {
+          const userRecord = await getAuth().getUserByEmail(email);
+          await getAuth().updateUser(userRecord.uid, {
+            email: `_freed_${Date.now()}@imprenta.internal`,
+          });
+        } catch (_) {
+          return res.status(500).json({ error: 'Could not free email' });
+        }
+      }
+      // auth/user-not-found means it's already gone — that's fine
+    }
+
+    // Remove the marker (one-time use)
+    await marker.ref.delete().catch(() => {});
+    return res.status(200).json({ success: true });
   }
 );

@@ -5,7 +5,7 @@ import 'app_theme.dart';
 
 // ── Breakpoint ────────────────────────────────────────────────────────────────
 const double _kNarrow = 700.0;
-const double _kTableMinWidth = 560.0;
+const double _kTableMinWidth = 640.0;
 
 // ── Liquid Glass Design Tokens ────────────────────────────────────────────────
 class _Glass {
@@ -106,13 +106,18 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
       final col = FirebaseFirestore.instance.collection('RawMaterials');
       for (final mat in _kInitialMaterials) {
         final ref = col.doc(mat['material_id'] as String);
-        batch.set(ref, {
+        final docData = <String, dynamic>{
           ...mat,
           'current_stock': 0.0,
           'last_updated': null,
           'last_updated_by': '',
           'last_updated_by_uid': '',
-        });
+        };
+        // Remove null piece_to_sqft entries (pcs materials don't have it)
+        if (!mat.containsKey('piece_to_sqft')) {
+          docData.remove('piece_to_sqft');
+        }
+        batch.set(ref, docData);
       }
       await batch.commit();
       if (mounted)
@@ -151,7 +156,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
         const SizedBox(height: 10),
         Expanded(
           child: _activeTab == _InventoryTab.forecast
-              ? const _ForecastPlaceholder()
+              ? const _ForecastTab()
               : _buildInventoryContent(),
         ),
       ],
@@ -236,6 +241,11 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                       statusColor: _statusColor,
                       statusFilter: _statusFilter,
                       onQrTap: (m) => _showQr(context, m),
+                      onEditTap: (m) => _showAddMaterialDialog(
+                        context,
+                        materials,
+                        existing: m,
+                      ),
                       onDeleteTap: (m) => _confirmDelete(context, m),
                     ),
                   ),
@@ -264,14 +274,30 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
 
   void _showAddMaterialDialog(
     BuildContext context,
-    List<Map<String, dynamic>> materials,
-  ) {
-    final suggestedId = _nextMaterialId(materials);
+    List<Map<String, dynamic>> materials, {
+    Map<String, dynamic>? existing,
+  }) {
+    final isEdit = existing != null;
+    final suggestedId = isEdit
+        ? (existing['material_id']?.toString() ?? '')
+        : _nextMaterialId(materials);
     final idCtrl = TextEditingController(text: suggestedId);
-    final nameCtrl = TextEditingController();
-    final unitCtrl = TextEditingController();
-    final restockCtrl = TextEditingController(text: '5');
-    final stockCtrl = TextEditingController(text: '0');
+    final nameCtrl = TextEditingController(
+      text: existing?['material_name']?.toString() ?? '',
+    );
+    final unitCtrl = TextEditingController(
+      text: existing?['unit_description']?.toString() ?? '',
+    );
+    final restockCtrl = TextEditingController(
+      text: existing?['restock_level']?.toString() ?? '5',
+    );
+    final stockCtrl = TextEditingController(
+      text: existing?['current_stock']?.toString() ?? '0',
+    );
+    final pieceSqftCtrl = TextEditingController(
+      text: existing?['piece_to_sqft']?.toString() ?? '',
+    );
+    String stockUnit = existing?['stock_unit']?.toString() ?? 'pcs';
     final formKey = GlobalKey<FormState>();
     bool saving = false;
 
@@ -298,16 +324,16 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: _Glass.borderMid),
                 ),
-                child: const Icon(
-                  Icons.add_box_outlined,
+                child: Icon(
+                  isEdit ? Icons.edit_outlined : Icons.add_box_outlined,
                   color: _Glass.textSecondary,
                   size: 16,
                 ),
               ),
               const SizedBox(width: 10),
-              const Text(
-                'Add Raw Material',
-                style: TextStyle(
+              Text(
+                isEdit ? 'Edit Raw Material' : 'Add Raw Material',
+                style: const TextStyle(
                   color: _Glass.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -316,75 +342,253 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
             ],
           ),
           content: SizedBox(
-            width: 340,
+            width: 360,
             child: Form(
               key: formKey,
               autovalidateMode: AutovalidateMode.onUserInteraction,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _GlassField(
-                    controller: idCtrl,
-                    label: 'Material ID',
-                    icon: Icons.tag_rounded,
-                    validator: (v) =>
-                        v?.trim().isEmpty == true ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 10),
-                  _GlassField(
-                    controller: nameCtrl,
-                    label: 'Material Name',
-                    icon: Icons.inventory_2_outlined,
-                    validator: (v) =>
-                        v?.trim().isEmpty == true ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 10),
-                  _GlassField(
-                    controller: unitCtrl,
-                    label: 'Unit description  (e.g. 1 roll, 4x8ft sheet)',
-                    icon: Icons.straighten_rounded,
-                    validator: (v) =>
-                        v?.trim().isEmpty == true ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _GlassField(
-                          controller: restockCtrl,
-                          label: 'Restock at',
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty)
-                              return 'Required';
-                            if (double.tryParse(v.trim()) == null)
-                              return 'Invalid number';
-                            return null;
-                          },
-                        ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _GlassField(
+                      controller: idCtrl,
+                      label: 'Material ID',
+                      icon: Icons.tag_rounded,
+                      readOnly: isEdit,
+                      validator: (v) =>
+                          v?.trim().isEmpty == true ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 10),
+                    _GlassField(
+                      controller: nameCtrl,
+                      label: 'Material Name',
+                      icon: Icons.inventory_2_outlined,
+                      validator: (v) =>
+                          v?.trim().isEmpty == true ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 10),
+                    _GlassField(
+                      controller: unitCtrl,
+                      label: 'Unit description (e.g. 1 roll, 4×8ft sheet)',
+                      icon: Icons.straighten_rounded,
+                      validator: (v) =>
+                          v?.trim().isEmpty == true ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── Stock Unit ─────────────────────────────────────────────
+                    const Text(
+                      'STOCK UNIT',
+                      style: TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _GlassField(
-                          controller: stockCtrl,
-                          label: 'Initial stock',
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty)
-                              return 'Required';
-                            if (double.tryParse(v.trim()) == null)
-                              return 'Invalid number';
-                            return null;
-                          },
-                        ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: _Glass.surfaceThin,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: _Glass.borderMid, width: 0.8),
                       ),
-                    ],
-                  ),
-                ],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // sqft option
+                          GestureDetector(
+                            onTap: () => setDlg(() => stockUnit = 'sqft'),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  stockUnit == 'sqft'
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
+                                  size: 16,
+                                  color: stockUnit == 'sqft'
+                                      ? AppTheme.gold
+                                      : _Glass.textMuted,
+                                ),
+                                const SizedBox(width: 8),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: const [
+                                    Text(
+                                      'sqft  (area — for rolls & sheets)',
+                                      style: TextStyle(
+                                        color: _Glass.textPrimary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Stock tracks total sq ft remaining',
+                                      style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          // pcs option
+                          GestureDetector(
+                            onTap: () => setDlg(() => stockUnit = 'pcs'),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  stockUnit == 'pcs'
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
+                                  size: 16,
+                                  color: stockUnit == 'pcs'
+                                      ? AppTheme.gold
+                                      : _Glass.textMuted,
+                                ),
+                                const SizedBox(width: 8),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: const [
+                                    Text(
+                                      'pcs  (pieces / units / bottles)',
+                                      style: TextStyle(
+                                        color: _Glass.textPrimary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Stock tracks discrete count',
+                                      style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // sqft-per-piece field shown only when sqft is selected
+                          if (stockUnit == 'sqft') ...[
+                            const SizedBox(height: 10),
+                            const Divider(height: 1, color: _Glass.borderDim),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Sqft per piece (for replenishment conversion)',
+                              style: TextStyle(
+                                color: _Glass.textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'e.g. 1722.44 for a 10.5ft×50m tarpaulin roll, '
+                              '32 for a 4×8ft sheet.',
+                              style: TextStyle(
+                                color: _Glass.textMuted,
+                                fontSize: 10,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: pieceSqftCtrl,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              style: const TextStyle(
+                                color: _Glass.textPrimary,
+                                fontSize: 13,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: 'e.g. 1722.44',
+                                hintStyle: const TextStyle(
+                                  color: _Glass.textMuted,
+                                  fontSize: 12,
+                                ),
+                                filled: true,
+                                fillColor: _Glass.surface,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: _Glass.borderMid,
+                                    width: 0.8,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: AppTheme.gold.withValues(alpha: 0.7),
+                                  ),
+                                ),
+                              ),
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) return null;
+                                if (double.tryParse(v.trim()) == null) {
+                                  return 'Invalid number';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── Restock level + Initial stock ──────────────────────────
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _GlassField(
+                            controller: restockCtrl,
+                            label: 'Restock at (${stockUnit == 'sqft' ? 'sqft' : 'pcs'})',
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty)
+                                return 'Required';
+                              if (double.tryParse(v.trim()) == null)
+                                return 'Invalid';
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _GlassField(
+                            controller: stockCtrl,
+                            label: 'Initial stock (${stockUnit == 'sqft' ? 'sqft' : 'pcs'})',
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty)
+                                return 'Required';
+                              if (double.tryParse(v.trim()) == null)
+                                return 'Invalid';
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -400,7 +604,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
               child: const Text('Cancel'),
             ),
             _GlassButton(
-              label: 'Add',
+              label: isEdit ? 'Save' : 'Add',
               isPrimary: true,
               isLoading: saving,
               onPressed: saving
@@ -413,6 +617,9 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                       final messenger = ScaffoldMessenger.of(context);
                       try {
                         final id = idCtrl.text.trim();
+                        final pieceSqft = pieceSqftCtrl.text.trim().isNotEmpty
+                            ? double.tryParse(pieceSqftCtrl.text.trim())
+                            : null;
                         await FirebaseFirestore.instance
                             .collection('RawMaterials')
                             .doc(id)
@@ -420,18 +627,26 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                               'material_id': id,
                               'material_name': nameCtrl.text.trim(),
                               'unit_description': unitCtrl.text.trim(),
+                              'stock_unit': stockUnit,
+                              if (pieceSqft != null) 'piece_to_sqft': pieceSqft,
                               'restock_level':
                                   double.tryParse(restockCtrl.text) ?? 5.0,
                               'current_stock':
                                   double.tryParse(stockCtrl.text) ?? 0.0,
-                              'last_updated': null,
-                              'last_updated_by': '',
-                              'last_updated_by_uid': '',
-                            });
+                              if (!isEdit) ...{
+                                'last_updated': null,
+                                'last_updated_by': '',
+                                'last_updated_by_uid': '',
+                              },
+                            }, SetOptions(merge: isEdit));
                         if (ctx.mounted) Navigator.pop(ctx);
                         messenger.showSnackBar(
                           SnackBar(
-                            content: Text('$id added to inventory'),
+                            content: Text(
+                              isEdit
+                                  ? '$id updated'
+                                  : '$id added to inventory',
+                            ),
                             backgroundColor: const Color(0xFF2E7D32),
                             behavior: SnackBarBehavior.floating,
                             shape: RoundedRectangleBorder(
@@ -799,6 +1014,7 @@ class _TablePanel extends StatelessWidget {
   final String? statusFilter;
   final void Function(Map<String, dynamic>) onQrTap;
   final void Function(Map<String, dynamic>) onDeleteTap;
+  final void Function(Map<String, dynamic>) onEditTap;
 
   const _TablePanel({
     required this.isNarrow,
@@ -807,6 +1023,7 @@ class _TablePanel extends StatelessWidget {
     required this.statusFilter,
     required this.onQrTap,
     required this.onDeleteTap,
+    required this.onEditTap,
   });
 
   @override
@@ -882,6 +1099,7 @@ class _TablePanel extends StatelessWidget {
                                 filtered[i]['_status'] as String,
                               ),
                               onQrTap: () => onQrTap(filtered[i]),
+                              onEditTap: () => onEditTap(filtered[i]),
                               onDeleteTap: () => onDeleteTap(filtered[i]),
                             ),
                           ),
@@ -898,6 +1116,7 @@ class _TablePanel extends StatelessWidget {
                           filtered[i]['_status'] as String,
                         ),
                         onQrTap: () => onQrTap(filtered[i]),
+                        onEditTap: () => onEditTap(filtered[i]),
                         onDeleteTap: () => onDeleteTap(filtered[i]),
                       ),
                     ),
@@ -1006,51 +1225,785 @@ class _SubMenuTab extends StatelessWidget {
 }
 
 // =============================================================================
-// Forecast placeholder
+// DES algorithm — top-level function
 // =============================================================================
-class _ForecastPlaceholder extends StatelessWidget {
-  const _ForecastPlaceholder();
+
+// Double Exponential Smoothing (Holt's linear method)
+// Returns forecast for 1 period ahead, clamped >= 0
+Map<String, double> _applyDES(
+  List<double> series, {
+  double alpha = 0.3,
+  double beta = 0.1,
+}) {
+  if (series.isEmpty) return {'forecast': 0.0, 'trend': 0.0};
+
+  // Use non-zero values to compute a better initial estimate
+  final nonZero = series.where((v) => v > 0).toList();
+  if (nonZero.isEmpty) return {'forecast': 0.0, 'trend': 0.0};
+  if (nonZero.length == 1) return {'forecast': nonZero[0], 'trend': 0.0};
+
+  double L = series[0];
+  double T = 0.0;
+  // Init trend from first two non-flat values
+  for (int i = 1; i < series.length; i++) {
+    if (series[i] != series[i - 1]) {
+      T = (series[i] - series[i - 1]) * 0.5; // damped init
+      break;
+    }
+  }
+
+  for (int i = 1; i < series.length; i++) {
+    final prevL = L;
+    L = alpha * series[i] + (1 - alpha) * (prevL + T);
+    T = beta * (L - prevL) + (1 - beta) * T;
+  }
+  return {
+    'forecast': (L + T).clamp(0.0, double.maxFinite),
+    'trend': T,
+  };
+}
+
+// =============================================================================
+// Material forecast data model
+// =============================================================================
+class _MaterialForecast {
+  final String materialId;
+  final String docId;
+  final String materialName;
+  final String stockUnit;
+  final double? pieceToSqft;
+  final double currentStock;
+  final double currentRestockLevel;
+  final double avgMonthlyUsage;
+  final double forecastNextMonth;
+  final double suggestedRestockLevel;
+  final List<double> monthlyData;
+
+  const _MaterialForecast({
+    required this.materialId,
+    required this.docId,
+    required this.materialName,
+    required this.stockUnit,
+    required this.pieceToSqft,
+    required this.currentStock,
+    required this.currentRestockLevel,
+    required this.avgMonthlyUsage,
+    required this.forecastNextMonth,
+    required this.suggestedRestockLevel,
+    required this.monthlyData,
+  });
+}
+
+// =============================================================================
+// Forecast tab
+// =============================================================================
+class _ForecastTab extends StatefulWidget {
+  const _ForecastTab();
+
+  @override
+  State<_ForecastTab> createState() => _ForecastTabState();
+}
+
+class _ForecastTabState extends State<_ForecastTab> {
+  static const double _alpha = 0.3;
+  static const double _beta = 0.1;
+  static const double _safetyFactor = 1.5;
+  static const int _months = 12;
+
+  bool _loading = true;
+  String? _error;
+  List<_MaterialForecast> _forecasts = [];
+  DateTime _lastComputed = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _compute();
+  }
+
+  String _monthKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}';
+
+  Future<void> _compute() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final now = DateTime.now();
+      final cutoff = DateTime(now.year, now.month - (_months - 1), 1);
+
+      // Fetch orders (completed + ready + in_production)
+      final ordersSnap = await FirebaseFirestore.instance
+          .collection('Orders')
+          .where('status', whereIn: ['completed', 'ready', 'in_production'])
+          .where(
+            'created_at',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(cutoff),
+          )
+          .get();
+
+      // Fetch all products for BOM lookup
+      final productsSnap = await FirebaseFirestore.instance
+          .collection('Products')
+          .get();
+
+      // Fetch all raw materials
+      final materialsSnap = await FirebaseFirestore.instance
+          .collection('RawMaterials')
+          .orderBy('material_id')
+          .get();
+
+      // Build product BOM map (keyed by doc id AND product_id field)
+      final productBomMap = <String, List<Map<String, dynamic>>>{};
+      for (final doc in productsSnap.docs) {
+        final data = doc.data();
+        final bom = List<Map<String, dynamic>>.from(
+          ((data['bill_of_materials'] as List?) ?? [])
+              .map((e) => Map<String, dynamic>.from(e as Map)),
+        );
+        productBomMap[doc.id] = bom;
+        final pid = data['product_id']?.toString() ?? '';
+        if (pid.isNotEmpty && pid != doc.id) productBomMap[pid] = bom;
+      }
+
+      // Build material monthly consumption map
+      // material_id → month_key → total_consumed
+      final Map<String, Map<String, double>> materialMonthly = {};
+
+      for (final orderDoc in ordersSnap.docs) {
+        final orderData = orderDoc.data();
+        final createdAt = orderData['created_at'] as Timestamp?;
+        if (createdAt == null) continue;
+        final month = _monthKey(createdAt.toDate());
+
+        final products = List<Map<String, dynamic>>.from(
+          ((orderData['products'] as List?) ?? [])
+              .map((e) => Map<String, dynamic>.from(e as Map)),
+        );
+
+        for (final p in products) {
+          final productId = p['product_id']?.toString() ?? '';
+          if (productId.isEmpty) continue;
+          final bom = productBomMap[productId] ?? [];
+          if (bom.isEmpty) continue;
+
+          final qty = (p['qty'] as num?)?.toDouble() ?? 1.0;
+          final widthFt = (p['width_ft'] as num?)?.toDouble();
+          final heightFt = (p['height_ft'] as num?)?.toDouble();
+          final selectedMaterial = p['material']?.toString();
+
+          // Effective order quantity in the material's tracking unit
+          final effectiveQty = (widthFt != null && heightFt != null)
+              ? widthFt * heightFt * qty
+              : qty;
+
+          // Filter BOM by material option (same logic as InventoryService)
+          for (final bomItem in bom) {
+            final forOpt = bomItem['for_material_option']?.toString() ?? '';
+            if (forOpt.isNotEmpty && forOpt != (selectedMaterial ?? ''))
+              continue;
+            final matId = bomItem['material_id']?.toString() ?? '';
+            if (matId.isEmpty) continue;
+            final qpu =
+                (bomItem['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+            materialMonthly.putIfAbsent(matId, () => {});
+            materialMonthly[matId]![month] =
+                (materialMonthly[matId]![month] ?? 0) + effectiveQty * qpu;
+          }
+        }
+      }
+
+      // Build ordered month keys (oldest to newest)
+      final monthKeys = List.generate(
+        _months,
+        (i) =>
+            _monthKey(DateTime(now.year, now.month - (_months - 1 - i), 1)),
+      );
+
+      // Compute DES forecast per material
+      final forecasts = <_MaterialForecast>[];
+      for (final matDoc in materialsSnap.docs) {
+        final matData = matDoc.data();
+        final matId = matData['material_id']?.toString() ?? matDoc.id;
+        final matName = matData['material_name']?.toString() ?? '';
+        final stockUnit = matData['stock_unit']?.toString() ?? 'pcs';
+        final pieceToSqft = (matData['piece_to_sqft'] as num?)?.toDouble();
+        final currentStock =
+            (matData['current_stock'] as num?)?.toDouble() ?? 0.0;
+        final currentRestock =
+            (matData['restock_level'] as num?)?.toDouble() ?? 0.0;
+
+        final monthly = materialMonthly[matId] ?? {};
+        final series = monthKeys.map((k) => monthly[k] ?? 0.0).toList();
+
+        final nonZeroValues = series.where((v) => v > 0);
+        final avgMonthly = nonZeroValues.isEmpty
+            ? 0.0
+            : nonZeroValues.reduce((a, b) => a + b) / nonZeroValues.length;
+
+        final des = _applyDES(series, alpha: _alpha, beta: _beta);
+        final forecast = des['forecast']!;
+        final suggested = forecast * _safetyFactor;
+
+        forecasts.add(_MaterialForecast(
+          materialId: matId,
+          docId: matDoc.id,
+          materialName: matName,
+          stockUnit: stockUnit,
+          pieceToSqft: pieceToSqft,
+          currentStock: currentStock,
+          currentRestockLevel: currentRestock,
+          avgMonthlyUsage: avgMonthly,
+          forecastNextMonth: forecast,
+          suggestedRestockLevel: suggested,
+          monthlyData: series,
+        ));
+      }
+
+      // Sort: materials with usage first (desc forecast), then zero-forecast alphabetically
+      forecasts.sort((a, b) {
+        if (a.forecastNextMonth == 0 && b.forecastNextMonth > 0) return 1;
+        if (b.forecastNextMonth == 0 && a.forecastNextMonth > 0) return -1;
+        return b.forecastNextMonth.compareTo(a.forecastNextMonth);
+      });
+
+      if (mounted) {
+        setState(() {
+          _forecasts = forecasts;
+          _loading = false;
+          _lastComputed = DateTime.now();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _applyRestock(String docId, double value) async {
+    await FirebaseFirestore.instance
+        .collection('RawMaterials')
+        .doc(docId)
+        .update({'restock_level': value});
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Restock level updated'),
+        backgroundColor: const Color(0xFF2E7D32),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ));
+    }
+  }
+
+  String _fmtQty(double v, String stockUnit, double? pieceToSqft) {
+    if (v == 0) return '—';
+    final s = v < 10 ? v.toStringAsFixed(1) : v.toStringAsFixed(0);
+    if (stockUnit == 'sqft' && pieceToSqft != null && pieceToSqft > 0) {
+      final pieces = v / pieceToSqft;
+      final pLabel = pieces < 2 ? 'roll/sheet' : 'rolls/sheets';
+      final pStr =
+          pieces < 10 ? pieces.toStringAsFixed(2) : pieces.toStringAsFixed(1);
+      return '$s sqft\n(≈$pStr $pLabel)';
+    }
+    return '$s $stockUnit';
+  }
+
+  String _timeLabel(DateTime dt) {
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _Glass.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _Glass.borderMid, width: 0.8),
-        boxShadow: const [_Glass.rowShadow],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── Header panel ──────────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(
+            color: _Glass.surfaceMid,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: _Glass.borderMid, width: 0.8),
+            boxShadow: const [_Glass.rowShadow],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Demand Forecast',
+                          style: TextStyle(
+                            color: _Glass.textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Double Exponential Smoothing · α=0.3  β=0.1  ·  Safety buffer ×1.5',
+                          style: TextStyle(
+                            color: _Glass.textMuted,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1565C0).withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(99),
+                            border: Border.all(
+                              color: const Color(0xFF1565C0).withValues(alpha: 0.25),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: const Text(
+                            'Based on last 12 months of completed orders',
+                            style: TextStyle(
+                              color: Color(0xFF1565C0),
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      _GlassButton(
+                        label: 'Refresh',
+                        icon: Icons.refresh_rounded,
+                        isPrimary: false,
+                        isLoading: _loading,
+                        onPressed: _loading ? null : _compute,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Last computed: ${_timeLabel(_lastComputed)}',
+                        style: const TextStyle(
+                          color: _Glass.textMuted,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        // ── Main content area ─────────────────────────────────────────────────
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: _Glass.surface,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _Glass.borderMid, width: 0.8),
+              boxShadow: const [_Glass.rowShadow],
+            ),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            color: _Glass.textMuted,
+                            size: 32,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Error: $_error',
+                            style: const TextStyle(
+                              color: _Glass.textSecondary,
+                              fontSize: 13,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          _GlassButton(
+                            label: 'Retry',
+                            icon: Icons.refresh_rounded,
+                            isPrimary: true,
+                            onPressed: _compute,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : _forecasts.every((f) => f.forecastNextMonth == 0)
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'No order history found — forecasts will appear after orders are completed',
+                        style: TextStyle(
+                          color: _Glass.textSecondary,
+                          fontSize: 13,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                : Column(
+                    children: [
+                      // ── Table header ─────────────────────────────────────────
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xF2F4F6F8),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(18),
+                          ),
+                          border: Border(
+                            bottom: BorderSide(
+                              color: _Glass.borderMid,
+                              width: 0.8,
+                            ),
+                          ),
+                        ),
+                        child: const _ForecastTableHeader(),
+                      ),
+                      // ── Table rows ────────────────────────────────────────────
+                      Expanded(
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: _forecasts.length,
+                          itemBuilder: (_, i) {
+                            final f = _forecasts[i];
+                            return _ForecastRow(
+                              forecast: f,
+                              isLast: i == _forecasts.length - 1,
+                              fmtQty: _fmtQty,
+                              onApply: f.suggestedRestockLevel > 0
+                                  ? () => _applyRestock(
+                                      f.docId,
+                                      f.suggestedRestockLevel,
+                                    )
+                                  : null,
+                            );
+                          },
+                        ),
+                      ),
+                      // ── Footer note ───────────────────────────────────────────
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            top: BorderSide(color: _Glass.borderMid, width: 0.8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Restock level = DES forecast for next month × 1.5 safety factor. '
+                          'Apply to update the restock threshold for that material.',
+                          style: TextStyle(
+                            color: _Glass.textMuted,
+                            fontSize: 10.5,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// =============================================================================
+// Forecast table header
+// =============================================================================
+class _ForecastTableHeader extends StatelessWidget {
+  const _ForecastTableHeader();
+
+  static const _h = TextStyle(
+    color: _Glass.textSecondary,
+    fontSize: 10.5,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.3,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(flex: 3, child: Text('Material', style: _h)),
+          SizedBox(
+            width: 90,
+            child: Text('Avg/mo', style: _h, textAlign: TextAlign.center),
+          ),
+          SizedBox(
+            width: 110,
+            child: Text(
+              'Forecast (next mo)',
+              style: _h,
+              textAlign: TextAlign.center,
+            ),
+          ),
+          SizedBox(
+            width: 100,
+            child: Text(
+              'Current Stock',
+              style: _h,
+              textAlign: TextAlign.center,
+            ),
+          ),
+          SizedBox(
+            width: 110,
+            child: Text(
+              'Suggested Restock',
+              style: _h,
+              textAlign: TextAlign.center,
+            ),
+          ),
+          SizedBox(width: 70, child: Text('Action', style: _h, textAlign: TextAlign.center)),
+        ],
       ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    );
+  }
+}
+
+// =============================================================================
+// Forecast row
+// =============================================================================
+class _ForecastRow extends StatelessWidget {
+  final _MaterialForecast forecast;
+  final bool isLast;
+  final String Function(double, String, double?) fmtQty;
+  final VoidCallback? onApply;
+
+  const _ForecastRow({
+    required this.forecast,
+    required this.isLast,
+    required this.fmtQty,
+    required this.onApply,
+  });
+
+  Color _suggestedColor() {
+    final suggested = forecast.suggestedRestockLevel;
+    final current = forecast.currentStock;
+    if (suggested == 0) return _Glass.textMuted;
+    if (current >= suggested) return const Color(0xFF2E7D32);
+    if (current >= suggested * 0.5) return const Color(0xFFF57F17);
+    return const Color(0xFFC62828);
+  }
+
+  bool _isAlreadyApplied() {
+    final suggested = forecast.suggestedRestockLevel;
+    final current = forecast.currentRestockLevel;
+    if (suggested == 0) return false;
+    return (current - suggested).abs() / suggested < 0.05;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final f = forecast;
+    final sugColor = _suggestedColor();
+    final alreadyApplied = _isAlreadyApplied();
+
+    Widget qtyCell(String text, {Color? color}) {
+      final lines = text.split('\n');
+      if (lines.length > 1) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: _Glass.card(radius: 20, elevated: true),
-              child: const Icon(
-                Icons.trending_up_rounded,
-                size: 32,
-                color: _Glass.textMuted,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Forecast',
+            Text(
+              lines[0],
               style: TextStyle(
-                color: _Glass.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.4,
+                color: color ?? _Glass.textPrimary,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
               ),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Stock forecasting — coming soon',
-              style: TextStyle(color: _Glass.textSecondary, fontSize: 13),
+            Text(
+              lines[1],
+              style: const TextStyle(color: _Glass.textMuted, fontSize: 10),
+              textAlign: TextAlign.center,
             ),
           ],
+        );
+      }
+      return Text(
+        text,
+        style: TextStyle(
+          color: color ?? _Glass.textPrimary,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
         ),
+        textAlign: TextAlign.center,
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        border: isLast
+            ? null
+            : Border(bottom: BorderSide(color: _Glass.borderMid, width: 0.8)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Material name + ID
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  f.materialName,
+                  style: const TextStyle(
+                    color: _Glass.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  f.materialId,
+                  style: const TextStyle(
+                    color: _Glass.textMuted,
+                    fontSize: 10,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Avg/mo
+          SizedBox(
+            width: 90,
+            child: Center(
+              child: qtyCell(
+                fmtQty(f.avgMonthlyUsage, f.stockUnit, f.pieceToSqft),
+                color: _Glass.textSecondary,
+              ),
+            ),
+          ),
+          // Forecast next month
+          SizedBox(
+            width: 110,
+            child: Center(
+              child: f.forecastNextMonth == 0
+                  ? const Text(
+                      'No data',
+                      style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                      textAlign: TextAlign.center,
+                    )
+                  : qtyCell(
+                      fmtQty(
+                        f.forecastNextMonth,
+                        f.stockUnit,
+                        f.pieceToSqft,
+                      ),
+                    ),
+            ),
+          ),
+          // Current stock
+          SizedBox(
+            width: 100,
+            child: Center(
+              child: qtyCell(
+                fmtQty(f.currentStock, f.stockUnit, f.pieceToSqft),
+                color: _Glass.textSecondary,
+              ),
+            ),
+          ),
+          // Suggested restock (color coded)
+          SizedBox(
+            width: 110,
+            child: Center(
+              child: f.suggestedRestockLevel == 0
+                  ? const Text(
+                      '—',
+                      style: TextStyle(color: _Glass.textMuted, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    )
+                  : qtyCell(
+                      fmtQty(
+                        f.suggestedRestockLevel,
+                        f.stockUnit,
+                        f.pieceToSqft,
+                      ),
+                      color: sugColor,
+                    ),
+            ),
+          ),
+          // Action button
+          SizedBox(
+            width: 70,
+            child: Center(
+              child: alreadyApplied
+                  ? const Icon(
+                      Icons.check_circle_rounded,
+                      color: Color(0xFF2E7D32),
+                      size: 18,
+                    )
+                  : onApply != null
+                  ? GestureDetector(
+                      onTap: onApply,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xDD1A1A2E),
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(
+                            color: const Color(0x44FFFFFF),
+                            width: 0.8,
+                          ),
+                          boxShadow: const [_Glass.rowShadow],
+                        ),
+                        child: const Text(
+                          'Apply',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1131,6 +2084,7 @@ class _GlassField extends StatelessWidget {
   final IconData? icon;
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
+  final bool readOnly;
 
   const _GlassField({
     required this.controller,
@@ -1138,6 +2092,7 @@ class _GlassField extends StatelessWidget {
     this.icon,
     this.keyboardType,
     this.validator,
+    this.readOnly = false,
   });
 
   @override
@@ -1146,7 +2101,11 @@ class _GlassField extends StatelessWidget {
       controller: controller,
       keyboardType: keyboardType,
       validator: validator,
-      style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+      readOnly: readOnly,
+      style: TextStyle(
+        color: readOnly ? _Glass.textMuted : _Glass.textPrimary,
+        fontSize: 13,
+      ),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(color: _Glass.textSecondary, fontSize: 12),
@@ -1341,18 +2300,18 @@ class _TableHeader extends StatelessWidget {
           SizedBox(width: 74, child: Text('Code', style: _h)),
           Expanded(child: Text('Material Name', style: _h)),
           SizedBox(
-            width: 72,
+            width: 90,
             child: Text('Stock', style: _h, textAlign: TextAlign.center),
           ),
           SizedBox(
-            width: 80,
+            width: 90,
             child: Text('Restock At', style: _h, textAlign: TextAlign.center),
           ),
           SizedBox(
             width: 90,
             child: Text('Status', style: _h, textAlign: TextAlign.center),
           ),
-          SizedBox(width: 60),
+          SizedBox(width: 84),
         ],
       ),
     );
@@ -1365,12 +2324,14 @@ class _MaterialRow extends StatelessWidget {
   final Color statusColor;
   final bool isLast;
   final VoidCallback onQrTap;
+  final VoidCallback onEditTap;
   final VoidCallback onDeleteTap;
 
   const _MaterialRow({
     required this.data,
     required this.statusColor,
     required this.onQrTap,
+    required this.onEditTap,
     required this.onDeleteTap,
     this.isLast = false,
   });
@@ -1380,12 +2341,70 @@ class _MaterialRow extends StatelessWidget {
     final id = data['material_id']?.toString() ?? '';
     final name = data['material_name']?.toString() ?? '';
     final unit = data['unit_description']?.toString() ?? '';
+    final stockUnit = data['stock_unit']?.toString() ?? 'pcs';
+    final pieceToSqft = (data['piece_to_sqft'] as num?)?.toDouble();
     final current = (data['current_stock'] as num?) ?? 0;
     final restock = (data['restock_level'] as num?) ?? 0;
     final status = data['_status']?.toString() ?? '';
 
-    String fmt(num v) =>
-        v == v.toInt() ? v.toInt().toString() : v.toStringAsFixed(2);
+    // Determine piece label from unit_description
+    String pieceLabel() {
+      final ud = unit.toLowerCase();
+      if (ud.contains('roll')) return 'rolls';
+      if (ud.contains('sheet')) return 'sheets';
+      return 'pcs';
+    }
+
+    // Format a stock value — shows sqft + piece equivalent when applicable
+    Widget fmtWidget(num v, {bool isPrimary = true}) {
+      final numVal = v.toDouble();
+      if (stockUnit == 'sqft' && pieceToSqft != null && pieceToSqft > 0) {
+        final sqftStr = numVal == numVal.toInt()
+            ? numVal.toInt().toString()
+            : numVal.toStringAsFixed(1);
+        final pieces = numVal / pieceToSqft;
+        final piecesStr = pieces < 10
+            ? pieces.toStringAsFixed(1)
+            : pieces.toStringAsFixed(0);
+        final pLabel = pieceLabel();
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              '$sqftStr sqft',
+              style: TextStyle(
+                color: isPrimary ? _Glass.textPrimary : _Glass.textSecondary,
+                fontSize: isPrimary ? 12 : 11,
+                fontWeight: isPrimary ? FontWeight.w600 : FontWeight.w400,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              '≈$piecesStr $pLabel',
+              style: const TextStyle(
+                color: _Glass.textMuted,
+                fontSize: 10,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        );
+      }
+      // pcs or sqft without piece_to_sqft
+      final s = numVal == numVal.toInt()
+          ? numVal.toInt().toString()
+          : numVal.toStringAsFixed(1);
+      return Text(
+        '$s $stockUnit',
+        style: TextStyle(
+          color: isPrimary ? _Glass.textPrimary : _Glass.textSecondary,
+          fontSize: isPrimary ? 12 : 11,
+          fontWeight: isPrimary ? FontWeight.w600 : FontWeight.w400,
+        ),
+        textAlign: TextAlign.center,
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
@@ -1396,6 +2415,7 @@ class _MaterialRow extends StatelessWidget {
             : Border(bottom: BorderSide(color: _Glass.borderMid, width: 0.8)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 74,
@@ -1435,24 +2455,12 @@ class _MaterialRow extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 72,
-            child: Text(
-              fmt(current),
-              style: const TextStyle(
-                color: _Glass.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            width: 90,
+            child: Center(child: fmtWidget(current, isPrimary: true)),
           ),
           SizedBox(
-            width: 80,
-            child: Text(
-              fmt(restock),
-              style: const TextStyle(color: _Glass.textSecondary, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
+            width: 90,
+            child: Center(child: fmtWidget(restock, isPrimary: false)),
           ),
           SizedBox(
             width: 90,
@@ -1481,10 +2489,24 @@ class _MaterialRow extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 60,
+            width: 84,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    size: 15,
+                    color: _Glass.textMuted,
+                  ),
+                  onPressed: onEditTap,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  tooltip: 'Edit material',
+                ),
                 IconButton(
                   icon: const Icon(
                     Icons.qr_code_rounded,
@@ -1525,179 +2547,243 @@ class _MaterialRow extends StatelessWidget {
 // =============================================================================
 // Seed data
 // =============================================================================
+// piece_to_sqft = total sqft in 1 replenishment piece (roll / sheet)
+// stock_unit = "sqft" (area-tracked) or "pcs" (discrete count)
+// restock_level is always in the same unit as current_stock (sqft or pcs)
 const _kInitialMaterials = [
+  // ── Standard 30" (2.5ft) wide × 50m roll = 2.5 × 164.04 ≈ 410 sqft ──────
   {
     'material_id': 'RM-001',
     'material_name': 'Poster Glitter',
-    'unit_description': '1 roll',
-    'restock_level': 5.0,
+    'unit_description': 'Roll (2.5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 410.1,
+    'restock_level': 2050.0, // 5 rolls
   },
   {
     'material_id': 'RM-002',
     'material_name': 'Vinyl Matte Sticker',
-    'unit_description': '1 roll',
-    'restock_level': 5.0,
+    'unit_description': 'Roll (2.5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 410.1,
+    'restock_level': 2050.0,
   },
   {
     'material_id': 'RM-003',
     'material_name': 'Clear Matte Printable',
-    'unit_description': '1 roll',
-    'restock_level': 5.0,
+    'unit_description': 'Roll (2.5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 410.1,
+    'restock_level': 2050.0,
   },
   {
     'material_id': 'RM-004',
     'material_name': 'Clear Glossy Printable',
-    'unit_description': '1/2 roll',
-    'restock_level': 3.0,
+    'unit_description': 'Roll (2.5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 410.1,
+    'restock_level': 1230.0, // 3 rolls
   },
   {
     'material_id': 'RM-005',
     'material_name': 'Poster Paper Matte',
-    'unit_description': '1/2 roll',
-    'restock_level': 3.0,
+    'unit_description': 'Roll (2.5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 410.1,
+    'restock_level': 1230.0,
   },
   {
     'material_id': 'RM-006',
     'material_name': 'Poster Paper Glossy',
-    'unit_description': '3/4 roll',
-    'restock_level': 3.0,
+    'unit_description': 'Roll (2.5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 410.1,
+    'restock_level': 1230.0,
   },
   {
     'material_id': 'RM-007',
     'material_name': 'Vinyl Glossy Sticker',
-    'unit_description': '3/4 roll',
-    'restock_level': 3.0,
+    'unit_description': 'Roll (2.5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 410.1,
+    'restock_level': 1230.0,
   },
+  // ── 5ft wide × 50m roll = 5 × 164.04 ≈ 820 sqft ─────────────────────────
   {
     'material_id': 'RM-008',
     'material_name': '5ft Matte Sticker',
-    'unit_description': '1/4 roll',
-    'restock_level': 3.0,
+    'unit_description': 'Roll (5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 820.2,
+    'restock_level': 2460.0, // 3 rolls
   },
+  // ── Sheet materials (4×8ft = 32 sqft, 2×4ft = 8 sqft, etc.) ─────────────
   {
     'material_id': 'RM-009',
-    'material_name': '3in Sticker',
-    'unit_description': '4x5ft sheet',
-    'restock_level': 10.0,
+    'material_name': '3in Sticker Sheet',
+    'unit_description': '4×5ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 20.0,
+    'restock_level': 200.0, // 10 sheets
   },
   {
     'material_id': 'RM-010',
-    'material_name': 'Composite Panel (4x8ft)',
-    'unit_description': '4x8ft sheet',
-    'restock_level': 10.0,
+    'material_name': 'Composite Panel (4×8ft)',
+    'unit_description': '4×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 32.0,
+    'restock_level': 320.0, // 10 sheets
   },
   {
     'material_id': 'RM-011',
-    'material_name': 'Composite Panel (2x4ft)',
-    'unit_description': '2x4ft sheet',
-    'restock_level': 10.0,
+    'material_name': 'Composite Panel (2×4ft)',
+    'unit_description': '2×4ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 8.0,
+    'restock_level': 80.0,
   },
   {
     'material_id': 'RM-012',
     'material_name': 'Acrylic Clear 5mm',
-    'unit_description': '3x8ft sheet',
-    'restock_level': 5.0,
+    'unit_description': '3×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 24.0,
+    'restock_level': 120.0, // 5 sheets
   },
   {
     'material_id': 'RM-013',
     'material_name': 'Acrylic Chalk White',
-    'unit_description': '4x4ft sheet',
-    'restock_level': 5.0,
+    'unit_description': '4×4ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 16.0,
+    'restock_level': 80.0,
   },
   {
     'material_id': 'RM-014',
     'material_name': 'Acrylic Diffuser 3mm',
-    'unit_description': '4x8ft sheet',
-    'restock_level': 5.0,
+    'unit_description': '4×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 32.0,
+    'restock_level': 160.0,
   },
   {
     'material_id': 'RM-015',
     'material_name': 'Acrylic Diffuser 1.5mm',
-    'unit_description': '4x8ft sheet',
-    'restock_level': 5.0,
+    'unit_description': '4×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 32.0,
+    'restock_level': 160.0,
   },
   {
     'material_id': 'RM-016',
     'material_name': 'Acrylic Clear 3mm',
-    'unit_description': '4x8ft sheet',
-    'restock_level': 5.0,
+    'unit_description': '4×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 32.0,
+    'restock_level': 160.0,
   },
   {
     'material_id': 'RM-017',
     'material_name': 'Acrylic Clear 1.5mm',
-    'unit_description': '4x8ft sheet',
-    'restock_level': 5.0,
+    'unit_description': '4×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 32.0,
+    'restock_level': 160.0,
   },
   {
     'material_id': 'RM-018',
     'material_name': 'Sintra Board 3mm',
-    'unit_description': '4x8ft sheet',
-    'restock_level': 10.0,
+    'unit_description': '4×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 32.0,
+    'restock_level': 320.0, // 10 sheets
   },
   {
     'material_id': 'RM-019',
     'material_name': 'Sintra Board 1.5mm',
-    'unit_description': '4x8ft sheet',
-    'restock_level': 10.0,
+    'unit_description': '4×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 32.0,
+    'restock_level': 320.0,
   },
   {
     'material_id': 'RM-020',
     'material_name': 'Sintra Board 5mm',
-    'unit_description': '4x8ft sheet',
-    'restock_level': 10.0,
+    'unit_description': '4×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 32.0,
+    'restock_level': 320.0,
   },
+  // ── Tarpaulin: 10.5ft wide × 50m long = 10.5 × 164.042 ≈ 1722 sqft ───────
   {
     'material_id': 'RM-021',
     'material_name': 'Tarpaulin 13oz',
-    'unit_description': 'Roll (13oz)',
-    'restock_level': 3.0,
+    'unit_description': 'Roll (10.5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 1722.44,
+    'restock_level': 5167.0, // 3 rolls
   },
   {
     'material_id': 'RM-022',
     'material_name': 'Tarpaulin 10oz',
-    'unit_description': 'Roll (10oz)',
-    'restock_level': 3.0,
+    'unit_description': 'Roll (10.5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 1722.44,
+    'restock_level': 5167.0,
   },
   {
     'material_id': 'RM-023',
     'material_name': 'Sticker Matte',
-    'unit_description': 'Roll',
-    'restock_level': 5.0,
+    'unit_description': 'Roll (2.5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 410.1,
+    'restock_level': 2050.0,
   },
   {
     'material_id': 'RM-024',
     'material_name': 'Sticker Glossy',
-    'unit_description': 'Roll',
-    'restock_level': 5.0,
+    'unit_description': 'Roll (2.5ft × 50m)',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 410.1,
+    'restock_level': 2050.0,
   },
   {
     'material_id': 'RM-025',
     'material_name': 'Sintra Board 2mm',
-    'unit_description': '4x8ft sheet',
-    'restock_level': 10.0,
+    'unit_description': '4×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 32.0,
+    'restock_level': 320.0,
   },
   {
     'material_id': 'RM-026',
     'material_name': 'Plastic PVC',
-    'unit_description': 'Sheet',
-    'restock_level': 5.0,
+    'unit_description': '4×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 32.0,
+    'restock_level': 160.0,
   },
+  // ── Discrete piece materials ───────────────────────────────────────────────
   {
     'material_id': 'RM-027',
     'material_name': 'Adhesive',
     'unit_description': 'pcs / bottle',
+    'stock_unit': 'pcs',
     'restock_level': 10.0,
   },
   {
     'material_id': 'RM-028',
     'material_name': 'Signage - Composite Panel',
-    'unit_description': 'Sheet',
-    'restock_level': 5.0,
+    'unit_description': '4×8ft sheet',
+    'stock_unit': 'sqft',
+    'piece_to_sqft': 32.0,
+    'restock_level': 160.0,
   },
   {
     'material_id': 'RM-029',
     'material_name': 'Signage - Metal Furring',
     'unit_description': 'pcs',
+    'stock_unit': 'pcs',
     'restock_level': 20.0,
   },
 ];
