@@ -16,7 +16,7 @@ class AppNavBar extends StatelessWidget {
   static const _defaultItems = [
     "Home",
     "Inventory",
-    "Logs & History",
+    "Accounting",
     "Account",
   ];
 

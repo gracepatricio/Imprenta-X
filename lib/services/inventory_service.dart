@@ -45,6 +45,16 @@ class InventoryService {
 
   /// Deducts raw materials from stock based on a customer order.
   ///
+  /// [orderQuantity] must already be in the same unit as the raw material's
+  /// stock_unit:
+  ///   - For area-based materials (stock_unit = "sqft"): pass total sqft
+  ///     ordered (width × height × qty).
+  ///   - For piece-based materials (stock_unit = "pcs"): pass piece count.
+  ///
+  /// [selectedMaterial] is the customer's chosen material option (e.g. "13oz").
+  /// BOM items with a matching [for_material_option] are deducted; BOM items
+  /// with no [for_material_option] (null/"") always apply.
+  ///
   /// Throws if the product does not exist.
   /// Silently skips materials with empty IDs or that don't exist in Firestore.
   static Future<void> deductForOrder({
@@ -54,6 +64,7 @@ class InventoryService {
     required double orderQuantity,
     required String processedByUid,
     required String processedByName,
+    String? selectedMaterial,
   }) async {
     // 1. Fetch product BOM
     final productDoc =
@@ -62,10 +73,19 @@ class InventoryService {
       throw Exception('Product not found: $productId');
     }
 
-    final bom = List<Map<String, dynamic>>.from(
+    final rawBom = List<Map<String, dynamic>>.from(
       ((productDoc.data()?['bill_of_materials'] as List?) ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map)),
     );
+
+    // Filter BOM by material option:
+    // - Items with no for_material_option always apply (shared consumables).
+    // - Items with a for_material_option only apply when it matches the
+    //   customer's selection.
+    final bom = rawBom.where((item) {
+      final opt = item['for_material_option']?.toString() ?? '';
+      return opt.isEmpty || opt == (selectedMaterial ?? '');
+    }).toList();
 
     if (bom.isEmpty) return; // No BOM → nothing to deduct
 

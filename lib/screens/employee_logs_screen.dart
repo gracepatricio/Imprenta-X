@@ -5,18 +5,17 @@ import 'app_theme.dart';
 import 'sales_widgets.dart';
 import 'employee_pos_screen.dart';
 import 'invoice_screen.dart';
+import '../services/inventory_service.dart';
 
 class EmployeeLogsScreen extends StatefulWidget {
-  // 0 = Job Queue Pending, 1 = Job Queue Active, 2 = Ready for Pickup
-  final int initialJobQueueTab;
-  const EmployeeLogsScreen({super.key, this.initialJobQueueTab = 0});
+  const EmployeeLogsScreen({super.key});
 
   @override
   State<EmployeeLogsScreen> createState() => _EmployeeLogsScreenState();
 }
 
 class _EmployeeLogsScreenState extends State<EmployeeLogsScreen> {
-  int _topTab = 0; // 0 = Job Queue, 1 = Sales Record, 2 = POS
+  int _topTab = 0; // 0 = Sales Record, 1 = POS
 
   @override
   Widget build(BuildContext context) {
@@ -26,16 +25,15 @@ class _EmployeeLogsScreenState extends State<EmployeeLogsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _PillTabBar(
-            tabs: const ['Job Queue', 'Sales Record', 'POS'],
+            tabs: const ['Sales Record', 'POS'],
             active: _topTab,
             onTap: (i) => setState(() => _topTab = i),
           ),
           const SizedBox(height: 16),
           Expanded(
             child: switch (_topTab) {
-              0 => _JobQueueSection(initialTab: widget.initialJobQueueTab),
-              1 => const _SalesSection(),
-              2 => const EmployeePosScreen(),
+              0 => const _SalesSection(),
+              1 => const EmployeePosScreen(),
               _ => const SizedBox.shrink(),
             },
           ),
@@ -169,6 +167,22 @@ class _UnderlineTabBar extends StatelessWidget {
           ),
         );
       }),
+    );
+  }
+}
+
+// =============================================================================
+// Public entry-point — used by the top-level navbar tab in EmployeeHomepage
+// =============================================================================
+class EmployeeJobQueueScreen extends StatelessWidget {
+  final int initialTab;
+  const EmployeeJobQueueScreen({super.key, this.initialTab = 0});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      child: _JobQueueSection(initialTab: initialTab),
     );
   }
 }
@@ -324,9 +338,9 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
       final docs = [...snap.docs]
         ..sort((a, b) {
           final ta =
-              (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           final tb =
-              (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           if (ta == null && tb == null) return 0;
           if (ta == null) return 1;
           if (tb == null) return -1;
@@ -447,16 +461,16 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
             ),
             suffixIcon: _search.isNotEmpty
                 ? GestureDetector(
-                    onTap: () {
-                      _searchCtrl.clear();
-                      setState(() => _search = '');
-                    },
-                    child: const Icon(
-                      Icons.clear,
-                      color: Colors.white38,
-                      size: 18,
-                    ),
-                  )
+              onTap: () {
+                _searchCtrl.clear();
+                setState(() => _search = '');
+              },
+              child: const Icon(
+                Icons.clear,
+                color: Colors.white38,
+                size: 18,
+              ),
+            )
                 : null,
             filled: true,
             fillColor: Colors.white.withValues(alpha: 0.06),
@@ -551,11 +565,11 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                   final paid = (data['amount_paid'] as num?)?.toDouble() ?? 0;
                   final remaining =
                       (data['remaining_balance'] as num?)?.toDouble() ??
-                      (total - paid);
+                          (total - paid);
                   final products =
                       (data['products'] as List?)
                           ?.cast<Map<String, dynamic>>() ??
-                      [];
+                          [];
                   final dateStr = _fmtDate(data['created_at']);
                   final invoiceId = data['invoice_id']?.toString();
                   final statusColor = _statusColor(status);
@@ -623,8 +637,8 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                               products
                                   .map(
                                     (p) =>
-                                        '${p['name'] ?? '?'} ×${p['qty'] ?? 1}',
-                                  )
+                                '${p['name'] ?? '?'} ×${p['qty'] ?? 1}',
+                              )
                                   .join(', '),
                               style: const TextStyle(
                                 color: Colors.white70,
@@ -867,26 +881,26 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
       final products = _items
           .map(
             (item) => {
-              'product_id':
-                  item.productData['product_id']?.toString() ??
-                  item.productDocId,
-              'name': item.productData['product_name']?.toString() ?? '—',
-              'category': item.productData['category']?.toString() ?? '',
-              'qty': item.qty,
-              'unit_price':
-                  (item.productData['price'] as num?)?.toDouble() ?? 0,
-              'pricing_unit':
-                  item.productData['pricing_unit']?.toString() ?? '',
-              'price': item.subtotal,
-              'notes': item.notes,
-              if (item.widthFt != null) 'width_ft': item.widthFt,
-              if (item.heightFt != null) 'height_ft': item.heightFt,
-              if (item.material != null) 'material': item.material,
-              if (item.widthFt != null && item.heightFt != null)
-                'size_label': '${item.widthFt}ft × ${item.heightFt}ft',
-              'walk_in': true,
-            },
-          )
+          'product_id':
+          item.productData['product_id']?.toString() ??
+              item.productDocId,
+          'name': item.productData['product_name']?.toString() ?? '—',
+          'category': item.productData['category']?.toString() ?? '',
+          'qty': item.qty,
+          'unit_price':
+          (item.productData['price'] as num?)?.toDouble() ?? 0,
+          'pricing_unit':
+          item.productData['pricing_unit']?.toString() ?? '',
+          'price': item.subtotal,
+          'notes': item.notes,
+          if (item.widthFt != null) 'width_ft': item.widthFt,
+          if (item.heightFt != null) 'height_ft': item.heightFt,
+          if (item.material != null) 'material': item.material,
+          if (item.widthFt != null && item.heightFt != null)
+            'size_label': '${item.widthFt}ft × ${item.heightFt}ft',
+          'walk_in': true,
+        },
+      )
           .toList();
 
       final orderRef = db.collection('Orders').doc(orderId);
@@ -1167,11 +1181,11 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           item.productData['product_name']
-                                                  ?.toString() ??
+                                              ?.toString() ??
                                               '—',
                                           style: const TextStyle(
                                             color: Colors.white,
@@ -1363,20 +1377,20 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                         ),
                         child: _submitting
                             ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.black54,
-                                ),
-                              )
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.black54,
+                          ),
+                        )
                             : const Text(
-                                'Create Job Order',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
+                          'Create Job Order',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -1663,14 +1677,14 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                     _catChip(
                       'All',
                       _category == null,
-                      () => setState(() => _category = null),
+                          () => setState(() => _category = null),
                     ),
                     ..._categories.map(
-                      (c) => _catChip(
+                          (c) => _catChip(
                         c,
                         _category == c,
-                        () => setState(
-                          () => _category = _category == c ? null : c,
+                            () => setState(
+                              () => _category = _category == c ? null : c,
                         ),
                       ),
                     ),
@@ -1682,151 +1696,151 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
               Expanded(
                 child: filtered.isEmpty
                     ? const Center(
-                        child: Text(
-                          'No products found.',
-                          style: TextStyle(color: Colors.white38, fontSize: 13),
-                        ),
-                      )
+                  child: Text(
+                    'No products found.',
+                    style: TextStyle(color: Colors.white38, fontSize: 13),
+                  ),
+                )
                     : ListView.builder(
-                        itemCount: filtered.length,
-                        itemBuilder: (_, i) {
-                          final doc = filtered[i];
-                          final data = doc.data() as Map<String, dynamic>;
-                          final name = data['product_name']?.toString() ?? '—';
-                          final price =
-                              (data['price'] as num?)?.toDouble() ?? 0;
-                          final unit = data['pricing_unit']?.toString() ?? '';
-                          final imageUrl = data['image_url']?.toString() ?? '';
-                          final cat = data['category']?.toString() ?? '';
-                          final desc = data['description']?.toString() ?? '';
-                          final isSelected = _selected?.id == doc.id;
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) {
+                    final doc = filtered[i];
+                    final data = doc.data() as Map<String, dynamic>;
+                    final name = data['product_name']?.toString() ?? '—';
+                    final price =
+                        (data['price'] as num?)?.toDouble() ?? 0;
+                    final unit = data['pricing_unit']?.toString() ?? '';
+                    final imageUrl = data['image_url']?.toString() ?? '';
+                    final cat = data['category']?.toString() ?? '';
+                    final desc = data['description']?.toString() ?? '';
+                    final isSelected = _selected?.id == doc.id;
 
-                          return GestureDetector(
-                            onTap: () => setState(() {
-                              _selected = doc;
-                              final minQty =
-                                  (data['min_quantity'] as num?)?.toInt() ?? 1;
-                              _qty = minQty;
-                              _qtyCtrl.text = '$_qty';
-                              _sizePreset = '2×3 ft';
-                              _widthFt = 2;
-                              _heightFt = 3;
-                              _widthCtrl.text = '2';
-                              _heightCtrl.text = '3';
-                              final mats =
-                                  _materialMap[data['category']?.toString() ??
-                                      ''] ??
-                                  [];
-                              _material = mats.isNotEmpty ? mats.first : null;
-                            }),
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? AppTheme.gold.withValues(alpha: 0.12)
-                                    : Colors.white.withValues(alpha: 0.06),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? AppTheme.gold.withValues(alpha: 0.5)
-                                      : Colors.white.withValues(alpha: 0.1),
-                                ),
+                    return GestureDetector(
+                      onTap: () => setState(() {
+                        _selected = doc;
+                        final minQty =
+                            (data['min_quantity'] as num?)?.toInt() ?? 1;
+                        _qty = minQty;
+                        _qtyCtrl.text = '$_qty';
+                        _sizePreset = '2×3 ft';
+                        _widthFt = 2;
+                        _heightFt = 3;
+                        _widthCtrl.text = '2';
+                        _heightCtrl.text = '3';
+                        final mats =
+                            _materialMap[data['category']?.toString() ??
+                                ''] ??
+                                [];
+                        _material = mats.isNotEmpty ? mats.first : null;
+                      }),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppTheme.gold.withValues(alpha: 0.12)
+                              : Colors.white.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected
+                                ? AppTheme.gold.withValues(alpha: 0.5)
+                                : Colors.white.withValues(alpha: 0.1),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: const BorderRadius.horizontal(
+                                left: Radius.circular(12),
                               ),
-                              child: Row(
+                              child: SizedBox(
+                                width: 64,
+                                height: 64,
+                                child: imageUrl.isNotEmpty
+                                    ? Image.network(
+                                  imageUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      _imgPlaceholder(),
+                                )
+                                    : _imgPlaceholder(),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                CrossAxisAlignment.start,
                                 children: [
-                                  ClipRRect(
-                                    borderRadius: const BorderRadius.horizontal(
-                                      left: Radius.circular(12),
-                                    ),
-                                    child: SizedBox(
-                                      width: 64,
-                                      height: 64,
-                                      child: imageUrl.isNotEmpty
-                                          ? Image.network(
-                                              imageUrl,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) =>
-                                                  _imgPlaceholder(),
-                                            )
-                                          : _imgPlaceholder(),
+                                  Text(
+                                    name,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.w500,
+                                      fontSize: 13,
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          name,
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: isSelected
-                                                ? FontWeight.bold
-                                                : FontWeight.w500,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        if (cat.isNotEmpty)
-                                          Text(
-                                            cat,
-                                            style: const TextStyle(
-                                              color: Colors.white38,
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                        if (desc.isNotEmpty)
-                                          Text(
-                                            desc,
-                                            style: const TextStyle(
-                                              color: Colors.white38,
-                                              fontSize: 11,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                      ],
+                                  if (cat.isNotEmpty)
+                                    Text(
+                                      cat,
+                                      style: const TextStyle(
+                                        color: Colors.white38,
+                                        fontSize: 10,
+                                      ),
                                     ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 12),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          '₱${price.toStringAsFixed(2)}',
-                                          style: TextStyle(
-                                            color: isSelected
-                                                ? AppTheme.gold
-                                                : Colors.white70,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        if (unit.isNotEmpty)
-                                          Text(
-                                            '/ $unit',
-                                            style: const TextStyle(
-                                              color: Colors.white38,
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                        if (isSelected)
-                                          const Icon(
-                                            Icons.check_circle_rounded,
-                                            color: AppTheme.gold,
-                                            size: 16,
-                                          ),
-                                      ],
+                                  if (desc.isNotEmpty)
+                                    Text(
+                                      desc,
+                                      style: const TextStyle(
+                                        color: Colors.white38,
+                                        fontSize: 11,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
                                 ],
                               ),
                             ),
-                          );
-                        },
+                            Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: Column(
+                                crossAxisAlignment:
+                                CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '₱${price.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? AppTheme.gold
+                                          : Colors.white70,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  if (unit.isNotEmpty)
+                                    Text(
+                                      '/ $unit',
+                                      style: const TextStyle(
+                                        color: Colors.white38,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  if (isSelected)
+                                    const Icon(
+                                      Icons.check_circle_rounded,
+                                      color: AppTheme.gold,
+                                      size: 16,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                    );
+                  },
+                ),
               ),
 
               if (_selected != null) ...[
@@ -1843,18 +1857,18 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                     children: _sizePresets
                         .map(
                           (p) => _selChip(p, _sizePreset == p, () {
-                            final dims = _presetDims[p];
-                            setState(() {
-                              _sizePreset = p;
-                              if (dims != null) {
-                                _widthFt = dims.$1;
-                                _heightFt = dims.$2;
-                                _widthCtrl.text = dims.$1.toString();
-                                _heightCtrl.text = dims.$2.toString();
-                              }
-                            });
-                          }),
-                        )
+                        final dims = _presetDims[p];
+                        setState(() {
+                          _sizePreset = p;
+                          if (dims != null) {
+                            _widthFt = dims.$1;
+                            _heightFt = dims.$2;
+                            _widthCtrl.text = dims.$1.toString();
+                            _heightCtrl.text = dims.$2.toString();
+                          }
+                        });
+                      }),
+                    )
                         .toList(),
                   ),
                   const SizedBox(height: 10),
@@ -1901,11 +1915,11 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                     children: _materialList
                         .map(
                           (m) => _selChip(
-                            m,
-                            _material == m,
+                        m,
+                        _material == m,
                             () => setState(() => _material = m),
-                          ),
-                        )
+                      ),
+                    )
                         .toList(),
                   ),
                   const SizedBox(height: 14),
@@ -1920,11 +1934,11 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                     const Spacer(),
                     _qtyBtn(
                       Icons.remove_rounded,
-                      () => setState(() {
+                          () => setState(() {
                         final minQty =
                             ((_selected!.data() as Map)['min_quantity'] as num?)
                                 ?.toInt() ??
-                            1;
+                                1;
                         if (_qty > minQty) {
                           _qty--;
                           _qtyCtrl.text = '$_qty';
@@ -1974,7 +1988,7 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                     const SizedBox(width: 8),
                     _qtyBtn(
                       Icons.add_rounded,
-                      () => setState(() {
+                          () => setState(() {
                         _qty++;
                         _qtyCtrl.text = '$_qty';
                       }),
@@ -2009,30 +2023,30 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                   onPressed: _selected == null
                       ? null
                       : () {
-                          if (_materialList.isNotEmpty && _material == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Please select a material / finish.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-                          widget.onAdd(
-                            _WalkInItem(
-                              productDocId: _selected!.id,
-                              productData:
-                                  _selected!.data() as Map<String, dynamic>,
-                              qty: _qty,
-                              notes: _notes,
-                              widthFt: _needsSize ? _widthFt : null,
-                              heightFt: _needsSize ? _heightFt : null,
-                              material: _material,
-                            ),
-                          );
-                          Navigator.pop(context);
-                        },
+                    if (_materialList.isNotEmpty && _material == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Please select a material / finish.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                    widget.onAdd(
+                      _WalkInItem(
+                        productDocId: _selected!.id,
+                        productData:
+                        _selected!.data() as Map<String, dynamic>,
+                        qty: _qty,
+                        notes: _notes,
+                        widthFt: _needsSize ? _widthFt : null,
+                        heightFt: _needsSize ? _heightFt : null,
+                        material: _material,
+                      ),
+                    );
+                    Navigator.pop(context);
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.gold,
                     foregroundColor: Colors.black,
@@ -2150,10 +2164,10 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
       );
 
   Widget _dimField(
-    String label,
-    TextEditingController ctrl,
-    ValueChanged<String> onChanged,
-  ) => TextField(
+      String label,
+      TextEditingController ctrl,
+      ValueChanged<String> onChanged,
+      ) => TextField(
     controller: ctrl,
     keyboardType: const TextInputType.numberWithOptions(decimal: true),
     style: const TextStyle(color: Colors.white, fontSize: 13),
@@ -2198,9 +2212,9 @@ class _QueueList extends StatelessWidget {
         final docs = [...(snap.data?.docs ?? [])]
           ..sort((a, b) {
             final ta =
-                (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
             final tb =
-                (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
@@ -2277,9 +2291,9 @@ class _ReadyForPickupList extends StatelessWidget {
         final docs = [...(snap.data?.docs ?? [])]
           ..sort((a, b) {
             final ta =
-                (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
             final tb =
-                (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
@@ -2358,6 +2372,24 @@ class _ReadyOrderCard extends StatelessWidget {
           content: Text('Order $orderId marked as completed'),
           backgroundColor: Colors.green.shade700,
         ),
+      );
+    }
+  }
+
+  Future<void> _viewInvoice(BuildContext context) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('Orders')
+        .doc(orderId)
+        .get();
+    final invId = snap.data()?['invoice_id']?.toString();
+    if (!context.mounted) return;
+    if (invId != null && invId.isNotEmpty) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => InvoiceScreen(invoiceId: invId)),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No invoice yet for this order')),
       );
     }
   }
@@ -2471,6 +2503,25 @@ class _ReadyOrderCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
+                // Invoice button — always visible in Ready for Pickup
+                OutlinedButton(
+                  onPressed: () => _viewInvoice(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.gold,
+                    side: BorderSide(
+                      color: AppTheme.gold.withValues(alpha: 0.5),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Icon(Icons.receipt_long_rounded, size: 18),
+                ),
+                const SizedBox(width: 8),
                 if (!fullyPaid)
                   Expanded(
                     child: Container(
@@ -2673,7 +2724,7 @@ class _QueueCard extends StatelessWidget {
         'sender_uid': 'system',
         'sender_role': 'system',
         'text':
-            'Your order $orderId has been cancelled. Please contact us for assistance.',
+        'Your order $orderId has been cancelled. Please contact us for assistance.',
         'timestamp': FieldValue.serverTimestamp(),
       });
       await threadRef.set({
@@ -2709,6 +2760,50 @@ class _QueueCard extends StatelessWidget {
     });
     await batch.commit();
 
+    // Automatically deduct raw materials from inventory for each product
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      String employeeName = user.displayName ?? user.email ?? 'Employee';
+      try {
+        final userDoc = await db.collection('User').doc(user.uid).get();
+        if (userDoc.exists) {
+          employeeName = userDoc.data()?['full_name'] ?? employeeName;
+        }
+      } catch (_) {}
+
+      final products = List<Map<String, dynamic>>.from(
+        ((data['products'] as List?) ?? [])
+            .map((e) => Map<String, dynamic>.from(e as Map)),
+      );
+
+      for (final p in products) {
+        final productId = p['product_id']?.toString() ?? '';
+        if (productId.isEmpty) continue;
+        final qty = (p['qty'] as num?)?.toDouble() ?? 1.0;
+        final widthFt = (p['width_ft'] as num?)?.toDouble();
+        final heightFt = (p['height_ft'] as num?)?.toDouble();
+        final selectedMaterial = p['material']?.toString();
+        // For area-based products pass total sqft; for piece-based pass qty
+        final effectiveQty = (widthFt != null && heightFt != null)
+            ? widthFt * heightFt * qty
+            : qty;
+        try {
+          await InventoryService.deductForOrder(
+            orderId: orderId,
+            productId: productId,
+            productName: p['name']?.toString() ?? '',
+            orderQuantity: effectiveQty,
+            processedByUid: user.uid,
+            processedByName: employeeName,
+            selectedMaterial: selectedMaterial,
+          );
+        } catch (e) {
+          // Non-critical: log and continue — production must not be blocked
+          debugPrint('Inventory deduction failed for $productId: $e');
+        }
+      }
+    }
+
     if (customerUid != null && customerUid.isNotEmpty) {
       final threadRef = db.collection('Messages').doc('chat_$customerUid');
       final turnaround = data['turnaround_days'] as int?;
@@ -2716,7 +2811,7 @@ class _QueueCard extends StatelessWidget {
         'sender_uid': 'system',
         'sender_role': 'system',
         'text':
-            'Your order $orderId is now in production!'
+        'Your order $orderId is now in production!'
             '${turnaround != null ? ' Estimated completion: ~$turnaround day${turnaround == 1 ? '' : 's'}.' : ''}',
         'timestamp': FieldValue.serverTimestamp(),
       });
@@ -2794,6 +2889,10 @@ class _QueueCard extends StatelessWidget {
         (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final dateStr = _fmtDate(data['created_at']);
 
+    // TODO (James): wire `is_completed` to the Firestore Order_Queue document
+    // and surface a toggle/action to mark individual job steps as done.
+    final isCompleted = data['is_completed'] as bool? ?? (jobStatus == 'completed');
+
     final statusColor = jobStatus == 'active'
         ? Colors.blueAccent
         : jobStatus == 'cancelled'
@@ -2854,6 +2953,49 @@ class _QueueCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                // ── Completed badge ──────────────────────────────────────
+                // TODO (James): replace with interactive toggle once
+                // `is_completed` field is added to Order_Queue documents.
+                Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isCompleted
+                        ? Colors.green.withValues(alpha: 0.15)
+                        : Colors.white.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isCompleted
+                          ? Colors.green.withValues(alpha: 0.45)
+                          : Colors.white.withValues(alpha: 0.18),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isCompleted
+                            ? Icons.check_circle_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        size: 11,
+                        color: isCompleted ? Colors.green : Colors.white38,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isCompleted ? 'Completed' : 'Pending',
+                        style: TextStyle(
+                          color: isCompleted ? Colors.green : Colors.white38,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // ── Status badge ─────────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,

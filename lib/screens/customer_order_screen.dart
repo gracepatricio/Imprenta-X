@@ -65,16 +65,15 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     '5×10 ft': (5.0, 10.0),
   };
 
-  static const _materialMap = {
-    'Large Format Printing': ['Standard Tarp', 'Premium Tarp', 'Mesh Tarp'],
-    'Sticker Printing':      ['Glossy Vinyl', 'Matte Vinyl', 'Clear Vinyl'],
-    'Photo Printing':        ['Glossy', 'Matte', 'Satin'],
-    'Menu Board':            ['Standard', 'Premium Backlit'],
-    'Invitations':           ['Matte', 'Glossy', 'Kraft Paper'],
-    'Calling Cards':         ['Matte', 'Glossy', 'UV Coated'],
-  };
-
-  List<String> get _materialList => _materialMap[_category] ?? [];
+  // Material options come from the product's material_options field (set in
+  // admin product management). Falls back to empty if not configured.
+  List<String> get _materialList {
+    final raw = widget.product['material_options'] as List?;
+    if (raw != null && raw.isNotEmpty) {
+      return raw.map((e) => e.toString()).toList();
+    }
+    return [];
+  }
 
   // ── Pricing ──────────────────────────────────────────────────────────────────
 

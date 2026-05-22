@@ -26,6 +26,8 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
   void initState() {
     super.initState();
     _searchCtrl.addListener(_onSearchChanged);
+    // Show all customers immediately before any search is performed
+    _loadAllCustomers();
   }
 
   @override
@@ -42,14 +44,43 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
     if (q == _searchQuery) return;
     _searchQuery = q;
     if (q.isEmpty) {
+      // Show all customers when the search field is cleared
       setState(() {
-        _customers = [];
         _selectedCustomer = null;
         _activeOrders = [];
       });
+      _loadAllCustomers();
       return;
     }
     _searchCustomers(q);
+  }
+
+  Future<void> _loadAllCustomers() async {
+    setState(() => _loadingCustomers = true);
+    try {
+      final snap = await _db
+          .collection('User')
+          .where('role', isEqualTo: 'customer')
+          .limit(100)
+          .get()
+          .catchError((_) => null);
+      final results = <Map<String, dynamic>>[];
+      if (snap != null) {
+        for (final doc in snap.docs) {
+          results.add({'uid': doc.id, ...doc.data()});
+        }
+        results.sort((a, b) {
+          final na = (a['full_name'] as String? ?? '').toLowerCase();
+          final nb = (b['full_name'] as String? ?? '').toLowerCase();
+          return na.compareTo(nb);
+        });
+      }
+      if (mounted) setState(() => _customers = results);
+    } catch (e) {
+      _showSnack('Could not load customers: $e');
+    } finally {
+      if (mounted) setState(() => _loadingCustomers = false);
+    }
   }
 
   Future<void> _searchCustomers(String query) async {
@@ -140,8 +171,12 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
 
     try {
       final uid = customer['uid'] as String;
-      // Fetch pending + in_production + ready orders (all unpaid/partially-paid)
-      // Fetch all unpaid/active statuses in a single whereIn query
+      // Employee POS shows pending + in_production + ready so staff can collect
+      // payments at any stage.  Important: orders only appear in the
+      // *customer-facing* order history once an employee has explicitly advanced
+      // the status to 'in_production' or beyond.  Payment completion alone does
+      // NOT trigger that transition — the status field is controlled exclusively
+      // by employee actions (e.g. "Mark as In Production"), never by payment events.
       final snap = await _db
           .collection('Orders')
           .where('customer_uid', isEqualTo: uid)
@@ -204,13 +239,25 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
           final total     = (orderSnap.data()?['total_price'] as num?)?.toDouble() ?? 0;
           final remaining = total - newPaid;
 
-          // Update order
+          // Update order — payment completion alone does NOT advance status.
+          // The order status (pending → in_production → ready → completed) is
+          // controlled exclusively by employees, not by payment events.
           await _db.collection('Orders').doc(orderId).update({
             'amount_paid':       newPaid,
             'remaining_balance': remaining.clamp(0, double.infinity),
             'payment_status':    wasFullyPaid ? 'paid' : 'partial',
-            if (wasFullyPaid) 'status': 'completed',
+            // NOTE: 'status' is intentionally NOT updated here.
+            // Only an employee action (marking "In Production") may advance it.
           });
+
+          // Keep the Invoice in sync with the new payment amounts
+          final invId = orderSnap.data()?['invoice_id']?.toString();
+          if (invId != null && invId.isNotEmpty) {
+            await _db.collection('Invoices').doc(invId).update({
+              'amount_paid':       newPaid,
+              'remaining_balance': remaining.clamp(0, double.infinity),
+            }).catchError((_) {});
+          }
 
           final cashPaid = newPaid - ((orderSnap.data()?['amount_paid'] as num?)?.toDouble() ?? 0);
           final orderTotal = total;
@@ -392,14 +439,16 @@ class _CustomerResultsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (query.isEmpty) {
+    if (loading && customers.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (query.isEmpty && customers.isEmpty) {
       return _EmptyHint(
         icon: Icons.person_search_outlined,
-        title: 'Search for a customer',
-        subtitle: 'Enter a name or customer ID above to begin',
+        title: 'No customers found',
+        subtitle: 'Could not load customer list',
       );
     }
-    if (loading) return const Center(child: CircularProgressIndicator());
     if (customers.isEmpty) {
       return _EmptyHint(
         icon: Icons.search_off_rounded,
@@ -630,6 +679,9 @@ class _OrderCard extends StatelessWidget {
     final orderId   = rawId.length > 8 ? rawId.substring(0, 8) : rawId;
     final date      = _formatDate(order['date_created']);
 
+    // Any order (walk-in or online) that has not yet met the 50% downpayment.
+    final needsDownpayment = paid < (total * 0.50);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -665,14 +717,25 @@ class _OrderCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _statusColor(order['status']?.toString() ?? '')
-                        .withValues(alpha: 0.18),
+                    color: needsDownpayment
+                        ? Colors.red.withValues(alpha: 0.18)
+                        : remaining > 0
+                        ? Colors.orange.withValues(alpha: 0.18)
+                        : Colors.green.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    remaining > 0 ? 'Unpaid' : 'Paid',
+                    needsDownpayment
+                        ? '↓ Downpayment Required'
+                        : remaining > 0
+                        ? 'Unpaid'
+                        : 'Paid',
                     style: TextStyle(
-                      color: remaining > 0 ? Colors.orange : Colors.green,
+                      color: needsDownpayment
+                          ? Colors.red.shade300
+                          : remaining > 0
+                          ? Colors.orange
+                          : Colors.green,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                     ),
@@ -827,6 +890,12 @@ class _PaymentSheetState extends State<_PaymentSheet> {
     setState(() => _change = null);
   }
 
+  /// Returns true when this is a walk-in order that has not yet received
+  /// any downpayment (i.e. the very first payment collection on a fresh order).
+  /// True when this is the very first payment on any order (walk-in or online)
+  /// and the 50% downpayment has not yet been collected.
+  bool get _requiresDownpayment => _paid == 0.0;
+
   Future<void> _confirm() async {
     final tendered = double.tryParse(_ctrl.text.trim());
     if (tendered == null || tendered <= 0) {
@@ -834,9 +903,29 @@ class _PaymentSheetState extends State<_PaymentSheet> {
           const SnackBar(content: Text('Enter a valid amount')));
       return;
     }
-    if (tendered < _remaining) {
-      // Partial payment is allowed — no error, just update.
+
+    // ── Downpayment rule (all order types) ───────────────────────────────
+    // Before any payment has been collected, the customer must pay at least
+    // 50% of the total — whether the order is walk-in or online.
+    if (_requiresDownpayment) {
+      final minimumDown = _total * 0.50;
+      if (tendered < minimumDown) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'A minimum downpayment of ₱${minimumDown.toStringAsFixed(2)} '
+                  '(50% of ₱${_total.toStringAsFixed(2)}) is required '
+                  'to process this order.',
+            ),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        return; // ← order does NOT push through
+      }
     }
+    // ─────────────────────────────────────────────────────────────────────
+
     final change = tendered - _remaining;
     final newPaid = _paid + (tendered < _remaining ? tendered : _remaining);
     final wasFullyPaid = newPaid >= _total;
@@ -918,6 +1007,39 @@ class _PaymentSheetState extends State<_PaymentSheet> {
                     color: Colors.white.withValues(alpha: 0.45),
                     fontSize: 12),
               ),
+
+              // ── Walk-in downpayment notice ──
+              if (_requiresDownpayment) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: Colors.orange.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded,
+                          color: Colors.orange, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Minimum 50% downpayment required '
+                              '(₱${(_total * 0.5).toStringAsFixed(2)})',
+                          style: const TextStyle(
+                              color: Colors.orange,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 20),
 
               // ── Balance summary ──

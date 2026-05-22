@@ -166,11 +166,16 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
     final qtyCtrl = TextEditingController();
     final name = material['material_name']?.toString() ?? '';
     final unit = material['unit_description']?.toString() ?? '';
+    final stockUnit = material['stock_unit']?.toString() ?? 'pcs';
+    final pieceToSqft = (material['piece_to_sqft'] as num?)?.toDouble();
+    final isSqft = stockUnit == 'sqft';
     final current = (material['current_stock'] as num?) ?? 0;
     bool saving = false;
 
-    String fmt(num v) =>
-        v == v.toInt() ? v.toInt().toString() : v.toStringAsFixed(2);
+    String fmt(num v) {
+      final s = v == v.toInt() ? v.toInt().toString() : v.toStringAsFixed(1);
+      return '$s $stockUnit';
+    }
 
     showDialog(
       context: context,
@@ -241,17 +246,65 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text('Quantity to add',
-                    style: TextStyle(color: Colors.white60, fontSize: 12)),
+                Text(
+                  isSqft && pieceToSqft != null
+                      ? 'Number of pieces to add (rolls / sheets)'
+                      : 'Quantity to add (${isSqft ? 'sqft' : 'pcs'})',
+                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+                if (isSqft && pieceToSqft != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    '1 piece = ${pieceToSqft.toStringAsFixed(1)} sqft  •  '
+                    'e.g. enter 1 to add ${pieceToSqft.toStringAsFixed(0)} sqft',
+                    style: const TextStyle(
+                      color: AppTheme.gold,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 6),
-                TextField(
-                  controller: qtyCtrl,
-                  autofocus: true,
-                  keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                  decoration: AppTheme.inputDecoration('e.g. 2 or 0.5',
-                      icon: Icons.add_circle_outline),
+                StatefulBuilder(
+                  builder: (_, setQty) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: qtyCtrl,
+                        autofocus: true,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 16),
+                        decoration: AppTheme.inputDecoration(
+                          isSqft && pieceToSqft != null
+                              ? 'e.g. 1 (roll/sheet)'
+                              : 'e.g. 2',
+                          icon: Icons.add_circle_outline,
+                        ),
+                        onChanged: (_) => setQty(() {}),
+                      ),
+                      if (isSqft &&
+                          pieceToSqft != null &&
+                          qtyCtrl.text.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Builder(
+                          builder: (_) {
+                            final pieces =
+                                double.tryParse(qtyCtrl.text.trim()) ?? 0;
+                            final sqft = pieces * pieceToSqft;
+                            return Text(
+                              '= ${sqft.toStringAsFixed(1)} sqft will be added to stock',
+                              style: const TextStyle(
+                                color: Color(0xFF4CAF50),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -285,8 +338,8 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
               onPressed: saving
                   ? null
                   : () async {
-                final qty = double.tryParse(qtyCtrl.text.trim());
-                if (qty == null || qty <= 0) {
+                final inputQty = double.tryParse(qtyCtrl.text.trim());
+                if (inputQty == null || inputQty <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Enter a valid quantity > 0'),
@@ -295,9 +348,13 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                   );
                   return;
                 }
+                // Convert pieces → sqft if material is area-tracked
+                final actualQty = (isSqft && pieceToSqft != null)
+                    ? inputQty * pieceToSqft
+                    : inputQty;
                 setDlg(() => saving = true);
                 await _commitReplenish(
-                    docId, material, qty, method, ctx);
+                    docId, material, actualQty, method, ctx);
               },
               style: AppTheme.primaryButton(),
               child: saving

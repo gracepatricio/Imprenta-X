@@ -1013,11 +1013,6 @@ class _OrderDetailSheet extends StatelessWidget {
                   style: TextStyle(color: Colors.white38, fontSize: 11)),
             ),
 
-          // ── QR Code section ───────────────────────────────────────────
-          if (remaining > 0.009 || status == 'awaiting_payment') ...[
-            const SizedBox(height: 20),
-            _PaymentQrSection(docId: docId, order: order, status: status, remaining: remaining),
-          ],
 
           // Action buttons
           if (onPayNow != null) ...[
@@ -1090,14 +1085,48 @@ class _PaymentQrSection extends StatefulWidget {
 }
 
 class _PaymentQrSectionState extends State<_PaymentQrSection> {
-  String? _localUrl;    // set immediately after generation for instant display
-  bool   _generating = false;
+  String? _localUrl;
+  bool    _generating = false;
+  bool    _stale      = false; // true while a stale link is being replaced
 
-  String? get _checkoutUrl =>
-      _localUrl ??
-      (widget.status == 'awaiting_payment'
-          ? widget.order['paymongo_checkout_url'] as String?
-          : widget.order['balance_checkout_url'] as String?);
+  @override
+  void initState() {
+    super.initState();
+    // Validate the stored balance link against the live API on load.
+    // If it was created with the old test key it won't exist in live mode
+    // and we regenerate it silently.
+    if (widget.status != 'awaiting_payment') {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _validateStoredLink());
+    }
+  }
+
+  Future<void> _validateStoredLink() async {
+    final linkId = widget.order['balance_link_id'] as String?;
+    if (linkId == null || !mounted) return;
+    try {
+      await PayMongoService.getLinkStatus(linkId);
+    } catch (_) {
+      // Link not found in current API mode — clear the stale entry and
+      // regenerate so the customer always has a scannable live QR.
+      if (!mounted) return;
+      setState(() => _stale = true);
+      final orderId = widget.order['order_id']?.toString() ?? widget.docId;
+      FirebaseFirestore.instance.collection('Orders').doc(orderId).update({
+        'balance_link_id':      FieldValue.delete(),
+        'balance_checkout_url': FieldValue.delete(),
+        'balance_link_amount':  FieldValue.delete(),
+      }).catchError((_) {});
+      if (mounted) await _generate();
+    }
+  }
+
+  String? get _checkoutUrl {
+    if (_stale) return _localUrl; // hide stale URL while regenerating
+    return _localUrl ??
+        (widget.status == 'awaiting_payment'
+            ? widget.order['paymongo_checkout_url'] as String?
+            : widget.order['balance_checkout_url'] as String?);
+  }
 
   double? get _linkAmount =>
       (widget.order['balance_link_amount'] as num?)?.toDouble();

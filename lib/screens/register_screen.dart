@@ -52,46 +52,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!mounted) return;
     setState(() => isLoading = false);
 
-    if (result.error == 'account_reclaim_needed') {
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1a1a2e),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
-          ),
-          title: const Text(
-            'Account Recovery',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          content: const Text(
-            'This email was previously registered and its account was '
-            'removed by an administrator.\n\n'
-            'We\'ve sent a password reset link to your email. '
-            'Click the link to set a new password, then sign in.',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.gold,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20)),
-              ),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
-      return;
-    }
-
     if (result.error != null) {
       _snack(result.error!);
       return;

@@ -655,6 +655,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   List<Map<String, dynamic>> _bulkPricing = [];
   List<Map<String, dynamic>> _allMaterials = [];
   bool _materialsLoaded = false;
+  List<String> _materialOptions = [];
+  final List<TextEditingController> _optionControllers = [];
 
   @override
   void initState() {
@@ -685,6 +687,12 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
           ) ??
           [],
     );
+    _materialOptions = List<String>.from(
+      (e?['material_options'] as List?)?.map((x) => x.toString()) ?? [],
+    );
+    for (final opt in _materialOptions) {
+      _optionControllers.add(TextEditingController(text: opt));
+    }
     _loadMaterials();
   }
 
@@ -696,6 +704,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _pricingUnitCtrl.dispose();
     _minQtyCtrl.dispose();
     _uomCtrl.dispose();
+    for (final c in _optionControllers) c.dispose();
     super.dispose();
   }
 
@@ -767,6 +776,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         'is_available': computedAvailable,
         'availability_override': _availabilityOverride,
         'featured': _isFeatured,
+        'material_options': _optionControllers.map((c) => c.text.trim()).where((s) => s.isNotEmpty).toList(),
         'bill_of_materials': _bom,
         'bulk_pricing': _bulkPricing,
         'updated_at': FieldValue.serverTimestamp(),
@@ -1285,6 +1295,81 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 18),
 
+                      // ── Material Options ────────────────────────────────────
+                      Row(
+                        children: [
+                          _SectionLabel('Material Options'),
+                          const Spacer(),
+                          _GlassButton(
+                            label: 'Add Option',
+                            icon: Icons.add_rounded,
+                            isPrimary: false,
+                            onPressed: () => setState(() {
+                              _materialOptions.add('');
+                              _optionControllers.add(TextEditingController());
+                            }),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'e.g. "13oz", "10oz" — customers choose one when ordering. '
+                        'Link each option to a BOM material using "For option" below.',
+                        style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_materialOptions.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            'No options — all customers will use the same materials.',
+                            style: TextStyle(
+                              color: _Glass.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ..._materialOptions.asMap().entries.map((entry) {
+                        final ctrl = _optionControllers[entry.key];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: ctrl,
+                                  style: const TextStyle(
+                                    color: _Glass.textPrimary,
+                                    fontSize: 13,
+                                  ),
+                                  decoration: _Glass.field(
+                                    'Option name, e.g. 13oz',
+                                  ),
+                                  onChanged: (v) {
+                                    _materialOptions[entry.key] = v;
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.remove_circle_outline,
+                                  color: Colors.red.shade400,
+                                  size: 18,
+                                ),
+                                onPressed: () => setState(() {
+                                  _materialOptions.removeAt(entry.key);
+                                  _optionControllers.removeAt(entry.key)
+                                      .dispose();
+                                }),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 18),
+
                       // ── Bill of Materials ───────────────────────────────────
                       Row(
                         children: [
@@ -1298,12 +1383,18 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Set quantity_per_unit = sqft consumed per sqft ordered '
+                        '(for area-based prints), or pcs per piece ordered.',
+                        style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                      ),
                       const SizedBox(height: 8),
                       if (_bom.isEmpty)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: const Text(
-                            'No BOM set. Add materials to enable automatic availability tracking.',
+                            'No BOM set. Add materials to enable automatic inventory deduction.',
                             style: TextStyle(
                               color: _Glass.textMuted,
                               fontSize: 11,
@@ -1315,6 +1406,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           key: ValueKey('bom_${e.key}'),
                           item: e.value,
                           allMaterials: _allMaterials,
+                          materialOptions: _materialOptions,
                           onChanged: (updated) =>
                               setState(() => _bom[e.key] = updated),
                           onRemove: () => setState(() => _bom.removeAt(e.key)),
@@ -1414,6 +1506,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         'material_id': first['material_id'] ?? first['id'],
         'material_name': first['material_name'] ?? '',
         'quantity_per_unit': 1.0,
+        'for_material_option': '',
       });
     });
   }
@@ -1425,6 +1518,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
 class _BomEditRow extends StatefulWidget {
   final Map<String, dynamic> item;
   final List<Map<String, dynamic>> allMaterials;
+  final List<String> materialOptions;
   final Function(Map<String, dynamic>) onChanged;
   final VoidCallback onRemove;
 
@@ -1432,6 +1526,7 @@ class _BomEditRow extends StatefulWidget {
     super.key,
     required this.item,
     required this.allMaterials,
+    required this.materialOptions,
     required this.onChanged,
     required this.onRemove,
   });
@@ -1443,6 +1538,7 @@ class _BomEditRow extends StatefulWidget {
 class _BomEditRowState extends State<_BomEditRow> {
   String _materialId = '';
   String _materialName = '';
+  String _forMaterialOption = '';
   late TextEditingController _qtyCtrl;
 
   @override
@@ -1450,19 +1546,12 @@ class _BomEditRowState extends State<_BomEditRow> {
     super.initState();
     _materialId = widget.item['material_id']?.toString() ?? '';
     _materialName = widget.item['material_name']?.toString() ?? '';
+    _forMaterialOption = widget.item['for_material_option']?.toString() ?? '';
     _qtyCtrl = TextEditingController(
       text: widget.item['quantity_per_unit']?.toString() ?? '1',
     );
-
-    if (widget.allMaterials.isNotEmpty &&
-        !widget.allMaterials.any(
-          (m) => (m['material_id'] ?? m['id'])?.toString() == _materialId,
-        )) {
-      final first = widget.allMaterials.first;
-      _materialId = (first['material_id'] ?? first['id'])?.toString() ?? '';
-      _materialName = first['material_name']?.toString() ?? '';
-      WidgetsBinding.instance.addPostFrameCallback((_) => _notify());
-    }
+    // Do NOT auto-replace unrecognised material IDs — keep the ID so the
+    // admin can see and fix it rather than silently corrupting the BOM.
   }
 
   @override
@@ -1476,6 +1565,7 @@ class _BomEditRowState extends State<_BomEditRow> {
       'material_id': _materialId,
       'material_name': _materialName,
       'quantity_per_unit': double.tryParse(_qtyCtrl.text) ?? 1.0,
+      'for_material_option': _forMaterialOption,
     });
   }
 
@@ -1510,125 +1600,240 @@ class _BomEditRowState extends State<_BomEditRow> {
       (m) => (m['material_id'] ?? m['id'])?.toString() == _materialId,
     );
 
+    // Get the linked material's stock_unit for the hint label
+    String unitHint = '';
+    if (valueExists) {
+      final mat = widget.allMaterials.firstWhere(
+        (m) => (m['material_id'] ?? m['id'])?.toString() == _materialId,
+        orElse: () => {},
+      );
+      final su = mat['stock_unit']?.toString() ?? 'pcs';
+      unitHint = su == 'sqft' ? 'sqft / sqft ordered' : 'pcs / piece ordered';
+    }
+
+    // Build the "for option" dropdown items
+    // Filter out empty strings to avoid duplicate values with the "All options" item (value: '')
+    final validOptions = widget.materialOptions.where((o) => o.isNotEmpty).toList();
+    final optionItems = <DropdownMenuItem<String>>[
+      const DropdownMenuItem(
+        value: '',
+        child: Text(
+          'All options',
+          style: TextStyle(color: _Glass.textMuted, fontSize: 12),
+        ),
+      ),
+      ...validOptions.map(
+        (o) => DropdownMenuItem(
+          value: o,
+          child: Text(
+            o,
+            style: const TextStyle(color: _Glass.textPrimary, fontSize: 12),
+          ),
+        ),
+      ),
+    ];
+
+    final forOptionValue = validOptions.contains(_forMaterialOption)
+        ? _forMaterialOption
+        : '';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: _Glass.surfaceThin,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _Glass.borderMid, width: 0.8),
+        border: Border.all(
+          color: valueExists ? _Glass.borderMid : Colors.orange.shade300,
+          width: 0.8,
+        ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Material',
-                  style: TextStyle(
-                    color: _Glass.textMuted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _Glass.surface,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: _Glass.borderMid, width: 0.8),
-                  ),
-                  child: DropdownButton<String>(
-                    value: valueExists ? _materialId : null,
-                    isExpanded: true,
-                    dropdownColor: _Glass.surface,
-                    underline: const SizedBox.shrink(),
-                    hint: const Text(
-                      'Select material',
-                      style: TextStyle(color: _Glass.textMuted, fontSize: 12),
+          // Row 1: Material dropdown + remove button
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Raw Material',
+                      style: TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    style: const TextStyle(
-                      color: _Glass.textPrimary,
-                      fontSize: 12,
-                    ),
-                    items: widget.allMaterials.map((m) {
-                      final id =
-                          (m['material_id'] ?? m['id'])?.toString() ?? '';
-                      final name = m['material_name']?.toString() ?? '';
-                      return DropdownMenuItem<String>(
-                        value: id,
-                        child: Text(
-                          '$id – $name',
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: _Glass.textPrimary,
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _Glass.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: _Glass.borderMid,
+                          width: 0.8,
+                        ),
+                      ),
+                      child: DropdownButton<String>(
+                        value: valueExists ? _materialId : null,
+                        isExpanded: true,
+                        dropdownColor: _Glass.surface,
+                        underline: const SizedBox.shrink(),
+                        hint: Text(
+                          valueExists
+                              ? 'Select material'
+                              : '⚠ Unknown: $_materialId',
+                          style: TextStyle(
+                            color: valueExists
+                                ? _Glass.textMuted
+                                : Colors.orange.shade700,
                             fontSize: 12,
                           ),
                         ),
-                      );
-                    }).toList(),
-                    onChanged: (id) {
-                      if (id == null) return;
-                      final mat = widget.allMaterials.firstWhere(
-                        (m) => (m['material_id'] ?? m['id'])?.toString() == id,
-                      );
-                      setState(() {
-                        _materialId = id;
-                        _materialName = mat['material_name']?.toString() ?? '';
-                      });
-                      _notify();
-                    },
-                  ),
+                        style: const TextStyle(
+                          color: _Glass.textPrimary,
+                          fontSize: 12,
+                        ),
+                        items: widget.allMaterials.map((m) {
+                          final id =
+                              (m['material_id'] ?? m['id'])?.toString() ?? '';
+                          final name = m['material_name']?.toString() ?? '';
+                          final su = m['stock_unit']?.toString() ?? 'pcs';
+                          return DropdownMenuItem<String>(
+                            value: id,
+                            child: Text(
+                              '$id – $name ($su)',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: _Glass.textPrimary,
+                                fontSize: 12,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (id) {
+                          if (id == null) return;
+                          final mat = widget.allMaterials.firstWhere(
+                            (m) =>
+                                (m['material_id'] ?? m['id'])?.toString() == id,
+                          );
+                          setState(() {
+                            _materialId = id;
+                            _materialName =
+                                mat['material_name']?.toString() ?? '';
+                          });
+                          _notify();
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.remove_circle_outline,
+                  color: Colors.red.shade400,
+                  size: 18,
+                ),
+                onPressed: widget.onRemove,
+                padding: const EdgeInsets.only(bottom: 2, left: 4),
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 40),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 76,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Qty/unit',
-                  style: TextStyle(
-                    color: _Glass.textMuted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
+          const SizedBox(height: 8),
+          // Row 2: Qty/unit + For material option
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              SizedBox(
+                width: 100,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      unitHint.isNotEmpty ? 'Qty ($unitHint)' : 'Qty/unit',
+                      style: const TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _qtyCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: const TextStyle(
+                        color: _Glass.textPrimary,
+                        fontSize: 13,
+                      ),
+                      decoration: _Glass.field('1.0'),
+                      onChanged: (_) => _notify(),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                TextField(
-                  controller: _qtyCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  style: const TextStyle(
-                    color: _Glass.textPrimary,
-                    fontSize: 13,
-                  ),
-                  decoration: _Glass.field('1'),
-                  onChanged: (_) => _notify(),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'For option',
+                      style: TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _Glass.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: _Glass.borderMid,
+                          width: 0.8,
+                        ),
+                      ),
+                      child: DropdownButton<String>(
+                        value: forOptionValue,
+                        isExpanded: true,
+                        dropdownColor: _Glass.surface,
+                        underline: const SizedBox.shrink(),
+                        style: const TextStyle(
+                          color: _Glass.textPrimary,
+                          fontSize: 12,
+                        ),
+                        items: optionItems,
+                        onChanged: validOptions.isEmpty
+                            ? null
+                            : (val) {
+                                setState(
+                                  () => _forMaterialOption = val ?? '',
+                                );
+                                _notify();
+                              },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: Icon(
-              Icons.remove_circle_outline,
-              color: Colors.red.shade400,
-              size: 18,
-            ),
-            onPressed: widget.onRemove,
-            padding: const EdgeInsets.only(bottom: 2),
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 40),
+              ),
+            ],
           ),
         ],
       ),
