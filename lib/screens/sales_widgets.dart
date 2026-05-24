@@ -1,5 +1,6 @@
 // Shared widgets for Sales Record and Sales Report.
 // Used by BOTH the employee and admin screens.
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
@@ -96,25 +97,25 @@ class _PeriodFilterBar extends StatelessWidget {
                 color: isActive
                     ? (dark ? AppTheme.gold : const Color(0xFF1A1A2E))
                     : (dark
-                          ? Colors.white.withValues(alpha: 0.10)
-                          : Colors.white),
+                    ? Colors.white.withValues(alpha: 0.10)
+                    : Colors.white),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isActive
                       ? (dark ? AppTheme.gold : const Color(0xFF1A1A2E))
                       : (dark
-                            ? Colors.white.withValues(alpha: 0.18)
-                            : _T.divider),
+                      ? Colors.white.withValues(alpha: 0.18)
+                      : _T.divider),
                   width: 1,
                 ),
                 boxShadow: (isActive && !dark)
                     ? [
-                        const BoxShadow(
-                          color: Color(0x20000000),
-                          blurRadius: 6,
-                          offset: Offset(0, 2),
-                        ),
-                      ]
+                  const BoxShadow(
+                    color: Color(0x20000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
+                  ),
+                ]
                     : [],
               ),
               child: Text(
@@ -148,13 +149,27 @@ class SalesRecordTable extends StatefulWidget {
 class _SalesRecordTableState extends State<SalesRecordTable> {
   String _typeFilter = 'all';
   _Period _period = _Period.all;
-  // FIX: use a local state variable that is only updated on change, not on
-  // every build, to prevent the cursor-jump / re-entry bug.
   String _search = '';
+
+  QuerySnapshot? _snapshot;
+  StreamSubscription<QuerySnapshot>? _sub;
   final _searchCtrl = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _sub = FirebaseFirestore.instance
+        .collection('Sales_Records')
+        .orderBy('sale_date', descending: true)
+        .snapshots()
+        .listen((snap) {
+      if (mounted) setState(() => _snapshot = snap);
+    });
+  }
+
+  @override
   void dispose() {
+    _sub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -163,469 +178,498 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
     if (ts == null) return '—';
     final d = ts.toDate().toLocal();
     const mo = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${mo[d.month - 1]} ${d.day.toString().padLeft(2, '0')}, ${d.year}';
   }
 
   String _typeLabel(String? t) {
     switch (t) {
-      case 'downpayment':
-        return 'Downpayment';
-      case 'balance':
-        return 'Balance';
-      case 'cash':
-        return 'Cash';
-      case 'full':
-        return 'Full';
-      default:
-        return (t != null && t.isNotEmpty) ? t : '—';
+      case 'downpayment': return 'Downpayment';
+      case 'balance':     return 'Balance';
+      case 'cash':        return 'Cash';
+      case 'full':        return 'Full';
+      default:            return (t != null && t.isNotEmpty) ? t : '—';
     }
   }
 
   Color _typeFg(String? t) {
     switch (t) {
-      case 'downpayment':
-        return const Color(0xFF1D4ED8);
-      case 'balance':
-        return const Color(0xFFB45309);
-      case 'cash':
-        return const Color(0xFF15803D);
-      case 'full':
-        return const Color(0xFF6D28D9);
-      default:
-        return _T.textMuted;
+      case 'downpayment': return const Color(0xFF1D4ED8);
+      case 'balance':     return const Color(0xFFB45309);
+      case 'cash':        return const Color(0xFF15803D);
+      case 'full':        return const Color(0xFF6D28D9);
+      default:            return _T.textMuted;
     }
   }
 
   Color _typeBg(String? t) {
     switch (t) {
-      case 'downpayment':
-        return const Color(0xFFEFF6FF);
-      case 'balance':
-        return const Color(0xFFFFFBEB);
-      case 'cash':
-        return const Color(0xFFF0FDF4);
-      case 'full':
-        return const Color(0xFFF5F3FF);
-      default:
-        return _T.headerBg;
+      case 'downpayment': return const Color(0xFFEFF6FF);
+      case 'balance':     return const Color(0xFFFFFBEB);
+      case 'cash':        return const Color(0xFFF0FDF4);
+      case 'full':        return const Color(0xFFF5F3FF);
+      default:            return _T.headerBg;
     }
   }
 
   Color _typeBorder(String? t) {
     switch (t) {
-      case 'downpayment':
-        return const Color(0xFFBFDBFE);
-      case 'balance':
-        return const Color(0xFFFDE68A);
-      case 'cash':
-        return const Color(0xFFBBF7D0);
-      case 'full':
-        return const Color(0xFFDDD6FE);
-      default:
-        return _T.divider;
+      case 'downpayment': return const Color(0xFFBFDBFE);
+      case 'balance':     return const Color(0xFFFDE68A);
+      case 'cash':        return const Color(0xFFBBF7D0);
+      case 'full':        return const Color(0xFFDDD6FE);
+      default:            return _T.divider;
     }
   }
 
   String _methodLabel(String? m) {
     switch (m) {
-      case 'gcash':
-        return 'GCash';
-      case 'card':
-        return 'Card';
-      case 'maya':
-        return 'Maya';
-      case 'cash':
-        return 'Cash';
-      case 'online':
-        return 'Online';
-      default:
-        return (m != null && m.isNotEmpty) ? m : '—';
+      case 'gcash':  return 'GCash';
+      case 'card':   return 'Card';
+      case 'maya':   return 'Maya';
+      case 'cash':   return 'Cash';
+      case 'online': return 'Online';
+      default:       return (m != null && m.isNotEmpty) ? m : '—';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final query = FirebaseFirestore.instance
-        .collection('Sales_Records')
-        .orderBy('sale_date', descending: true);
+    // Show loading spinner until first snapshot arrives
+    if (_snapshot == null) {
+      return Center(
+        child: CircularProgressIndicator(
+          color: _T.textPrimary.withValues(alpha: 0.4),
+        ),
+      );
+    }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: query.snapshots(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return Center(
-            child: CircularProgressIndicator(
-              color: _T.textPrimary.withValues(alpha: 0.4),
-            ),
-          );
-        }
-        if (snap.hasError) {
-          return Center(
-            child: Text(
-              'Error: ${snap.error}',
-              style: const TextStyle(color: Color(0xFFDC2626)),
-            ),
-          );
-        }
+    final allDocs = _snapshot!.docs;
 
-        final allDocs = snap.data?.docs ?? [];
+    // Apply period filter
+    var filtered = allDocs.where((d) {
+      final data = d.data() as Map<String, dynamic>;
+      final ts = data['sale_date'] as Timestamp?;
+      if (ts == null) return _period == _Period.all;
+      return _inPeriod(ts.toDate().toLocal(), _period);
+    }).toList();
 
-        // Apply period filter
-        var filtered = allDocs.where((d) {
-          final data = d.data() as Map<String, dynamic>;
-          final ts = data['sale_date'] as Timestamp?;
-          if (ts == null) return _period == _Period.all;
-          return _inPeriod(ts.toDate().toLocal(), _period);
-        }).toList();
+    // Apply type filter
+    if (_typeFilter != 'all') {
+      filtered = filtered
+          .where(
+            (d) => (d.data() as Map)['payment_type']?.toString() == _typeFilter,
+      )
+          .toList();
+    }
 
-        // Apply type filter
-        if (_typeFilter != 'all') {
-          filtered = filtered
-              .where(
-                (d) =>
-                    (d.data() as Map)['payment_type']?.toString() ==
-                    _typeFilter,
+    // Apply search — order id, customer name, customer_uid, customer_id
+    if (_search.isNotEmpty) {
+      filtered = filtered.where((d) {
+        final data = d.data() as Map<String, dynamic>;
+        final ordId   = (data['order_id']?.toString()      ?? '').toLowerCase();
+        final cust    = (data['customer_name']?.toString() ?? '').toLowerCase();
+        final custUid = (data['customer_uid']?.toString()  ?? '').toLowerCase();
+        final custId  = (data['customer_id']?.toString()   ?? '').toLowerCase();
+        return ordId.contains(_search) ||
+            cust.contains(_search) ||
+            custUid.contains(_search) ||
+            custId.contains(_search);
+      }).toList();
+    }
+
+    final totalCollected = filtered.fold<double>(
+      0,
+          (s, d) => s + ((d.data() as Map)['sale_amount'] as num? ?? 0).toDouble(),
+    );
+    final allTotal = allDocs.fold<double>(
+      0,
+          (s, d) => s + ((d.data() as Map)['sale_amount'] as num? ?? 0).toDouble(),
+    );
+
+    // ── Controls header (outside StreamBuilder so TextField never loses focus) ──
+    final headerContent = Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Row 1: Summary chips ──────────────────────────────────────
+          Row(
+            children: [
+              _SummaryChip(
+                label: 'Period Total',
+                value: '₱${totalCollected.toStringAsFixed(2)}',
+                fg: _T.gold,
+                bg: const Color(0xFFFFFBEB),
+                border: const Color(0xFFFDE68A),
+              ),
+              const SizedBox(width: 8),
+              _SummaryChip(
+                label: 'Records',
+                value: '${filtered.length}',
+                fg: const Color(0xFF374151),
+                bg: _T.headerBg,
+                border: _T.divider,
+              ),
+              const SizedBox(width: 8),
+              _SummaryChip(
+                label: 'All-Time',
+                value: '₱${allTotal.toStringAsFixed(2)}',
+                fg: const Color(0xFF6D28D9),
+                bg: const Color(0xFFF5F3FF),
+                border: const Color(0xFFDDD6FE),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // ── Row 2: Unified filter bar ─────────────────────────────────
+          _UnifiedFilterBar(
+            activePeriod: _period,
+            activeType: _typeFilter,
+            onPeriodChanged: (p) => setState(() => _period = p),
+            onTypeChanged: (t) => setState(() => _typeFilter = t),
+          ),
+          const SizedBox(height: 12),
+
+          // ── Row 3: Search field ───────────────────────────────────────
+          TextField(
+            controller: _searchCtrl,
+            onChanged: (v) {
+              final trimmed = v.trim().toLowerCase();
+              if (trimmed != _search) setState(() => _search = trimmed);
+            },
+            style: const TextStyle(color: _T.textPrimary, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Search by Order ID, Customer Name, or Customer ID',
+              hintStyle: const TextStyle(color: _T.textMuted, fontSize: 13),
+              prefixIcon: const Icon(Icons.search, size: 16, color: _T.textMuted),
+              suffixIcon: _search.isNotEmpty
+                  ? GestureDetector(
+                onTap: () {
+                  _searchCtrl.clear();
+                  setState(() => _search = '');
+                },
+                child: const Icon(Icons.clear, size: 16, color: _T.textMuted),
               )
-              .toList();
-        }
+                  : null,
+              filled: true,
+              fillColor: const Color(0xFFF9FAFB),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFE5E7EB), width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: AppTheme.gold.withValues(alpha: 0.7)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
 
-        // Apply search — now also checks customer_uid / customer ID
-        if (_search.isNotEmpty) {
-          filtered = filtered.where((d) {
-            final data = d.data() as Map<String, dynamic>;
-            final ordId = (data['order_id']?.toString() ?? '').toLowerCase();
-            final cust = (data['customer_name']?.toString() ?? '')
-                .toLowerCase();
-            // FIX: also search by customer_uid
-            final custId = (data['customer_uid']?.toString() ?? '')
-                .toLowerCase();
-            return ordId.contains(_search) ||
-                cust.contains(_search) ||
-                custId.contains(_search);
-          }).toList();
-        }
+    // ── Empty state ───────────────────────────────────────────────────────────
+    if (filtered.isEmpty) {
+      return CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: headerContent),
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: _T.headerBg,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _T.divider),
+                    ),
+                    child: const Icon(
+                      Icons.receipt_long_outlined,
+                      size: 32,
+                      color: _T.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'No sales records found',
+                    style: TextStyle(
+                      color: _T.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Try adjusting your filters',
+                    style: TextStyle(color: _T.textSecondary, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
 
-        final totalCollected = filtered.fold<double>(
-          0,
-          (s, d) =>
-              s + ((d.data() as Map)['sale_amount'] as num? ?? 0).toDouble(),
-        );
-        final allTotal = allDocs.fold<double>(
-          0,
-          (s, d) =>
-              s + ((d.data() as Map)['sale_amount'] as num? ?? 0).toDouble(),
-        );
+    // ── Populated list ────────────────────────────────────────────────────────
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: headerContent),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+                  (_, i) {
+                final d        = filtered[i].data() as Map<String, dynamic>;
+                final type     = d['payment_type']?.toString();
+                final method   = d['payment_method']?.toString();
+                final amount   = (d['sale_amount'] as num?)?.toDouble() ?? 0;
+                final orderId  = d['order_id']?.toString() ?? '—';
+                final custName = d['customer_name']?.toString() ?? '—';
+                final custId   = d['customer_id']?.toString() ?? '';
+                final date     = _fmt(d['sale_date'] as Timestamp?);
 
-        return Column(
+                return _SalesRecordCard(
+                  index: i,
+                  orderId: orderId,
+                  custName: custName,
+                  custId: custId,
+                  type: type,
+                  method: method,
+                  amount: amount,
+                  date: date,
+                  typeFg: _typeFg(type),
+                  typeBg: _typeBg(type),
+                  typeBorder: _typeBorder(type),
+                  typeLabel: _typeLabel(type),
+                  methodLabel: _methodLabel(method),
+                );
+              },
+              childCount: filtered.length,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// =============================================================================
+// Sales Record Card
+// =============================================================================
+class _SalesRecordCard extends StatelessWidget {
+  final int index;
+  final String orderId;
+  final String custName;
+  final String custId;
+  final String? type;
+  final String? method;
+  final double amount;
+  final String date;
+  final Color typeFg;
+  final Color typeBg;
+  final Color typeBorder;
+  final String typeLabel;
+  final String methodLabel;
+
+  const _SalesRecordCard({
+    required this.index,
+    required this.orderId,
+    required this.custName,
+    required this.custId,
+    required this.type,
+    required this.method,
+    required this.amount,
+    required this.date,
+    required this.typeFg,
+    required this.typeBg,
+    required this.typeBorder,
+    required this.typeLabel,
+    required this.methodLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Top controls ──────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Row 1: Summary chips ──────────────────────────────
-                  Row(
-                    children: [
-                      _SummaryChip(
-                        label: 'Period Total',
-                        value: '₱${totalCollected.toStringAsFixed(2)}',
-                        fg: _T.gold,
-                        bg: const Color(0xFFFFFBEB),
-                        border: const Color(0xFFFDE68A),
-                      ),
-                      const SizedBox(width: 8),
-                      _SummaryChip(
-                        label: 'Records',
-                        value: '${filtered.length}',
-                        fg: const Color(0xFF374151),
-                        bg: _T.headerBg,
-                        border: _T.divider,
-                      ),
-                      const SizedBox(width: 8),
-                      _SummaryChip(
-                        label: 'All-Time',
-                        value: '₱${allTotal.toStringAsFixed(2)}',
-                        fg: const Color(0xFF6D28D9),
-                        bg: const Color(0xFFF5F3FF),
-                        border: const Color(0xFFDDD6FE),
-                      ),
-                    ],
+            // ── Top row: order id + amount ─────────────────────────────
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Index dot
+                Container(
+                  width: 22,
+                  height: 22,
+                  margin: const EdgeInsets.only(right: 10, top: 1),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F4F6),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
                   ),
-                  const SizedBox(height: 14),
-
-                  // ── Row 2: Unified filter bar ──────────────────────────
-                  _UnifiedFilterBar(
-                    activePeriod: _period,
-                    activeType: _typeFilter,
-                    onPeriodChanged: (p) => setState(() => _period = p),
-                    onTypeChanged: (t) => setState(() => _typeFilter = t),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // ── Row 3: Search field ──────────────────────────────────
-                  // FIX: Use a separate ValueNotifier / local variable so that
-                  // TextField is never rebuilt while the user is typing, which
-                  // was causing the "keeps entering" cursor-jump bug.
-                  TextField(
-                    controller: _searchCtrl,
-                    onChanged: (v) {
-                      // Only call setState if the trimmed lowercase value
-                      // actually changed, avoiding unnecessary rebuilds.
-                      final trimmed = v.trim().toLowerCase();
-                      if (trimmed != _search) {
-                        setState(() => _search = trimmed);
-                      }
-                    },
-                    style: const TextStyle(color: _T.textPrimary, fontSize: 13),
-                    decoration: InputDecoration(
-                      hintText: 'Search by Order ID, Customer Name',
-                      hintStyle: const TextStyle(
+                  child: Center(
+                    child: Text(
+                      '${index + 1}',
+                      style: const TextStyle(
                         color: _T.textMuted,
-                        fontSize: 13,
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.search,
-                        size: 16,
-                        color: _T.textMuted,
-                      ),
-                      suffixIcon: _search.isNotEmpty
-                          ? GestureDetector(
-                              onTap: () {
-                                _searchCtrl.clear();
-                                setState(() => _search = '');
-                              },
-                              child: const Icon(
-                                Icons.clear,
-                                size: 16,
-                                color: _T.textMuted,
-                              ),
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: const Color(0xFFF9FAFB),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFE5E7EB),
-                          width: 1,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: AppTheme.gold.withValues(alpha: 0.7),
-                        ),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-
-            // ── Table header ──────────────────────────────────────────────
-            // IMPROVED: wider Type column, fixed min-width to prevent squishing
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: _T.headerBg,
-                border: Border(
-                  top: BorderSide(color: _T.divider),
-                  bottom: BorderSide(color: _T.divider),
                 ),
-              ),
-              child: const Row(
-                children: [
-                  Expanded(flex: 3, child: _H('Order')),
-                  Expanded(flex: 3, child: _H('Customer')),
-                  // Type column: give it more flex so 'Downpayment' doesn't squish
-                  Expanded(flex: 3, child: _H('Type')),
-                  Expanded(flex: 2, child: _H('Method')),
-                  Expanded(flex: 2, child: _H('Amount')),
-                  Expanded(flex: 3, child: _H('Date')),
-                ],
-              ),
-            ),
 
-            // ── Rows ──────────────────────────────────────────────────────
-            Expanded(
-              child: filtered.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                // Order ID + date
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        orderId,
+                        style: const TextStyle(
+                          color: _T.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
                         children: [
-                          Container(
-                            width: 72,
-                            height: 72,
-                            decoration: BoxDecoration(
-                              color: _T.headerBg,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: _T.divider),
-                            ),
-                            child: const Icon(
-                              Icons.receipt_long_outlined,
-                              size: 32,
+                          const Icon(
+                            Icons.calendar_today_outlined,
+                            size: 10,
+                            color: _T.textMuted,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            date,
+                            style: const TextStyle(
                               color: _T.textMuted,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          const Text(
-                            'No sales records found',
-                            style: TextStyle(
-                              color: _T.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Try adjusting your filters',
-                            style: TextStyle(
-                              color: _T.textSecondary,
-                              fontSize: 13,
+                              fontSize: 11,
                             ),
                           ),
                         ],
                       ),
-                    )
-                  : ListView.separated(
-                      padding: EdgeInsets.zero,
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) =>
-                          Divider(height: 1, color: _T.divider),
-                      itemBuilder: (_, i) {
-                        final d = filtered[i].data() as Map<String, dynamic>;
-                        final type = d['payment_type']?.toString();
-                        final method = d['payment_method']?.toString();
-                        final amount =
-                            (d['sale_amount'] as num?)?.toDouble() ?? 0;
-                        final orderId = d['order_id']?.toString() ?? '—';
-                        final custName = d['customer_name']?.toString() ?? '—';
-                        final date = _fmt(d['sale_date'] as Timestamp?);
+                    ],
+                  ),
+                ),
 
-                        return Container(
-                          color: i.isEven
-                              ? Colors.white
-                              : const Color(0xFFFAFAFA),
-                          // IMPROVED: more vertical padding for easier scanning
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 14,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: Text(
-                                  orderId,
-                                  style: const TextStyle(
-                                    color: _T.textPrimary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 3,
-                                child: Text(
-                                  custName.length > 14
-                                      ? '${custName.substring(0, 12)}…'
-                                      : custName,
-                                  style: const TextStyle(
-                                    color: _T.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              // IMPROVED: flex 3 + SoftWrap to prevent squishing
-                              Expanded(
-                                flex: 3,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: _typeBg(type),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: _typeBorder(type),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      _typeLabel(type),
-                                      style: TextStyle(
-                                        color: _typeFg(type),
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                      softWrap: false,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Text(
-                                  _methodLabel(method),
-                                  style: const TextStyle(
-                                    color: _T.textMuted,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Text(
-                                  '₱${amount.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    color: _T.gold,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 3,
-                                child: Text(
-                                  date,
-                                  style: const TextStyle(
-                                    color: _T.textMuted,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                // Amount — right-aligned, prominent
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '₱${amount.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: _T.gold,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
                     ),
+                    const SizedBox(height: 2),
+                    Text(
+                      methodLabel,
+                      style: const TextStyle(
+                        color: _T.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 10),
+            Container(height: 1, color: const Color(0xFFF3F4F6)),
+            const SizedBox(height: 10),
+
+            // ── Bottom row: customer + type badge ──────────────────────
+            Row(
+              children: [
+                const Icon(
+                  Icons.person_outline_rounded,
+                  size: 13,
+                  color: _T.textMuted,
+                ),
+                const SizedBox(width: 5),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        custName,
+                        style: const TextStyle(
+                          color: _T.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (custId.isNotEmpty)
+                        Text(
+                          'ID: $custId',
+                          style: const TextStyle(
+                            color: _T.textMuted,
+                            fontSize: 10,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                // Payment type badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: typeBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: typeBorder, width: 1),
+                  ),
+                  child: Text(
+                    typeLabel,
+                    style: TextStyle(
+                      color: typeFg,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -666,19 +710,14 @@ class _UnifiedFilterBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Period row ─────────────────────────────────────────────────
+          // ── Period row ────────────────────────────────────────────────
           Row(
             children: [
-              // Label
               SizedBox(
                 width: 72,
                 child: Row(
                   children: const [
-                    Icon(
-                      Icons.calendar_today_outlined,
-                      size: 12,
-                      color: _T.textMuted,
-                    ),
+                    Icon(Icons.calendar_today_outlined, size: 12, color: _T.textMuted),
                     SizedBox(width: 5),
                     Text(
                       'Period',
@@ -692,7 +731,6 @@ class _UnifiedFilterBar extends StatelessWidget {
                   ],
                 ),
               ),
-              // Period pills — 'All' is first in the enum so it appears leftmost
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -704,14 +742,9 @@ class _UnifiedFilterBar extends StatelessWidget {
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
                           margin: const EdgeInsets.only(right: 6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 5,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                           decoration: BoxDecoration(
-                            color: isActive
-                                ? const Color(0xFF1A1A2E)
-                                : Colors.white,
+                            color: isActive ? const Color(0xFF1A1A2E) : Colors.white,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                               color: isActive
@@ -721,12 +754,12 @@ class _UnifiedFilterBar extends StatelessWidget {
                             ),
                             boxShadow: isActive
                                 ? [
-                                    const BoxShadow(
-                                      color: Color(0x18000000),
-                                      blurRadius: 4,
-                                      offset: Offset(0, 1),
-                                    ),
-                                  ]
+                              const BoxShadow(
+                                color: Color(0x18000000),
+                                blurRadius: 4,
+                                offset: Offset(0, 1),
+                              ),
+                            ]
                                 : [],
                           ),
                           child: Text(
@@ -734,9 +767,7 @@ class _UnifiedFilterBar extends StatelessWidget {
                             style: TextStyle(
                               color: isActive ? Colors.white : _T.textSecondary,
                               fontSize: 12,
-                              fontWeight: isActive
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
+                              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                             ),
                           ),
                         ),
@@ -752,19 +783,14 @@ class _UnifiedFilterBar extends StatelessWidget {
           Container(height: 1, color: const Color(0xFFE5E7EB)),
           const SizedBox(height: 10),
 
-          // ── Type row ───────────────────────────────────────────────────
+          // ── Type row ──────────────────────────────────────────────────
           Row(
             children: [
-              // Label
               SizedBox(
                 width: 72,
                 child: Row(
                   children: const [
-                    Icon(
-                      Icons.label_outline_rounded,
-                      size: 12,
-                      color: _T.textMuted,
-                    ),
+                    Icon(Icons.label_outline_rounded, size: 12, color: _T.textMuted),
                     SizedBox(width: 5),
                     Text(
                       'Type',
@@ -778,7 +804,6 @@ class _UnifiedFilterBar extends StatelessWidget {
                   ],
                 ),
               ),
-              // Type pills
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -791,10 +816,7 @@ class _UnifiedFilterBar extends StatelessWidget {
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
                           margin: const EdgeInsets.only(right: 6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 5,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                           decoration: BoxDecoration(
                             color: isActive
                                 ? accent.withValues(alpha: 0.10)
@@ -826,9 +848,7 @@ class _UnifiedFilterBar extends StatelessWidget {
                                 style: TextStyle(
                                   color: isActive ? accent : _T.textSecondary,
                                   fontSize: 12,
-                                  fontWeight: isActive
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
+                                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                                 ),
                               ),
                             ],
@@ -916,12 +936,12 @@ class _FilterChip extends StatelessWidget {
           ),
           boxShadow: sel
               ? [
-                  const BoxShadow(
-                    color: Color(0x20000000),
-                    blurRadius: 6,
-                    offset: Offset(0, 2),
-                  ),
-                ]
+            const BoxShadow(
+              color: Color(0x20000000),
+              blurRadius: 6,
+              offset: Offset(0, 2),
+            ),
+          ]
               : [],
         ),
         child: Text(
@@ -955,7 +975,7 @@ class _H extends StatelessWidget {
 }
 
 // =============================================================================
-// AdminSalesReportView — light-themed, with period filter (Year/Month/Week/Day)
+// AdminSalesReportView — light-themed, with period filter
 // =============================================================================
 class AdminSalesReportView extends StatefulWidget {
   const AdminSalesReportView({super.key});
@@ -969,26 +989,14 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
 
   static String _shortMonth(int m) {
     const names = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return names[m - 1];
   }
 
   @override
   Widget build(BuildContext context) {
-    // NEW: We need two streams — Sales_Records for revenue, and Orders for
-    // outstanding balance (remaining_balance on non-cancelled orders).
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('Sales_Records')
@@ -1011,17 +1019,15 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
           );
         }
 
-        // NEW: Also stream Orders to compute outstanding balance
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('Orders')
               .where(
-                'status',
-                whereIn: ['pending', 'in_production', 'ready', 'completed'],
-              )
+            'status',
+            whereIn: ['pending', 'in_production', 'ready', 'completed'],
+          )
               .snapshots(),
           builder: (context, ordersSnap) {
-            // Compute outstanding balance from non-cancelled orders
             double outstandingBalance = 0;
             if (ordersSnap.hasData) {
               for (final doc in ordersSnap.data!.docs) {
@@ -1030,10 +1036,9 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                 if (remaining != null && remaining > 0.01) {
                   outstandingBalance += remaining;
                 } else {
-                  // Fallback: compute from total - paid
                   final total = (d['total_price'] as num?)?.toDouble() ?? 0;
-                  final paid = (d['amount_paid'] as num?)?.toDouble() ?? 0;
-                  final diff = total - paid;
+                  final paid  = (d['amount_paid'] as num?)?.toDouble() ?? 0;
+                  final diff  = total - paid;
                   if (diff > 0.01) outstandingBalance += diff;
                 }
               }
@@ -1055,18 +1060,14 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
             final now = DateTime.now();
             final monthBuckets = List.generate(6, (i) {
               final m = DateTime(now.year, now.month - (5 - i));
-              return _MonthBucket(
-                month: m,
-                label: _shortMonth(m.month),
-                total: 0,
-              );
+              return _MonthBucket(month: m, label: _shortMonth(m.month), total: 0);
             });
 
             for (final doc in docs) {
-              final d = doc.data() as Map<String, dynamic>;
+              final d      = doc.data() as Map<String, dynamic>;
               final amount = (d['sale_amount'] as num?)?.toDouble() ?? 0;
-              final type = d['payment_type']?.toString() ?? '';
-              final ordId = d['order_id']?.toString() ?? '';
+              final type   = d['payment_type']?.toString() ?? '';
+              final ordId  = d['order_id']?.toString() ?? '';
 
               totalRevenue += amount;
               if (type == 'downpayment') downpaymentTotal += amount;
@@ -1090,7 +1091,6 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Title + period filter
                   const Row(
                     children: [
                       Expanded(
@@ -1109,10 +1109,7 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                             SizedBox(height: 2),
                             Text(
                               'Revenue breakdown and trends',
-                              style: TextStyle(
-                                color: _T.textMuted,
-                                fontSize: 12,
-                              ),
+                              style: TextStyle(color: _T.textMuted, fontSize: 12),
                             ),
                           ],
                         ),
@@ -1121,14 +1118,12 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Period filter bar
                   _PeriodFilterBar(
                     active: _period,
                     onChanged: (p) => setState(() => _period = p),
                   ),
                   const SizedBox(height: 20),
 
-                  // KPI cards — now 5 cards including Balance to Collect
                   LayoutBuilder(
                     builder: (_, constraints) {
                       final narrow = constraints.maxWidth < 460;
@@ -1168,7 +1163,6 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                             border: const Color(0xFFBBF7D0),
                             narrow: narrow,
                           ),
-                          // NEW: Balance still to be collected from active orders
                           _AdminReportCard(
                             label: 'Balance to Collect',
                             value: '₱${outstandingBalance.toStringAsFixed(2)}',
@@ -1176,8 +1170,7 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                             bg: const Color(0xFFFEF2F2),
                             border: const Color(0xFFFECACA),
                             narrow: narrow,
-                            tooltip:
-                                'Total remaining balance on non-cancelled orders',
+                            tooltip: 'Total remaining balance on non-cancelled orders',
                           ),
                         ],
                       );
@@ -1185,7 +1178,6 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Chart section
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -1211,9 +1203,7 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                               decoration: BoxDecoration(
                                 color: const Color(0xFFEFF6FF),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: const Color(0xFFBFDBFE),
-                                ),
+                                border: Border.all(color: const Color(0xFFBFDBFE)),
                               ),
                               child: const Icon(
                                 Icons.bar_chart_rounded,
@@ -1235,10 +1225,7 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                                 ),
                                 Text(
                                   'Last 6 months',
-                                  style: TextStyle(
-                                    color: _T.textMuted,
-                                    fontSize: 11,
-                                  ),
+                                  style: TextStyle(color: _T.textMuted, fontSize: 11),
                                 ),
                               ],
                             ),
@@ -1258,28 +1245,28 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                           children: monthBuckets
                               .map(
                                 (b) => Column(
-                                  children: [
-                                    Text(
-                                      b.label,
-                                      style: const TextStyle(
-                                        color: _T.textMuted,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                    if (b.total > 0) ...[
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        '₱${b.total >= 1000 ? '${(b.total / 1000).toStringAsFixed(1)}k' : b.total.toStringAsFixed(0)}',
-                                        style: const TextStyle(
-                                          color: _T.gold,
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
+                              children: [
+                                Text(
+                                  b.label,
+                                  style: const TextStyle(
+                                    color: _T.textMuted,
+                                    fontSize: 10,
+                                  ),
                                 ),
-                              )
+                                if (b.total > 0) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '₱${b.total >= 1000 ? '${(b.total / 1000).toStringAsFixed(1)}k' : b.total.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      color: _T.gold,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
                               .toList(),
                         ),
                       ],
@@ -1299,7 +1286,6 @@ class _AdminReportCard extends StatelessWidget {
   final String label, value;
   final Color color, bg, border;
   final bool narrow;
-  // NEW: optional tooltip for extra context
   final String? tooltip;
 
   const _AdminReportCard({
@@ -1314,7 +1300,7 @@ class _AdminReportCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final card = Container(
+    return Container(
       width: narrow ? double.infinity : 168,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -1360,8 +1346,6 @@ class _AdminReportCard extends StatelessWidget {
         ],
       ),
     );
-
-    return card;
   }
 }
 
@@ -1387,7 +1371,7 @@ class _AdminChartPainter extends CustomPainter {
 
     final points = List.generate(
       n,
-      (i) => Offset(
+          (i) => Offset(
         i * stepX,
         size.height - (buckets[i].total / effectiveMax) * size.height * 0.85,
       ),
@@ -1415,12 +1399,9 @@ class _AdminChartPainter extends CustomPainter {
       final prev = points[i - 1];
       final curr = points[i];
       linePath.cubicTo(
-        (prev.dx + curr.dx) / 2,
-        prev.dy,
-        (prev.dx + curr.dx) / 2,
-        curr.dy,
-        curr.dx,
-        curr.dy,
+        (prev.dx + curr.dx) / 2, prev.dy,
+        (prev.dx + curr.dx) / 2, curr.dy,
+        curr.dx, curr.dy,
       );
     }
     canvas.drawPath(
@@ -1456,18 +1437,8 @@ class _SalesReportViewState extends State<SalesReportView> {
 
   static String _shortMonth(int m) {
     const names = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return names[m - 1];
   }
@@ -1514,10 +1485,10 @@ class _SalesReportViewState extends State<SalesReportView> {
         });
 
         for (final doc in docs) {
-          final d = doc.data() as Map<String, dynamic>;
+          final d      = doc.data() as Map<String, dynamic>;
           final amount = (d['sale_amount'] as num?)?.toDouble() ?? 0;
-          final type = d['payment_type']?.toString() ?? '';
-          final ordId = d['order_id']?.toString() ?? '';
+          final type   = d['payment_type']?.toString() ?? '';
+          final ordId  = d['order_id']?.toString() ?? '';
 
           totalRevenue += amount;
           if (type == 'downpayment') downpaymentTotal += amount;
@@ -1551,7 +1522,6 @@ class _SalesReportViewState extends State<SalesReportView> {
               ),
               const SizedBox(height: 12),
 
-              // Period filter (dark style)
               _PeriodFilterBar(
                 active: _period,
                 onChanged: (p) => setState(() => _period = p),
@@ -1566,30 +1536,10 @@ class _SalesReportViewState extends State<SalesReportView> {
                     spacing: 10,
                     runSpacing: 10,
                     children: [
-                      _ReportCard(
-                        'Total Revenue',
-                        '₱${totalRevenue.toStringAsFixed(2)}',
-                        AppTheme.gold,
-                        narrow,
-                      ),
-                      _ReportCard(
-                        'Orders',
-                        '${orderIds.length}',
-                        Colors.blueAccent,
-                        narrow,
-                      ),
-                      _ReportCard(
-                        'Downpayments',
-                        '₱${downpaymentTotal.toStringAsFixed(2)}',
-                        Colors.blue,
-                        narrow,
-                      ),
-                      _ReportCard(
-                        'Balance Collected',
-                        '₱${balanceTotal.toStringAsFixed(2)}',
-                        Colors.green,
-                        narrow,
-                      ),
+                      _ReportCard('Total Revenue',      '₱${totalRevenue.toStringAsFixed(2)}',      AppTheme.gold,       narrow),
+                      _ReportCard('Orders',             '${orderIds.length}',                        Colors.blueAccent,   narrow),
+                      _ReportCard('Downpayments',       '₱${downpaymentTotal.toStringAsFixed(2)}',   Colors.blue,         narrow),
+                      _ReportCard('Balance Collected',  '₱${balanceTotal.toStringAsFixed(2)}',       Colors.green,        narrow),
                     ],
                   );
                 },
@@ -1598,11 +1548,7 @@ class _SalesReportViewState extends State<SalesReportView> {
 
               const Row(
                 children: [
-                  Icon(
-                    Icons.bar_chart_rounded,
-                    color: Colors.blueAccent,
-                    size: 14,
-                  ),
+                  Icon(Icons.bar_chart_rounded, color: Colors.blueAccent, size: 14),
                   SizedBox(width: 6),
                   Text(
                     'MONTHLY REVENUE',
@@ -1629,25 +1575,19 @@ class _SalesReportViewState extends State<SalesReportView> {
                 children: monthBuckets
                     .map(
                       (b) => Column(
-                        children: [
-                          Text(
-                            b.label,
-                            style: const TextStyle(
-                              color: Colors.white38,
-                              fontSize: 10,
-                            ),
-                          ),
-                          if (b.total > 0)
-                            Text(
-                              '₱${b.total.toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                color: AppTheme.gold,
-                                fontSize: 9,
-                              ),
-                            ),
-                        ],
+                    children: [
+                      Text(
+                        b.label,
+                        style: const TextStyle(color: Colors.white38, fontSize: 10),
                       ),
-                    )
+                      if (b.total > 0)
+                        Text(
+                          '₱${b.total.toStringAsFixed(0)}',
+                          style: const TextStyle(color: AppTheme.gold, fontSize: 9),
+                        ),
+                    ],
+                  ),
+                )
                     .toList(),
               ),
             ],
@@ -1683,11 +1623,7 @@ class _ReportCard extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           value,
-          style: TextStyle(
-            color: color,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ],
     ),
@@ -1723,7 +1659,7 @@ class _ChartPainter extends CustomPainter {
 
     final points = List.generate(
       n,
-      (i) => Offset(
+          (i) => Offset(
         i * stepX,
         size.height - (buckets[i].total / effectiveMax) * size.height * 0.85,
       ),
@@ -1751,12 +1687,9 @@ class _ChartPainter extends CustomPainter {
       final prev = points[i - 1];
       final curr = points[i];
       linePath.cubicTo(
-        (prev.dx + curr.dx) / 2,
-        prev.dy,
-        (prev.dx + curr.dx) / 2,
-        curr.dy,
-        curr.dx,
-        curr.dy,
+        (prev.dx + curr.dx) / 2, prev.dy,
+        (prev.dx + curr.dx) / 2, curr.dy,
+        curr.dx, curr.dy,
       );
     }
     canvas.drawPath(
@@ -1767,7 +1700,7 @@ class _ChartPainter extends CustomPainter {
         ..style = PaintingStyle.stroke,
     );
 
-    final dotBg = Paint()..color = const Color(0xFF1a1a2e);
+    final dotBg   = Paint()..color = const Color(0xFF1a1a2e);
     final dotFill = Paint()..color = Colors.blueAccent;
     for (final p in points) {
       canvas.drawCircle(p, 5, dotBg);

@@ -4,48 +4,35 @@ import 'package:intl/intl.dart';
 import 'app_theme.dart';
 import 'sales_widgets.dart';
 import 'invoice_screen.dart';
+import 'sales_import_widget.dart';
 
 // ── Liquid Glass Design Tokens ────────────────────────────────────────────────
 class _Glass {
-  static const Color surface = Color(0xEEFFFFFF);
-  static const Color surfaceMid = Color(0xCCFFFFFF);
+  static const Color surface     = Color(0xEEFFFFFF);
+  static const Color surfaceMid  = Color(0xCCFFFFFF);
   static const Color surfaceThin = Color(0x99FFFFFF);
-
-  static const Color borderMid = Color(0x55FFFFFF);
-  static const Color borderDim = Color(0x28FFFFFF);
-
-  static const Color textPrimary = Color(0xFF111827);
+  static const Color borderMid   = Color(0x55FFFFFF);
+  static const Color borderDim   = Color(0x28FFFFFF);
+  static const Color textPrimary   = Color(0xFF111827);
   static const Color textSecondary = Color(0xFF4B5563);
-  static const Color textMuted = Color(0xFF9CA3AF);
+  static const Color textMuted     = Color(0xFF9CA3AF);
 
   static const BoxShadow elevatedShadow = BoxShadow(
-    color: Color(0x1A000000),
-    blurRadius: 20,
-    spreadRadius: -2,
-    offset: Offset(0, 6),
+    color: Color(0x1A000000), blurRadius: 20, spreadRadius: -2, offset: Offset(0, 6),
   );
   static const BoxShadow rowShadow = BoxShadow(
-    color: Color(0x0D000000),
-    blurRadius: 8,
-    spreadRadius: 0,
-    offset: Offset(0, 2),
+    color: Color(0x0D000000), blurRadius: 8, spreadRadius: 0, offset: Offset(0, 2),
   );
 
-  static BoxDecoration card({
-    Color? color,
-    double radius = 14,
-    bool elevated = false,
-  }) => BoxDecoration(
-    color: color ?? surfaceMid,
-    borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: borderMid, width: 0.8),
-    boxShadow: [elevated ? elevatedShadow : rowShadow],
-  );
+  static BoxDecoration card({Color? color, double radius = 14, bool elevated = false}) =>
+      BoxDecoration(
+        color: color ?? surfaceMid,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: borderMid, width: 0.8),
+        boxShadow: [elevated ? elevatedShadow : rowShadow],
+      );
 
-  static InputDecoration field(
-    String hint, {
-    IconData? icon,
-  }) => InputDecoration(
+  static InputDecoration field(String hint, {IconData? icon}) => InputDecoration(
     hintText: hint,
     hintStyle: const TextStyle(color: textMuted, fontSize: 13),
     prefixIcon: icon != null ? Icon(icon, size: 16, color: textMuted) : null,
@@ -66,18 +53,15 @@ class _Glass {
 // ── iOS-style design tokens ───────────────────────────────────────────────────
 class _iOS {
   static const Color groupedBg = Color(0xFFF2F2F7);
-  static const Color cellBg = Colors.white;
+  static const Color cellBg    = Colors.white;
   static const Color separator = Color(0xFFE5E5EA);
-  static const Color label = Color(0xFF000000);
-  static const Color label2 = Color(0xFF3C3C43);
-  static const Color label3 = Color(0xFF8E8E93);
-  static const Color tint = Color(0xFF007AFF);
+  static const Color label     = Color(0xFF000000);
+  static const Color label2    = Color(0xFF3C3C43);
+  static const Color label3    = Color(0xFF8E8E93);
+  static const Color tint      = Color(0xFF007AFF);
 
   static const BoxShadow cardShadow = BoxShadow(
-    color: Color(0x0A000000),
-    blurRadius: 12,
-    spreadRadius: 0,
-    offset: Offset(0, 2),
+    color: Color(0x0A000000), blurRadius: 12, spreadRadius: 0, offset: Offset(0, 2),
   );
 
   static BoxDecoration groupedCard({double radius = 12}) => BoxDecoration(
@@ -100,18 +84,10 @@ class _SubMenuTabBar extends StatelessWidget {
   const _SubMenuTabBar({required this.activeTab, required this.onTabChanged});
 
   static const _tabs = [
-    (_LogsTab.jobQueue, 'Job Queue', Icons.queue_outlined),
-    (_LogsTab.salesRecord, 'Sales Record', Icons.receipt_long_outlined),
-    (
-      _LogsTab.employeeActivity,
-      'Employee Activity',
-      Icons.people_outline_rounded,
-    ),
-    (
-      _LogsTab.customerFeedback,
-      'Customer Feedback',
-      Icons.rate_review_outlined,
-    ),
+    (_LogsTab.jobQueue,          'Job Queue',          Icons.queue_outlined),
+    (_LogsTab.salesRecord,       'Sales Record',       Icons.receipt_long_outlined),
+    (_LogsTab.employeeActivity,  'Employee Activity',  Icons.people_outline_rounded),
+    (_LogsTab.customerFeedback,  'Customer Feedback',  Icons.rate_review_outlined),
   ];
 
   @override
@@ -136,33 +112,22 @@ class _SubMenuTabBar extends StatelessWidget {
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeInOut,
                 margin: const EdgeInsets.symmetric(horizontal: 2),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: isActive
-                      ? const Color(0xFF1A1A2E)
-                      : Colors.transparent,
+                  color: isActive ? const Color(0xFF1A1A2E) : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      t.$3,
-                      size: 14,
-                      color: isActive ? Colors.white : _Glass.textSecondary,
-                    ),
+                    Icon(t.$3, size: 14, color: isActive ? Colors.white : _Glass.textSecondary),
                     const SizedBox(width: 7),
                     Text(
                       t.$2,
                       style: TextStyle(
                         color: isActive ? Colors.white : _Glass.textSecondary,
                         fontSize: 13,
-                        fontWeight: isActive
-                            ? FontWeight.w700
-                            : FontWeight.w500,
+                        fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                         letterSpacing: 0.1,
                       ),
                     ),
@@ -214,17 +179,12 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 36, height: 36,
                 decoration: BoxDecoration(
                   color: const Color(0xFF1A1A2E),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
-                  _iconForTab(_activeTab),
-                  color: Colors.white,
-                  size: 16,
-                ),
+                child: Icon(_iconForTab(_activeTab), color: Colors.white, size: 16),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -235,19 +195,14 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                     Text(
                       _titleForTab(_activeTab),
                       style: const TextStyle(
-                        color: _Glass.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
+                        color: _Glass.textPrimary, fontSize: 15,
+                        fontWeight: FontWeight.w800, letterSpacing: -0.3,
                       ),
                     ),
                     const SizedBox(height: 1),
                     Text(
                       _subtitleForTab(_activeTab),
-                      style: const TextStyle(
-                        color: _Glass.textMuted,
-                        fontSize: 11,
-                      ),
+                      style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
                     ),
                   ],
                 ),
@@ -276,53 +231,37 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
 
   IconData _iconForTab(_LogsTab t) {
     switch (t) {
-      case _LogsTab.jobQueue:
-        return Icons.queue_outlined;
-      case _LogsTab.salesRecord:
-        return Icons.receipt_long_outlined;
-      case _LogsTab.employeeActivity:
-        return Icons.people_outline_rounded;
-      case _LogsTab.customerFeedback:
-        return Icons.rate_review_outlined;
+      case _LogsTab.jobQueue:         return Icons.queue_outlined;
+      case _LogsTab.salesRecord:      return Icons.receipt_long_outlined;
+      case _LogsTab.employeeActivity: return Icons.people_outline_rounded;
+      case _LogsTab.customerFeedback: return Icons.rate_review_outlined;
     }
   }
 
   String _titleForTab(_LogsTab t) {
     switch (t) {
-      case _LogsTab.jobQueue:
-        return 'Job Queue';
-      case _LogsTab.salesRecord:
-        return 'Sales Record';
-      case _LogsTab.employeeActivity:
-        return 'Employee Activity';
-      case _LogsTab.customerFeedback:
-        return 'Customer Feedback';
+      case _LogsTab.jobQueue:         return 'Job Queue';
+      case _LogsTab.salesRecord:      return 'Sales Record';
+      case _LogsTab.employeeActivity: return 'Employee Activity';
+      case _LogsTab.customerFeedback: return 'Customer Feedback';
     }
   }
 
   String _subtitleForTab(_LogsTab t) {
     switch (t) {
-      case _LogsTab.jobQueue:
-        return 'Monitor and track all print jobs';
-      case _LogsTab.salesRecord:
-        return 'View sales data and reports';
-      case _LogsTab.employeeActivity:
-        return 'Inventory updates by employees';
-      case _LogsTab.customerFeedback:
-        return 'Feedback submitted by customers';
+      case _LogsTab.jobQueue:         return 'Monitor and track all print jobs';
+      case _LogsTab.salesRecord:      return 'View sales data and reports';
+      case _LogsTab.employeeActivity: return 'Inventory updates by employees';
+      case _LogsTab.customerFeedback: return 'Feedback submitted by customers';
     }
   }
 
   Widget _buildContent() {
     switch (_activeTab) {
-      case _LogsTab.jobQueue:
-        return const _JobQueueTab();
-      case _LogsTab.salesRecord:
-        return const _SalesRecordSubTab();
-      case _LogsTab.employeeActivity:
-        return const _InventoryLogsTab();
-      case _LogsTab.customerFeedback:
-        return const _CustomerFeedbackTab();
+      case _LogsTab.jobQueue:         return const _JobQueueTab();
+      case _LogsTab.salesRecord:      return const _SalesRecordSubTab();
+      case _LogsTab.employeeActivity: return const _InventoryLogsTab();
+      case _LogsTab.customerFeedback: return const _CustomerFeedbackTab();
     }
   }
 }
@@ -334,7 +273,6 @@ enum _QueueSubTab { pending, active, ready, cancelled, history }
 
 class _JobQueueTab extends StatefulWidget {
   const _JobQueueTab();
-
   @override
   State<_JobQueueTab> createState() => _JobQueueTabState();
 }
@@ -343,25 +281,10 @@ class _JobQueueTabState extends State<_JobQueueTab> {
   _QueueSubTab _sub = _QueueSubTab.pending;
 
   static const _statusTabs = [
-    (
-      _QueueSubTab.pending,
-      'Pending',
-      Icons.hourglass_empty_rounded,
-      Color(0xFFD97706),
-    ),
-    (_QueueSubTab.active, 'Active', Icons.bolt_rounded, Color(0xFF2563EB)),
-    (
-      _QueueSubTab.ready,
-      'Ready',
-      Icons.check_circle_outline,
-      Color(0xFF16A34A),
-    ),
-    (
-      _QueueSubTab.cancelled,
-      'Cancelled',
-      Icons.cancel_outlined,
-      Color(0xFFDC2626),
-    ),
+    (_QueueSubTab.pending,   'Pending',   Icons.hourglass_empty_rounded, Color(0xFFD97706)),
+    (_QueueSubTab.active,    'Active',    Icons.bolt_rounded,            Color(0xFF2563EB)),
+    (_QueueSubTab.ready,     'Ready',     Icons.check_circle_outline,    Color(0xFF16A34A)),
+    (_QueueSubTab.cancelled, 'Cancelled', Icons.cancel_outlined,         Color(0xFFDC2626)),
   ];
 
   @override
@@ -379,29 +302,17 @@ class _JobQueueTabState extends State<_JobQueueTab> {
                 Expanded(
                   child: _IOSSegmentControl<_QueueSubTab>(
                     selected: _sub,
-                    items: _statusTabs
-                        .map(
-                          (t) => _IOSSegmentItem(
-                            value: t.$1,
-                            label: t.$2,
-                            icon: t.$3,
-                            accent: t.$4,
-                          ),
-                        )
-                        .toList(),
+                    items: _statusTabs.map((t) => _IOSSegmentItem(
+                      value: t.$1, label: t.$2, icon: t.$3, accent: t.$4,
+                    )).toList(),
                     onChanged: (v) => setState(() => _sub = v),
                   ),
                 ),
-
                 const SizedBox(width: 10),
-
                 GestureDetector(
                   onTap: () => setState(() => _sub = _QueueSubTab.history),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 9,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     decoration: BoxDecoration(
                       color: const Color(0xFF6D28D9),
                       borderRadius: BorderRadius.circular(10),
@@ -409,21 +320,13 @@ class _JobQueueTabState extends State<_JobQueueTab> {
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.history_rounded,
-                          size: 13,
-                          color: Colors.white,
-                        ),
+                        Icon(Icons.history_rounded, size: 13, color: Colors.white),
                         SizedBox(width: 6),
-                        Text(
-                          'Order History',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.1,
-                          ),
-                        ),
+                        Text('Order History',
+                            style: TextStyle(
+                              color: Colors.white, fontSize: 12,
+                              fontWeight: FontWeight.w600, letterSpacing: -0.1,
+                            )),
                       ],
                     ),
                   ),
@@ -435,9 +338,7 @@ class _JobQueueTabState extends State<_JobQueueTab> {
 
           Expanded(
             child: isHistory
-                ? _AdminOrderHistory(
-                    onBack: () => setState(() => _sub = _QueueSubTab.pending),
-                  )
+                ? _AdminOrderHistory(onBack: () => setState(() => _sub = _QueueSubTab.pending))
                 : _buildQueueContent(),
           ),
         ],
@@ -446,23 +347,13 @@ class _JobQueueTabState extends State<_JobQueueTab> {
   }
 
   Widget _buildQueueContent() {
-    String jobStatus;
-    switch (_sub) {
-      case _QueueSubTab.pending:
-        jobStatus = 'pending';
-        break;
-      case _QueueSubTab.active:
-        jobStatus = 'active';
-        break;
-      case _QueueSubTab.ready:
-        jobStatus = 'completed';
-        break;
-      case _QueueSubTab.cancelled:
-        jobStatus = 'cancelled';
-        break;
-      default:
-        jobStatus = 'pending';
-    }
+    final jobStatus = switch (_sub) {
+      _QueueSubTab.pending   => 'pending',
+      _QueueSubTab.active    => 'active',
+      _QueueSubTab.ready     => 'completed',
+      _QueueSubTab.cancelled => 'cancelled',
+      _QueueSubTab.history   => 'pending',
+    };
     return _QueueStatusList(jobStatus: jobStatus);
   }
 }
@@ -474,10 +365,8 @@ class _IOSSegmentItem<T> {
   final IconData icon;
   final Color accent;
   const _IOSSegmentItem({
-    required this.value,
-    required this.label,
-    required this.icon,
-    required this.accent,
+    required this.value, required this.label,
+    required this.icon,  required this.accent,
   });
 }
 
@@ -487,9 +376,7 @@ class _IOSSegmentControl<T> extends StatelessWidget {
   final ValueChanged<T> onChanged;
 
   const _IOSSegmentControl({
-    required this.selected,
-    required this.items,
-    required this.onChanged,
+    required this.selected, required this.items, required this.onChanged,
   });
 
   @override
@@ -512,40 +399,25 @@ class _IOSSegmentControl<T> extends StatelessWidget {
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeInOut,
                 margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 13,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
                 decoration: BoxDecoration(
                   color: isActive ? Colors.white : Colors.transparent,
                   borderRadius: BorderRadius.circular(7),
                   boxShadow: isActive
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
+                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))]
                       : null,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      item.icon,
-                      size: 12,
-                      color: isActive ? item.accent : _iOS.label3,
-                    ),
+                    Icon(item.icon, size: 12, color: isActive ? item.accent : _iOS.label3),
                     const SizedBox(width: 5),
                     Text(
                       item.label,
                       style: TextStyle(
                         color: isActive ? item.accent : _iOS.label3,
                         fontSize: 12,
-                        fontWeight: isActive
-                            ? FontWeight.w600
-                            : FontWeight.w500,
+                        fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
                         letterSpacing: -0.1,
                       ),
                     ),
@@ -571,47 +443,25 @@ class _QueueStatusList extends StatelessWidget {
     if (ts == null) return '—';
     try {
       final d = (ts as Timestamp).toDate().toLocal();
-      const m = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
+      const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       return '${m[d.month - 1]} ${d.day}, ${d.year}';
-    } catch (_) {
-      return '—';
-    }
+    } catch (_) { return '—'; }
   }
 
   static Color _statusColor(String status) {
     switch (status.toLowerCase()) {
-      case 'pending':
-        return const Color(0xFFD97706);
-      case 'active':
-        return const Color(0xFF2563EB);
-      case 'completed':
-        return const Color(0xFF16A34A);
-      case 'cancelled':
-        return const Color(0xFFDC2626);
-      default:
-        return _Glass.textMuted;
+      case 'pending':   return const Color(0xFFD97706);
+      case 'active':    return const Color(0xFF2563EB);
+      case 'completed': return const Color(0xFF16A34A);
+      case 'cancelled': return const Color(0xFFDC2626);
+      default:          return _Glass.textMuted;
     }
   }
 
   String _statusLabel(String s) {
     switch (s) {
-      case 'completed':
-        return 'Ready';
-      default:
-        return s[0].toUpperCase() + s.substring(1);
+      case 'completed': return 'Ready';
+      default: return s[0].toUpperCase() + s.substring(1);
     }
   }
 
@@ -624,27 +474,17 @@ class _QueueStatusList extends StatelessWidget {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(
-            child: CircularProgressIndicator(
-              color: _Glass.textPrimary.withValues(alpha: 0.4),
-            ),
-          );
+          return Center(child: CircularProgressIndicator(color: _Glass.textPrimary.withValues(alpha: 0.4)));
         }
         if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Error: ${snapshot.error}',
-              style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13),
-            ),
-          );
+          return Center(child: Text('Error: ${snapshot.error}',
+              style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13)));
         }
 
         final docs = [...(snapshot.data?.docs ?? [])]
           ..sort((a, b) {
-            final ta =
-                (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
-            final tb =
-                (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            final ta = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            final tb = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
@@ -657,34 +497,20 @@ class _QueueStatusList extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 64,
-                  height: 64,
+                  width: 64, height: 64,
                   decoration: BoxDecoration(
                     color: const Color(0xFFEFEFF4),
                     borderRadius: BorderRadius.circular(18),
                   ),
-                  child: const Icon(
-                    Icons.queue_outlined,
-                    size: 28,
-                    color: _iOS.label3,
-                  ),
+                  child: const Icon(Icons.queue_outlined, size: 28, color: _iOS.label3),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'No $jobStatus jobs',
-                  style: const TextStyle(
-                    color: _iOS.label,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.3,
-                  ),
-                ),
+                Text('No $jobStatus jobs',
+                    style: const TextStyle(color: _iOS.label, fontSize: 15,
+                        fontWeight: FontWeight.w600, letterSpacing: -0.3)),
                 const SizedBox(height: 4),
-                Text(
-                  'Jobs assigned to this status will appear here.',
-                  style: TextStyle(color: _iOS.label3, fontSize: 13),
-                  textAlign: TextAlign.center,
-                ),
+                const Text('Jobs assigned to this status will appear here.',
+                    style: TextStyle(color: _iOS.label3, fontSize: 13), textAlign: TextAlign.center),
               ],
             ),
           );
@@ -695,38 +521,25 @@ class _QueueStatusList extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 8),
-              child: Text(
-                '${docs.length} JOB${docs.length == 1 ? '' : 'S'}',
-                style: const TextStyle(
-                  color: _iOS.label3,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                ),
-              ),
+              child: Text('${docs.length} JOB${docs.length == 1 ? '' : 'S'}',
+                  style: const TextStyle(color: _iOS.label3, fontSize: 12,
+                      fontWeight: FontWeight.w600, letterSpacing: 0.5)),
             ),
-
             Expanded(
               child: ListView.separated(
                 itemCount: docs.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (_, i) {
                   final data = docs[i].data() as Map<String, dynamic>;
-                  final orderId = data['order_id']?.toString() ?? '—';
+                  final orderId  = data['order_id']?.toString() ?? '—';
                   final customer = data['customer_name']?.toString() ?? '—';
-                  final status = data['job_status']?.toString() ?? jobStatus;
-                  final total = (data['total_price'] as num?)?.toDouble() ?? 0;
-                  final products =
-                      (data['products'] as List?)
-                          ?.cast<Map<String, dynamic>>() ??
-                      [];
-                  final dateStr = _fmtDate(data['created_at']);
-                  final statusColor = _statusColor(status);
-                  final productSummary = products.isEmpty
-                      ? '—'
-                      : products
-                            .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
-                            .join(', ');
+                  final status   = data['job_status']?.toString() ?? jobStatus;
+                  final total    = (data['total_price'] as num?)?.toDouble() ?? 0;
+                  final products = (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                  final dateStr  = _fmtDate(data['created_at']);
+                  final statusColor   = _statusColor(status);
+                  final productSummary = products.isEmpty ? '—'
+                      : products.map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}').join(', ');
 
                   return _IOSJobCard(
                     index: i + 1,
@@ -750,11 +563,11 @@ class _QueueStatusList extends StatelessWidget {
 
 // ── iOS Job Card ──────────────────────────────────────────────────────────────
 class _IOSJobCard extends StatelessWidget {
-  final int index;
+  final int    index;
   final String orderId;
   final String customer;
   final String statusLabel;
-  final Color statusColor;
+  final Color  statusColor;
   final String? productSummary;
   final String dateStr;
   final double total;
@@ -781,29 +594,20 @@ class _IOSJobCard extends StatelessWidget {
           width: 32,
           child: Center(
             child: Container(
-              width: 26,
-              height: 26,
+              width: 26, height: 26,
               decoration: BoxDecoration(
                 color: _amber.withValues(alpha: 0.10),
                 shape: BoxShape.circle,
                 border: Border.all(color: _amber.withValues(alpha: 0.35)),
               ),
               child: Center(
-                child: Text(
-                  '$index',
-                  style: const TextStyle(
-                    color: _amber,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+                child: Text('$index',
+                    style: const TextStyle(color: _amber, fontSize: 10, fontWeight: FontWeight.w800)),
               ),
             ),
           ),
         ),
-
         const SizedBox(width: 6),
-
         Expanded(
           child: Container(
             padding: const EdgeInsets.all(14),
@@ -822,82 +626,43 @@ class _IOSJobCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            orderId,
-                            style: const TextStyle(
-                              color: _iOS.label,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
+                          Text(orderId,
+                              style: const TextStyle(color: _iOS.label, fontSize: 14,
+                                  fontWeight: FontWeight.w700, letterSpacing: -0.2)),
                           const SizedBox(height: 2),
-                          Text(
-                            customer,
-                            style: const TextStyle(
-                              color: _iOS.label2,
-                              fontSize: 12,
-                            ),
-                          ),
+                          Text(customer,
+                              style: const TextStyle(color: _iOS.label2, fontSize: 12)),
                         ],
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 3,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                       decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(99),
                       ),
-                      child: Text(
-                        statusLabel,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      child: Text(statusLabel,
+                          style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w700)),
                     ),
                   ],
                 ),
-
                 if (productSummary != null) ...[
                   const SizedBox(height: 8),
-                  Text(
-                    productSummary!,
-                    style: const TextStyle(color: _iOS.label2, fontSize: 13),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(productSummary!,
+                      style: const TextStyle(color: _iOS.label2, fontSize: 13),
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
                 ],
-
                 const SizedBox(height: 10),
                 Container(height: 0.5, color: _iOS.separator),
                 const SizedBox(height: 10),
-
                 Row(
                   children: [
-                    const Icon(
-                      Icons.calendar_today_outlined,
-                      size: 11,
-                      color: _iOS.label3,
-                    ),
+                    const Icon(Icons.calendar_today_outlined, size: 11, color: _iOS.label3),
                     const SizedBox(width: 4),
-                    Text(
-                      dateStr,
-                      style: const TextStyle(color: _iOS.label3, fontSize: 12),
-                    ),
+                    Text(dateStr, style: const TextStyle(color: _iOS.label3, fontSize: 12)),
                     const Spacer(),
-                    Text(
-                      '₱${total.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: _amber,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+                    Text('₱${total.toStringAsFixed(2)}',
+                        style: const TextStyle(color: _amber, fontSize: 14, fontWeight: FontWeight.w800)),
                   ],
                 ),
               ],
@@ -910,7 +675,7 @@ class _IOSJobCard extends StatelessWidget {
 }
 
 // =============================================================================
-// Admin Order History — with Customer ID search + invoice + total/paid/balance
+// Admin Order History
 // =============================================================================
 class _AdminOrderHistory extends StatefulWidget {
   final VoidCallback onBack;
@@ -926,33 +691,21 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
   final _searchCtrl = TextEditingController();
 
   static const _statusOpts = [
-    ('all', 'All'),
-    ('pending', 'Pending'),
-    ('active', 'Active'),
-    ('ready', 'Ready'),
+    ('all',       'All'),
+    ('pending',   'Pending'),
+    ('active',    'Active'),
+    ('ready',     'Ready'),
     ('cancelled', 'Cancelled'),
     ('completed', 'Completed'),
   ];
 
   @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
+  void dispose() { _searchCtrl.dispose(); super.dispose(); }
 
   Stream<List<QueryDocumentSnapshot>> _stream() {
     Query q = FirebaseFirestore.instance.collection('Orders');
     if (_statusFilter == 'all') {
-      q = q.where(
-        'status',
-        whereIn: [
-          'pending',
-          'in_production',
-          'ready',
-          'completed',
-          'cancelled',
-        ],
-      );
+      q = q.where('status', whereIn: ['pending','in_production','ready','completed','cancelled']);
     } else if (_statusFilter == 'active') {
       q = q.where('status', isEqualTo: 'in_production');
     } else if (_statusFilter == 'ready') {
@@ -963,10 +716,8 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
     return q.snapshots().map((snap) {
       final docs = [...snap.docs]
         ..sort((a, b) {
-          final ta =
-              (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
-          final tb =
-              (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          final ta = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          final tb = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           if (ta == null && tb == null) return 0;
           if (ta == null) return 1;
           if (tb == null) return -1;
@@ -978,27 +729,19 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
 
   Color _statusColor(String s) {
     switch (s) {
-      case 'pending':
-        return const Color(0xFFD97706);
-      case 'in_production':
-        return const Color(0xFF2563EB);
-      case 'ready':
-        return const Color(0xFF16A34A);
-      case 'completed':
-        return const Color(0xFF6D28D9);
-      case 'cancelled':
-        return const Color(0xFFDC2626);
-      default:
-        return _Glass.textMuted;
+      case 'pending':       return const Color(0xFFD97706);
+      case 'in_production': return const Color(0xFF2563EB);
+      case 'ready':         return const Color(0xFF16A34A);
+      case 'completed':     return const Color(0xFF6D28D9);
+      case 'cancelled':     return const Color(0xFFDC2626);
+      default:              return _Glass.textMuted;
     }
   }
 
   String _statusLabel(String s) {
     switch (s) {
-      case 'in_production':
-        return 'Active';
-      default:
-        return s[0].toUpperCase() + s.substring(1);
+      case 'in_production': return 'Active';
+      default: return s[0].toUpperCase() + s.substring(1);
     }
   }
 
@@ -1006,40 +749,19 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
     if (ts == null) return '—';
     try {
       final d = (ts as Timestamp).toDate().toLocal();
-      const m = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
+      const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       return '${m[d.month - 1]} ${d.day}, ${d.year}';
-    } catch (_) {
-      return '—';
-    }
+    } catch (_) { return '—'; }
   }
 
   Color _filterAccent(String val) {
     switch (val) {
-      case 'pending':
-        return const Color(0xFFD97706);
-      case 'active':
-        return const Color(0xFF2563EB);
-      case 'ready':
-        return const Color(0xFF16A34A);
-      case 'cancelled':
-        return const Color(0xFFDC2626);
-      case 'completed':
-        return const Color(0xFF6D28D9);
-      default:
-        return const Color(0xFF1A1A2E);
+      case 'pending':   return const Color(0xFFD97706);
+      case 'active':    return const Color(0xFF2563EB);
+      case 'ready':     return const Color(0xFF16A34A);
+      case 'cancelled': return const Color(0xFFDC2626);
+      case 'completed': return const Color(0xFF6D28D9);
+      default:          return const Color(0xFF1A1A2E);
     }
   }
 
@@ -1050,7 +772,6 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Top bar: Back + Search + Filter ─────────────────────────────
         Row(
           children: [
             GestureDetector(
@@ -1065,29 +786,15 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.chevron_left_rounded,
-                      size: 18,
-                      color: _iOS.label2,
-                    ),
+                    Icon(Icons.chevron_left_rounded, size: 18, color: _iOS.label2),
                     SizedBox(width: 2),
-                    Text(
-                      'Back',
-                      style: TextStyle(
-                        color: _iOS.label2,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
+                    Text('Back', style: TextStyle(color: _iOS.label2, fontSize: 14,
+                        fontWeight: FontWeight.w500, letterSpacing: -0.2)),
                   ],
                 ),
               ),
             ),
-
             const SizedBox(width: 10),
-
-            // FIXED: Search now includes customer_uid / customer ID
             Expanded(
               child: Container(
                 height: 38,
@@ -1097,33 +804,17 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                 ),
                 child: TextField(
                   controller: _searchCtrl,
-                  onChanged: (v) =>
-                      setState(() => _search = v.trim().toLowerCase()),
-                  style: const TextStyle(
-                    color: _iOS.label,
-                    fontSize: 14,
-                    letterSpacing: -0.1,
-                  ),
+                  onChanged: (v) => setState(() => _search = v.trim().toLowerCase()),
+                  style: const TextStyle(color: _iOS.label, fontSize: 14, letterSpacing: -0.1),
                   decoration: InputDecoration(
                     hintText: 'Search by Order ID or Customer Name',
                     hintStyle: TextStyle(color: _iOS.label3, fontSize: 13),
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      size: 16,
-                      color: _iOS.label3,
-                    ),
+                    prefixIcon: const Icon(Icons.search, size: 16, color: _iOS.label3),
                     suffixIcon: _search.isNotEmpty
                         ? GestureDetector(
-                            onTap: () {
-                              _searchCtrl.clear();
-                              setState(() => _search = '');
-                            },
-                            child: const Icon(
-                              Icons.clear,
-                              size: 16,
-                              color: _iOS.label3,
-                            ),
-                          )
+                      onTap: () { _searchCtrl.clear(); setState(() => _search = ''); },
+                      child: const Icon(Icons.clear, size: 16, color: _iOS.label3),
+                    )
                         : null,
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 10),
@@ -1131,34 +822,21 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                 ),
               ),
             ),
-
             const SizedBox(width: 10),
-
             Container(
               height: 38,
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: _statusFilter == 'all'
-                    ? const Color(0xFF1A1A2E)
-                    : dropdownAccent,
+                color: _statusFilter == 'all' ? const Color(0xFF1A1A2E) : dropdownAccent,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: _statusFilter,
                   isDense: true,
-                  icon: const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'sans-serif',
-                    letterSpacing: -0.1,
-                  ),
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Colors.white),
+                  style: const TextStyle(color: Colors.white, fontSize: 13,
+                      fontWeight: FontWeight.w600, fontFamily: 'sans-serif', letterSpacing: -0.1),
                   dropdownColor: Colors.white,
                   borderRadius: BorderRadius.circular(14),
                   items: _statusOpts.map((opt) {
@@ -1168,45 +846,22 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              color: accent,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
+                          Container(width: 7, height: 7,
+                              decoration: BoxDecoration(color: accent, shape: BoxShape.circle)),
                           const SizedBox(width: 8),
-                          Text(
-                            opt.$2,
-                            style: const TextStyle(
-                              color: _iOS.label,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                          Text(opt.$2, style: const TextStyle(
+                              color: _iOS.label, fontSize: 13, fontWeight: FontWeight.w500)),
                         ],
                       ),
                     );
                   }).toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _statusFilter = val);
-                  },
-                  selectedItemBuilder: (_) => _statusOpts.map((opt) {
-                    return Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          opt.$2,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
+                  onChanged: (val) { if (val != null) setState(() => _statusFilter = val); },
+                  selectedItemBuilder: (_) => _statusOpts.map((opt) => Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(opt.$2, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                    ],
+                  )).toList(),
                 ),
               ),
             ),
@@ -1219,41 +874,23 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
           child: StreamBuilder<List<QueryDocumentSnapshot>>(
             stream: _stream(),
             builder: (ctx, snap) {
-              if (snap.connectionState == ConnectionState.waiting &&
-                  !snap.hasData) {
-                return Center(
-                  child: CircularProgressIndicator(
-                    color: _Glass.textPrimary.withValues(alpha: 0.4),
-                  ),
-                );
+              if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+                return Center(child: CircularProgressIndicator(color: _Glass.textPrimary.withValues(alpha: 0.4)));
               }
               if (snap.hasError) {
-                return Center(
-                  child: Text(
-                    'Error: ${snap.error}',
-                    style: const TextStyle(
-                      color: Color(0xFFDC2626),
-                      fontSize: 12,
-                    ),
-                  ),
-                );
+                return Center(child: Text('Error: ${snap.error}',
+                    style: const TextStyle(color: Color(0xFFDC2626), fontSize: 12)));
               }
 
               var docs = snap.data ?? [];
 
-              // FIXED: search checks order_id, customer_name, AND customer_uid
               if (_search.isNotEmpty) {
                 docs = docs.where((d) {
                   final data = d.data() as Map<String, dynamic>;
-                  final id = (data['order_id']?.toString() ?? d.id)
-                      .toLowerCase();
-                  final name = (data['customer_name']?.toString() ?? '')
-                      .toLowerCase();
-                  final customerId = (data['customer_uid']?.toString() ?? '')
-                      .toLowerCase();
-                  return id.contains(_search) ||
-                      name.contains(_search) ||
-                      customerId.contains(_search);
+                  final id  = (data['order_id']?.toString() ?? d.id).toLowerCase();
+                  final name = (data['customer_name']?.toString() ?? '').toLowerCase();
+                  final uid  = (data['customer_uid']?.toString() ?? '').toLowerCase();
+                  return id.contains(_search) || name.contains(_search) || uid.contains(_search);
                 }).toList();
               }
 
@@ -1263,33 +900,17 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFEFF4),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: const Icon(
-                          Icons.history,
-                          size: 28,
-                          color: _iOS.label3,
-                        ),
+                        width: 64, height: 64,
+                        decoration: BoxDecoration(color: const Color(0xFFEFEFF4),
+                            borderRadius: BorderRadius.circular(18)),
+                        child: const Icon(Icons.history, size: 28, color: _iOS.label3),
                       ),
                       const SizedBox(height: 14),
-                      const Text(
-                        'No orders found',
-                        style: TextStyle(
-                          color: _iOS.label,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
+                      const Text('No orders found', style: TextStyle(color: _iOS.label, fontSize: 15,
+                          fontWeight: FontWeight.w600, letterSpacing: -0.3)),
                       const SizedBox(height: 4),
-                      const Text(
-                        'Try adjusting the filter or search.',
-                        style: TextStyle(color: _iOS.label3, fontSize: 13),
-                      ),
+                      const Text('Try adjusting the filter or search.',
+                          style: TextStyle(color: _iOS.label3, fontSize: 13)),
                     ],
                   ),
                 );
@@ -1300,15 +921,9 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                 children: [
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 8),
-                    child: Text(
-                      '${docs.length} ORDER${docs.length == 1 ? '' : 'S'}',
-                      style: const TextStyle(
-                        color: _iOS.label3,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
+                    child: Text('${docs.length} ORDER${docs.length == 1 ? '' : 'S'}',
+                        style: const TextStyle(color: _iOS.label3, fontSize: 12,
+                            fontWeight: FontWeight.w600, letterSpacing: 0.5)),
                   ),
                   Expanded(
                     child: ListView.separated(
@@ -1316,26 +931,16 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                       itemCount: docs.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (_, i) {
-                        final doc = docs[i];
+                        final doc  = docs[i];
                         final data = doc.data() as Map<String, dynamic>;
-                        final orderLabel =
-                            data['order_id']?.toString() ?? doc.id;
-                        final customer =
-                            data['customer_name']?.toString() ?? '—';
-                        final status = data['status']?.toString() ?? '';
-                        final total =
-                            (data['total_price'] as num?)?.toDouble() ?? 0;
-                        final paid =
-                            (data['amount_paid'] as num?)?.toDouble() ?? 0;
-                        final remaining =
-                            (data['remaining_balance'] as num?)?.toDouble() ??
-                            (total - paid);
-                        final products =
-                            (data['products'] as List?)
-                                ?.cast<Map<String, dynamic>>() ??
-                            [];
-                        final dateStr = _fmtDate(data['created_at']);
-                        final statusColor = _statusColor(status);
+                        final orderLabel = data['order_id']?.toString() ?? doc.id;
+                        final customer   = data['customer_name']?.toString() ?? '—';
+                        final status     = data['status']?.toString() ?? '';
+                        final total     = (data['total_price'] as num?)?.toDouble() ?? 0;
+                        final paid      = (data['amount_paid'] as num?)?.toDouble() ?? 0;
+                        final remaining = (data['remaining_balance'] as num?)?.toDouble() ?? (total - paid);
+                        final products  = (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                        final dateStr   = _fmtDate(data['created_at']);
                         final invoiceId = data['invoice_id']?.toString();
 
                         return _IOSOrderHistoryCard(
@@ -1344,7 +949,7 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                           customer: customer,
                           dateStr: dateStr,
                           statusLabel: _statusLabel(status),
-                          statusColor: statusColor,
+                          statusColor: _statusColor(status),
                           products: products,
                           paid: paid,
                           total: total,
@@ -1364,14 +969,14 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
   }
 }
 
-// ── iOS Order History Card — with total/paid/balance + View Invoice ───────────
+// ── iOS Order History Card ────────────────────────────────────────────────────
 class _IOSOrderHistoryCard extends StatelessWidget {
   final String docId;
   final String orderId;
   final String customer;
   final String dateStr;
   final String statusLabel;
-  final Color statusColor;
+  final Color  statusColor;
   final List<Map<String, dynamic>> products;
   final double paid;
   final double total;
@@ -1409,7 +1014,6 @@ class _IOSOrderHistoryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1417,20 +1021,11 @@ class _IOSOrderHistoryCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      orderId,
-                      style: const TextStyle(
-                        color: _iOS.label,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
+                    Text(orderId, style: const TextStyle(color: _iOS.label, fontSize: 14,
+                        fontWeight: FontWeight.w700, letterSpacing: -0.2)),
                     const SizedBox(height: 2),
-                    Text(
-                      '$customer · $dateStr',
-                      style: const TextStyle(color: _iOS.label2, fontSize: 12),
-                    ),
+                    Text('$customer · $dateStr',
+                        style: const TextStyle(color: _iOS.label2, fontSize: 12)),
                   ],
                 ),
               ),
@@ -1441,14 +1036,8 @@ class _IOSOrderHistoryCard extends StatelessWidget {
                   color: statusColor.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(99),
                 ),
-                child: Text(
-                  statusLabel,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                child: Text(statusLabel,
+                    style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w700)),
               ),
             ],
           ),
@@ -1456,12 +1045,9 @@ class _IOSOrderHistoryCard extends StatelessWidget {
           if (products.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
-              products
-                  .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
-                  .join(', '),
+              products.map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}').join(', '),
               style: const TextStyle(color: _iOS.label2, fontSize: 13),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              maxLines: 2, overflow: TextOverflow.ellipsis,
             ),
           ],
 
@@ -1469,69 +1055,47 @@ class _IOSOrderHistoryCard extends StatelessWidget {
           Container(height: 0.5, color: _iOS.separator),
           const SizedBox(height: 10),
 
-          // IMPROVED: Total / Paid / Balance — full-width row with better spacing
           IntrinsicHeight(
             child: Row(
               children: [
-                Expanded(
-                  child: _HistoryChipWide(
-                    label: 'Total',
-                    value: '₱${total.toStringAsFixed(2)}',
-                    color: const Color(0xFF374151),
-                    bgColor: const Color(0xFFF9FAFB),
-                    borderColor: const Color(0xFFE5E7EB),
-                  ),
-                ),
+                Expanded(child: _HistoryChipWide(
+                  label: 'Total', value: '₱${total.toStringAsFixed(2)}',
+                  color: const Color(0xFF374151), bgColor: const Color(0xFFF9FAFB),
+                  borderColor: const Color(0xFFE5E7EB),
+                )),
                 const SizedBox(width: 6),
-                Expanded(
-                  child: _HistoryChipWide(
-                    label: 'Paid',
-                    value: '₱${paid.toStringAsFixed(2)}',
-                    color: const Color(0xFF16A34A),
-                    bgColor: const Color(0xFFF0FDF4),
-                    borderColor: const Color(0xFFBBF7D0),
-                  ),
-                ),
+                Expanded(child: _HistoryChipWide(
+                  label: 'Paid', value: '₱${paid.toStringAsFixed(2)}',
+                  color: const Color(0xFF16A34A), bgColor: const Color(0xFFF0FDF4),
+                  borderColor: const Color(0xFFBBF7D0),
+                )),
                 const SizedBox(width: 6),
-                Expanded(
-                  child: _HistoryChipWide(
-                    label: fullyPaid ? 'Fully Paid' : 'Balance',
-                    value: fullyPaid
-                        ? '✓ Paid'
-                        : '₱${remaining.toStringAsFixed(2)}',
-                    color: fullyPaid ? const Color(0xFF16A34A) : _amber,
-                    bgColor: fullyPaid
-                        ? const Color(0xFFF0FDF4)
-                        : const Color(0xFFFFFBEB),
-                    borderColor: fullyPaid
-                        ? const Color(0xFFBBF7D0)
-                        : const Color(0xFFFDE68A),
-                    bold: true,
-                  ),
-                ),
+                Expanded(child: _HistoryChipWide(
+                  label: fullyPaid ? 'Fully Paid' : 'Balance',
+                  value: fullyPaid ? '✓ Paid' : '₱${remaining.toStringAsFixed(2)}',
+                  color: fullyPaid ? const Color(0xFF16A34A) : _amber,
+                  bgColor: fullyPaid ? const Color(0xFFF0FDF4) : const Color(0xFFFFFBEB),
+                  borderColor: fullyPaid ? const Color(0xFFBBF7D0) : const Color(0xFFFDE68A),
+                  bold: true,
+                )),
               ],
             ),
           ),
 
           const SizedBox(height: 10),
 
-          // ── View Invoice button ────────────────────────────────────
           Builder(
             builder: (ctx) => OutlinedButton.icon(
               onPressed: () async {
                 String? invId = invoiceId;
                 if (invId == null) {
                   final orderSnap = await FirebaseFirestore.instance
-                      .collection('Orders')
-                      .doc(docId)
-                      .get();
+                      .collection('Orders').doc(docId).get();
                   invId = orderSnap.data()?['invoice_id']?.toString();
                 }
                 if (invId != null && ctx.mounted) {
                   Navigator.of(ctx).push(
-                    MaterialPageRoute(
-                      builder: (_) => InvoiceScreen(invoiceId: invId!),
-                    ),
+                    MaterialPageRoute(builder: (_) => InvoiceScreen(invoiceId: invId!)),
                   );
                 } else if (ctx.mounted) {
                   ScaffoldMessenger.of(ctx).showSnackBar(
@@ -1539,30 +1103,13 @@ class _IOSOrderHistoryCard extends StatelessWidget {
                   );
                 }
               },
-              icon: const Icon(
-                Icons.receipt_long_rounded,
-                size: 15,
-                color: Color(0xFF6D28D9),
-              ),
-              label: const Text(
-                'View Invoice',
-                style: TextStyle(
-                  color: Color(0xFF6D28D9),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
+              icon: const Icon(Icons.receipt_long_rounded, size: 15, color: Color(0xFF6D28D9)),
+              label: const Text('View Invoice',
+                  style: TextStyle(color: Color(0xFF6D28D9), fontWeight: FontWeight.w600, fontSize: 12)),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(
-                  color: const Color(0xFF6D28D9).withValues(alpha: 0.4),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  vertical: 7,
-                  horizontal: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9),
-                ),
+                side: BorderSide(color: const Color(0xFF6D28D9).withValues(alpha: 0.4)),
+                padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
               ),
             ),
           ),
@@ -1572,22 +1119,19 @@ class _IOSOrderHistoryCard extends StatelessWidget {
   }
 }
 
-// ── Improved wide info chip for order history card ────────────────────────────
+// ── Wide info chip ────────────────────────────────────────────────────────────
 class _HistoryChipWide extends StatelessWidget {
   final String label;
   final String value;
-  final Color color;
-  final Color bgColor;
-  final Color borderColor;
-  final bool bold;
+  final Color  color;
+  final Color  bgColor;
+  final Color  borderColor;
+  final bool   bold;
 
   const _HistoryChipWide({
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.bgColor,
-    required this.borderColor,
-    this.bold = false,
+    required this.label,   required this.value,
+    required this.color,   required this.bgColor,
+    required this.borderColor, this.bold = false,
   });
 
   @override
@@ -1601,65 +1145,35 @@ class _HistoryChipWide extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label.toUpperCase(),
-          style: TextStyle(
-            color: color.withValues(alpha: 0.6),
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
-        ),
+        Text(label.toUpperCase(),
+            style: TextStyle(color: color.withValues(alpha: 0.6), fontSize: 9,
+                fontWeight: FontWeight.w600, letterSpacing: 0.5)),
         const SizedBox(height: 3),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: bold ? 13 : 12,
-            fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-          ),
-          overflow: TextOverflow.ellipsis,
-        ),
+        Text(value,
+            style: TextStyle(color: color, fontSize: bold ? 13 : 12,
+                fontWeight: bold ? FontWeight.w800 : FontWeight.w600),
+            overflow: TextOverflow.ellipsis),
       ],
     ),
   );
 }
 
-// Keep the old _HistoryChip for backward compatibility if needed
 class _HistoryChip extends StatelessWidget {
   final String label;
   final String value;
-  final Color color;
-  final bool bold;
+  final Color  color;
+  final bool   bold;
 
-  const _HistoryChip({
-    required this.label,
-    required this.value,
-    required this.color,
-    this.bold = false,
-  });
+  const _HistoryChip({required this.label, required this.value, required this.color, this.bold = false});
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(
-        label,
-        style: TextStyle(
-          color: color.withValues(alpha: 0.6),
-          fontSize: 9,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
+      Text(label, style: TextStyle(color: color.withValues(alpha: 0.6), fontSize: 9, fontWeight: FontWeight.w500)),
       const SizedBox(height: 2),
-      Text(
-        value,
-        style: TextStyle(
-          color: color,
-          fontSize: bold ? 13 : 12,
-          fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-        ),
-      ),
+      Text(value, style: TextStyle(color: color, fontSize: bold ? 13 : 12,
+          fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
     ],
   );
 }
@@ -1671,7 +1185,6 @@ enum _SalesSubTab { record, report }
 
 class _SalesRecordSubTab extends StatefulWidget {
   const _SalesRecordSubTab();
-
   @override
   State<_SalesRecordSubTab> createState() => _SalesRecordSubTabState();
 }
@@ -1686,34 +1199,42 @@ class _SalesRecordSubTabState extends State<_SalesRecordSubTab> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-          child: Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _SalesInnerTab(
-                  label: 'Sales Record',
-                  icon: Icons.table_rows_outlined,
-                  isActive: _sub == _SalesSubTab.record,
-                  onTap: () => setState(() => _sub = _SalesSubTab.record),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3F4F6),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
                 ),
-                const SizedBox(width: 4),
-                _SalesInnerTab(
-                  label: 'Sales Report',
-                  icon: Icons.bar_chart_rounded,
-                  isActive: _sub == _SalesSubTab.report,
-                  onTap: () => setState(() => _sub = _SalesSubTab.report),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _SalesInnerTab(
+                      label: 'Sales Record',
+                      icon: Icons.table_rows_outlined,
+                      isActive: _sub == _SalesSubTab.record,
+                      onTap: () => setState(() => _sub = _SalesSubTab.record),
+                    ),
+                    const SizedBox(width: 4),
+                    _SalesInnerTab(
+                      label: 'Sales Report',
+                      icon: Icons.bar_chart_rounded,
+                      isActive: _sub == _SalesSubTab.report,
+                      onTap: () => setState(() => _sub = _SalesSubTab.report),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const Spacer(),
+              if (_sub == _SalesSubTab.record) const SalesImportButton(),
+            ],
           ),
         ),
+
         const SizedBox(height: 8),
+
         Expanded(
           child: _sub == _SalesSubTab.record
               ? const SalesRecordTable()
@@ -1731,10 +1252,8 @@ class _SalesInnerTab extends StatelessWidget {
   final VoidCallback onTap;
 
   const _SalesInnerTab({
-    required this.label,
-    required this.icon,
-    required this.isActive,
-    required this.onTap,
+    required this.label, required this.icon,
+    required this.isActive, required this.onTap,
   });
 
   @override
@@ -1756,21 +1275,14 @@ class _SalesInnerTab extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 13,
-              color: isActive ? Colors.white : _Glass.textSecondary,
-            ),
+            Icon(icon, size: 13, color: isActive ? Colors.white : _Glass.textSecondary),
             const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? Colors.white : _Glass.textSecondary,
-                fontSize: 12,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 0.1,
-              ),
-            ),
+            Text(label, style: TextStyle(
+              color: isActive ? Colors.white : _Glass.textSecondary,
+              fontSize: 12,
+              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+              letterSpacing: 0.1,
+            )),
           ],
         ),
       ),
@@ -2026,6 +1538,7 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
           ),
           const SizedBox(height: 12),
 
+          // Column header row
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
@@ -2181,7 +1694,7 @@ class _CustomerFeedbackTab extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('OrderReviews') // ← was 'Feedback'
+            .collection('OrderReviews')
             .orderBy('created_at', descending: true)
             .limit(200)
             .snapshots(),
@@ -2277,7 +1790,6 @@ class _CustomerFeedbackTab extends StatelessWidget {
                   itemBuilder: (_, i) {
                     final data = docs[i].data() as Map<String, dynamic>;
 
-                    // OrderReviews fields
                     final customer = data['customer_name']?.toString() ?? '—';
                     final message = data['message']?.toString() ?? '';
                     final rating = (data['rating'] as num?)?.toInt();
@@ -2326,7 +1838,6 @@ class _CustomerFeedbackTab extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              // Replace the Expanded Column inside the Row (after the avatar):
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2353,7 +1864,7 @@ class _CustomerFeedbackTab extends StatelessWidget {
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                    _CustomerIdText(data: data), // ← add this
+                                    _CustomerIdText(data: data),
                                   ],
                                 ),
                               ),
@@ -2372,16 +1883,15 @@ class _CustomerFeedbackTab extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 8),
                               ],
-                              // Mark as read button (mirrors admin dashboard)
                               if (!isRead)
                                 GestureDetector(
                                   onTap: () => FirebaseFirestore.instance
                                       .collection('OrderReviews')
                                       .doc(docs[i].id)
                                       .update({'read': true}),
-                                  child: Tooltip(
+                                  child: const Tooltip(
                                     message: 'Mark as read',
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.check_circle_outline,
                                       color: _Glass.textMuted,
                                       size: 17,
@@ -2433,7 +1943,6 @@ class _CustomerFeedbackTab extends StatelessWidget {
     );
   }
 }
-
 // =============================================================================
 // Log Row
 // =============================================================================
@@ -2492,8 +2001,8 @@ class _LogRow extends StatelessWidget {
     final qtyColor = isPositive
         ? const Color(0xFF16A34A)
         : isNegative
-        ? const Color(0xFFDC2626)
-        : _Glass.textMuted;
+            ? const Color(0xFFDC2626)
+            : _Glass.textMuted;
     final methodColor = _methodColor(method);
 
     return Container(
@@ -2599,7 +2108,8 @@ class _LogRow extends StatelessWidget {
             width: 64,
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   color: methodColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
@@ -2625,8 +2135,9 @@ class _LogRow extends StatelessWidget {
   }
 }
 
-/// Resolves a customer_uid to a CUS-XXX id via the User collection.
-/// Shows the stored customer_id field directly if already present on the doc.
+// =============================================================================
+// Customer ID Text — resolves customer_uid → CUS-XXX from User collection
+// =============================================================================
 class _CustomerIdText extends StatelessWidget {
   final Map<String, dynamic> data;
   const _CustomerIdText({required this.data});
@@ -2658,11 +2169,11 @@ class _CustomerIdText extends StatelessWidget {
   }
 
   Widget _label(String id) => Text(
-    'ID: $id',
-    style: const TextStyle(
-      color: Color(0xFF9CA3AF), // matches _Glass.textMuted
-      fontSize: 11,
-      fontFamily: 'monospace',
-    ),
-  );
+        'ID: $id',
+        style: const TextStyle(
+          color: Color(0xFF9CA3AF),
+          fontSize: 11,
+          fontFamily: 'monospace',
+        ),
+      );
 }
