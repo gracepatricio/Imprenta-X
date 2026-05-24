@@ -25,7 +25,7 @@ class _EmployeeLogsScreenState extends State<EmployeeLogsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _PillTabBar(
-            tabs: const ['Sales Record', 'POS'],
+            tabs: const ['Sales', 'POS'],
             active: _topTab,
             onTap: (i) => setState(() => _topTab = i),
           ),

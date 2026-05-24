@@ -101,7 +101,7 @@ class _SubMenuTabBar extends StatelessWidget {
 
   static const _tabs = [
     (_LogsTab.jobQueue, 'Job Queue', Icons.queue_outlined),
-    (_LogsTab.salesRecord, 'Sales Record', Icons.receipt_long_outlined),
+    (_LogsTab.salesRecord, 'Sales', Icons.receipt_long_outlined),
     (
       _LogsTab.employeeActivity,
       'Employee Activity',
@@ -292,7 +292,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
       case _LogsTab.jobQueue:
         return 'Job Queue';
       case _LogsTab.salesRecord:
-        return 'Sales Record';
+        return 'Sales';
       case _LogsTab.employeeActivity:
         return 'Employee Activity';
       case _LogsTab.customerFeedback:
