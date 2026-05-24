@@ -106,17 +106,28 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                   ),
                 ],
                 if (employeeId.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    employeeId,
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 10,
-                      fontFamily: 'monospace',
-                      letterSpacing: 0.3,
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
                     ),
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: Text(
+                      'ID: $employeeId',
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 10,
+                        letterSpacing: 0.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 20),
@@ -192,12 +203,12 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                                   color: Colors.white70, fontSize: 11),
                               overflow: TextOverflow.ellipsis),
                         if (employeeId.isNotEmpty)
-                          Text(employeeId,
+                          Text(
+                              'ID: $employeeId',
                               style: const TextStyle(
                                 color: Colors.white38,
                                 fontSize: 10,
-                                fontFamily: 'monospace',
-                                letterSpacing: 0.3,
+                                letterSpacing: 0.4,
                               ),
                               overflow: TextOverflow.ellipsis),
                       ],

@@ -30,7 +30,7 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
     ('dashboard', 'Dashboard', Icons.dashboard_outlined),
     ('orders', 'Orders', Icons.receipt_long_outlined),
     ('messages', 'Messages', Icons.chat_bubble_outline),
-    ('manage', 'Manage Account', Icons.manage_accounts_outlined),
+    ('manage', 'Profile', Icons.manage_accounts_outlined),
     ('feedback', 'Feedback', Icons.star_outline),
   ];
 
@@ -155,6 +155,31 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
+                if (customerId.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: Text(
+                      'ID: $customerId',
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 10,
+                        letterSpacing: 0.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 ..._menus.map(
                   (m) => _SidebarBtn(
@@ -245,6 +270,16 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                             style: const TextStyle(
                               color: Colors.white70,
                               fontSize: 11,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        if (customerId.isNotEmpty)
+                          Text(
+                            'ID: $customerId',
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 10,
+                              letterSpacing: 0.4,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -2430,7 +2465,7 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Manage Account',
+            'Profile',
             style: TextStyle(
               color: Colors.white,
               fontSize: 20,
