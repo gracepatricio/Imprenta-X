@@ -10,30 +10,6 @@ import 'admin_inventory_screen.dart';
 import 'admin_product_management_screen.dart';
 import 'admin_logs_screen.dart';
 
-// ── Liquid Glass Design Tokens ────────────────────────────────────────────────
-class _Glass {
-  static const Color surface = Color(0xEEFFFFFF);
-  static const Color surfaceMid = Color(0xCCFFFFFF);
-  static const Color surfaceThin = Color(0x99FFFFFF);
-  static const Color borderMid = Color(0x55FFFFFF);
-  static const Color textPrimary = Color(0xFF111827);
-  static const Color textSecondary = Color(0xBB111827);
-  static const Color textMuted = Color(0x77111827);
-
-  static const BoxShadow elevatedShadow = BoxShadow(
-    color: Color(0x1A000000),
-    blurRadius: 20,
-    spreadRadius: -2,
-    offset: Offset(0, 6),
-  );
-  static const BoxShadow rowShadow = BoxShadow(
-    color: Color(0x0D000000),
-    blurRadius: 8,
-    spreadRadius: 0,
-    offset: Offset(0, 2),
-  );
-}
-
 // =============================================================================
 class AdminHomepage extends StatefulWidget {
   const AdminHomepage({super.key, this.initialTab = 'Home'});
@@ -162,188 +138,286 @@ class _AdminHomepageState extends State<AdminHomepage> {
 }
 
 // =============================================================================
-// Home content
+// Home content — logo + greeting only, fills vertical space
 // =============================================================================
-class _AdminHomeContent extends StatelessWidget {
+class _AdminHomeContent extends StatefulWidget {
   final String adminName;
   const _AdminHomeContent({this.adminName = ''});
 
   @override
+  State<_AdminHomeContent> createState() => _AdminHomeContentState();
+}
+
+class _AdminHomeContentState extends State<_AdminHomeContent> {
+  late DateTime _now;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final hour = DateTime.now().hour;
+    final hour = _now.hour;
     final greeting = hour < 12
         ? 'Good morning'
         : hour < 17
         ? 'Good afternoon'
         : 'Good evening';
-    final displayName = adminName.isNotEmpty ? adminName : 'Admin';
+    final displayName = widget.adminName.isNotEmpty
+        ? widget.adminName
+        : 'Admin';
+    final weekdays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final dateStr =
+        '${weekdays[_now.weekday - 1]}, ${months[_now.month - 1]} ${_now.day}, ${_now.year}';
+
+    final clockStr =
+        '${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}:${_now.second.toString().padLeft(2, '0')}';
 
     return Center(
       child: SizedBox(
-        width: 380,
+        width: 460,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // ── Logo + brand block ──────────────────────────────────
-            Column(
-              children: [
-                // Logo with shadow
-                Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.22),
-                        blurRadius: 32,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
+            // ── Logo ───────────────────────────────────────────────────
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.40),
+                    blurRadius: 32,
+                    offset: const Offset(0, 10),
                   ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      'assets/images/imprentalogo.jpg',
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.30),
-                        ),
-                        child: Icon(
-                          Icons.local_print_shop_rounded,
-                          color: Colors.white.withValues(alpha: 0.80),
-                          size: 44,
-                        ),
-                      ),
+                ],
+              ),
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/images/imprentalogo.jpg',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    child: Icon(
+                      Icons.local_print_shop_rounded,
+                      color: Colors.white.withValues(alpha: 0.50),
+                      size: 42,
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-
-                // Brand name
-                ShaderMask(
-                  shaderCallback: (bounds) => LinearGradient(
-                    colors: [
-                      Colors.white,
-                      const Color(0xFFFFE9AD).withValues(alpha: 0.95),
-                      Colors.white.withValues(alpha: 0.85),
-                    ],
-                    stops: const [0.0, 0.5, 1.0],
-                  ).createShader(bounds),
-                  child: const Text(
-                    'IMPRENTA INC.',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: 5,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Tagline
-                Text(
-                  'Specializes in manufacturing of customized product printing.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: Colors.white.withValues(alpha: 0.55),
-                    height: 1.6,
-                    letterSpacing: 0.2,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+              ),
             ),
 
-            const SizedBox(height: 36),
+            const SizedBox(height: 20),
 
-            // ── Greeting card — aligned to navbar (blur 18, alpha 0.72, border 0.45) ──
+            // ── Brand name ─────────────────────────────────────────────
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                colors: [
+                  Color(0xFFFFFFFF),
+                  Color(0xFFE8C96A),
+                  Color(0xFFFFFFFF),
+                ],
+                stops: [0.0, 0.5, 1.0],
+              ).createShader(bounds),
+              child: const Text(
+                'IMPRENTA INC.',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: 6,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // ── Tagline ────────────────────────────────────────────────
+            Text(
+              'Specializes in manufacturing of customized product printing.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.35),
+                height: 1.6,
+                letterSpacing: 0.2,
+              ),
+              textAlign: TextAlign.center,
+            ),
+
+            const SizedBox(height: 32),
+
+            // ── Greeting card ──────────────────────────────────────────
             ClipRRect(
               borderRadius: BorderRadius.circular(20),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 22,
-                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
+                    color: Colors.white.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.30),
-                      width: 1.2,
+                      color: Colors.white.withValues(alpha: 0.10),
+                      width: 0.8,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.14),
-                        blurRadius: 24,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      // Top row — greeting + badge
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(28, 26, 24, 20),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Text(
-                              greeting,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xAAFFFFFF), // soft white muted
-                                fontWeight: FontWeight.w400,
-                                letterSpacing: 0.3,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    greeting,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.38,
+                                      ),
+                                      fontWeight: FontWeight.w400,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    displayName,
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                      letterSpacing: -0.4,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              displayName,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                                letterSpacing: -0.4,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.gold.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(99),
+                                border: Border.all(
+                                  color: AppTheme.gold.withValues(alpha: 0.40),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.admin_panel_settings_outlined,
+                                    color: AppTheme.gold,
+                                    size: 13,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Admin',
+                                    style: TextStyle(
+                                      color: AppTheme.gold,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
                       ),
 
-                      // Admin badge — same dark pill as active navbar item
+                      // Inner divider
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.gold.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(99),
-                          border: Border.all(
-                            color: AppTheme.gold.withValues(alpha: 0.55),
-                            width: 1,
-                          ),
-                        ),
+                        height: 0.5,
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+
+                      // Bottom row — date + live clock
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(28, 16, 24, 20),
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              Icons.admin_panel_settings_outlined,
-                              color: AppTheme.gold,
-                              size: 14,
+                              Icons.calendar_today_outlined,
+                              size: 13,
+                              color: Colors.white.withValues(alpha: 0.30),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              dateStr,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.35),
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                            const Spacer(),
+                            Icon(
+                              Icons.access_time_outlined,
+                              size: 13,
+                              color: Colors.white.withValues(alpha: 0.30),
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              'Admin',
+                              clockStr,
                               style: TextStyle(
-                                color: AppTheme.gold,
                                 fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.3,
+                                color: Colors.white.withValues(alpha: 0.35),
+                                letterSpacing: 0.5,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
                               ),
                             ),
                           ],

@@ -2,12 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
 
-// Darker gold for the logo text — more visible on a light/translucent navbar
-const Color _navLogoGold = Color(0xFFFFE9AD);
-
-// Dark pill — matches the "Logs & History" active pill and "Order History" button
-const Color _navActiveDark = Color(0xFF1A1A2E);
-
 class AppNavBar extends StatelessWidget {
   final String activeItem;
   final Function(String) onTap;
@@ -23,7 +17,8 @@ class AppNavBar extends StatelessWidget {
   static const _defaultItems = [
     "Home",
     "Inventory",
-    "Accounting",
+    "Products",
+    "Logs & History",
     "Account",
   ];
 
@@ -34,21 +29,21 @@ class AppNavBar extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.45),
+              color: const Color(0xFF1A1A2E).withValues(alpha: 0.82),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.45),
-                width: 1.2,
+                color: Colors.white.withValues(alpha: 0.14),
+                width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.14),
+                  color: Colors.black.withValues(alpha: 0.40),
                   blurRadius: 24,
-                  offset: const Offset(0, 8),
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
@@ -58,7 +53,7 @@ class AppNavBar extends StatelessWidget {
                 final navItems = items ?? _defaultItems;
                 return Row(
                   children: [
-                    _Logo(),
+                    const _Logo(),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Row(
@@ -96,17 +91,23 @@ class AppNavBar extends StatelessWidget {
 // ── Logo ───────────────────────────────────────────────────────────────────
 
 class _Logo extends StatelessWidget {
+  const _Logo();
+
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 32,
-          height: 32,
+          width: 34,
+          height: 34,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.white.withValues(alpha: 0.08),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.12),
+              width: 1,
+            ),
           ),
           child: ClipOval(
             child: Image.asset(
@@ -114,20 +115,20 @@ class _Logo extends StatelessWidget {
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => const Icon(
                 Icons.local_print_shop,
-                color: Colors.black87,
+                color: AppTheme.gold,
                 size: 18,
               ),
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 10),
         const Text(
           "IMPRENTA INC.",
           style: TextStyle(
             color: AppTheme.gold,
-            fontWeight: FontWeight.bold,
-            fontSize: 17,
-            letterSpacing: 0.8,
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+            letterSpacing: 1.1,
           ),
         ),
       ],
@@ -135,7 +136,7 @@ class _Logo extends StatelessWidget {
   }
 }
 
-// ── Full nav item — with iOS-style hover animation ─────────────────────────
+// ── Nav item — full pill hover ─────────────────────────────────────────────
 
 class _NavItem extends StatefulWidget {
   final String label;
@@ -152,107 +153,53 @@ class _NavItem extends StatefulWidget {
   State<_NavItem> createState() => _NavItemState();
 }
 
-class _NavItemState extends State<_NavItem>
-    with SingleTickerProviderStateMixin {
+class _NavItemState extends State<_NavItem> {
   bool _hovered = false;
-  late final AnimationController _ctrl;
-  late final Animation<double> _scale;
-  late final Animation<double> _bgOpacity;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 180),
-    );
-    _scale = Tween<double>(
-      begin: 1.0,
-      end: 1.06,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
-    _bgOpacity = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _onEnter(_) {
-    setState(() => _hovered = true);
-    _ctrl.forward();
-  }
-
-  void _onExit(_) {
-    setState(() => _hovered = false);
-    _ctrl.reverse();
-  }
 
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onEnter: _onEnter,
-      onExit: _onExit,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedBuilder(
-          animation: _ctrl,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: _scale.value,
-              child: Container(
-                margin: const EdgeInsets.only(left: 4),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  // Active: gold pill — matches IMPRENTA INC. branding
-                  // Hover: faint gold tint
-                  color: widget.isActive
-                      ? AppTheme.gold
-                      : AppTheme.gold.withValues(
-                          alpha: 0.10 * _bgOpacity.value,
-                        ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: widget.isActive
-                      ? Border.all(
-                          color: AppTheme.gold.withValues(alpha: 0.60),
-                          width: 1,
-                        )
-                      : Border.all(
-                          color: AppTheme.gold.withValues(
-                            alpha: 0.20 * _bgOpacity.value,
-                          ),
-                          width: 1,
-                        ),
-                ),
-                child: Text(
-                  widget.label,
-                  style: TextStyle(
-                    color: widget.isActive
-                        ? Colors
-                              .black87 // dark text on gold pill
-                        : _hovered
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.75),
-                    fontSize: 14,
-                    fontWeight: widget.isActive
-                        ? FontWeight.w700
-                        : _hovered
-                        ? FontWeight.w600
-                        : FontWeight.w400,
-                    letterSpacing: 0.1,
-                  ),
-                ),
-              ),
-            );
-          },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          margin: const EdgeInsets.only(left: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+          decoration: BoxDecoration(
+            color: widget.isActive
+                ? AppTheme.gold
+                : _hovered
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: widget.isActive
+                  ? const Color(0xFFB48200).withValues(alpha: 0.30)
+                  : _hovered
+                  ? Colors.white.withValues(alpha: 0.10)
+                  : Colors.transparent,
+              width: 1,
+            ),
+          ),
+          child: Text(
+            widget.label,
+            style: TextStyle(
+              color: widget.isActive
+                  ? const Color(0xFF1A1A2E)
+                  : _hovered
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.50),
+              fontSize: 14,
+              fontWeight: widget.isActive || _hovered
+                  ? FontWeight.w600
+                  : FontWeight.w400,
+              letterSpacing: 0.1,
+            ),
+          ),
         ),
       ),
     );
@@ -276,18 +223,23 @@ class _CompactMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
       onSelected: onTap,
-      color: Colors.white,
+      color: const Color(0xFF1E1E30),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.black.withValues(alpha: 0.1)),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
       icon: Container(
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.08),
+          color: Colors.white.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
         ),
-        child: const Icon(Icons.menu, color: Colors.black87, size: 20),
+        child: Icon(
+          Icons.menu,
+          color: Colors.white.withValues(alpha: 0.80),
+          size: 20,
+        ),
       ),
       itemBuilder: (_) => items
           .map(
@@ -296,7 +248,9 @@ class _CompactMenu extends StatelessWidget {
               child: Text(
                 item,
                 style: TextStyle(
-                  color: item == activeItem ? AppTheme.gold : Colors.black87,
+                  color: item == activeItem
+                      ? AppTheme.gold
+                      : Colors.white.withValues(alpha: 0.75),
                   fontWeight: item == activeItem
                       ? FontWeight.bold
                       : FontWeight.normal,
