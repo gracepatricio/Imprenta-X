@@ -12,67 +12,53 @@ class _T {
   static const Color textMuted = Color(0xFF6B7280);
   static const Color divider = Color(0xFFE5E7EB);
   static const Color headerBg = Color(0xFFF3F4F6);
-  static const Color gold = Color(0xFFB45309); // amber-700
+  static const Color gold = Color(0xFFB45309);
 }
 
-// ── Period filter enum shared by both record and report ───────────────────────
+// ── Period filter enum ────────────────────────────────────────────────────────
 enum _Period { all, day, week, month, year }
 
 extension _PeriodLabel on _Period {
   String get label {
     switch (this) {
-      case _Period.all:
-        return 'All Time';
-      case _Period.day:
-        return 'Today';
-      case _Period.week:
-        return 'This Week';
-      case _Period.month:
-        return 'This Month';
-      case _Period.year:
-        return 'This Year';
+      case _Period.all:   return 'All Time';
+      case _Period.day:   return 'Today';
+      case _Period.week:  return 'This Week';
+      case _Period.month: return 'This Month';
+      case _Period.year:  return 'This Year';
     }
   }
 
   String get shortLabel {
     switch (this) {
-      case _Period.all:
-        return 'All';
-      case _Period.day:
-        return 'Today';
-      case _Period.week:
-        return 'Week';
-      case _Period.month:
-        return 'Month';
-      case _Period.year:
-        return 'Year';
+      case _Period.all:   return 'All';
+      case _Period.day:   return 'Today';
+      case _Period.week:  return 'Week';
+      case _Period.month: return 'Month';
+      case _Period.year:  return 'Year';
     }
   }
 }
 
 bool _inPeriod(DateTime dt, _Period period) {
-  final now = DateTime.now();
+  final now   = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   switch (period) {
-    case _Period.all:
-      return true;
-    case _Period.day:
-      return !dt.isBefore(today);
+    case _Period.all:   return true;
+    case _Period.day:   return !dt.isBefore(today);
     case _Period.week:
       final weekStart = today.subtract(Duration(days: today.weekday - 1));
       return !dt.isBefore(weekStart);
-    case _Period.month:
-      return dt.year == now.year && dt.month == now.month;
-    case _Period.year:
-      return dt.year == now.year;
+    case _Period.month: return dt.year == now.year && dt.month == now.month;
+    case _Period.year:  return dt.year == now.year;
   }
 }
 
-// ── Period filter bar (shared UI component) ───────────────────────────────────
+// ── Period filter bar ─────────────────────────────────────────────────────────
 class _PeriodFilterBar extends StatelessWidget {
   final _Period active;
   final ValueChanged<_Period> onChanged;
-  final bool dark; // true = dark pill style (employee), false = light (admin)
+  final bool dark;
 
   const _PeriodFilterBar({
     required this.active,
@@ -96,26 +82,16 @@ class _PeriodFilterBar extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isActive
                     ? (dark ? AppTheme.gold : const Color(0xFF1A1A2E))
-                    : (dark
-                    ? Colors.white.withValues(alpha: 0.10)
-                    : Colors.white),
+                    : (dark ? Colors.white.withValues(alpha: 0.10) : Colors.white),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isActive
                       ? (dark ? AppTheme.gold : const Color(0xFF1A1A2E))
-                      : (dark
-                      ? Colors.white.withValues(alpha: 0.18)
-                      : _T.divider),
+                      : (dark ? Colors.white.withValues(alpha: 0.18) : _T.divider),
                   width: 1,
                 ),
                 boxShadow: (isActive && !dark)
-                    ? [
-                  const BoxShadow(
-                    color: Color(0x20000000),
-                    blurRadius: 6,
-                    offset: Offset(0, 2),
-                  ),
-                ]
+                    ? [const BoxShadow(color: Color(0x20000000), blurRadius: 6, offset: Offset(0, 2))]
                     : [],
               ),
               child: Text(
@@ -148,8 +124,8 @@ class SalesRecordTable extends StatefulWidget {
 
 class _SalesRecordTableState extends State<SalesRecordTable> {
   String _typeFilter = 'all';
-  _Period _period = _Period.all;
-  String _search = '';
+  _Period _period    = _Period.all;
+  String _search     = '';
 
   QuerySnapshot? _snapshot;
   StreamSubscription<QuerySnapshot>? _sub;
@@ -176,11 +152,8 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
 
   String _fmt(Timestamp? ts) {
     if (ts == null) return '—';
-    final d = ts.toDate().toLocal();
-    const mo = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
+    final d  = ts.toDate().toLocal();
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return '${mo[d.month - 1]} ${d.day.toString().padLeft(2, '0')}, ${d.year}';
   }
 
@@ -237,65 +210,52 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
 
   @override
   Widget build(BuildContext context) {
-    // Show loading spinner until first snapshot arrives
     if (_snapshot == null) {
-      return Center(
-        child: CircularProgressIndicator(
-          color: _T.textPrimary.withValues(alpha: 0.4),
-        ),
-      );
+      return Center(child: CircularProgressIndicator(color: _T.textPrimary.withValues(alpha: 0.4)));
     }
 
     final allDocs = _snapshot!.docs;
 
-    // Apply period filter
+    // Period filter
     var filtered = allDocs.where((d) {
       final data = d.data() as Map<String, dynamic>;
-      final ts = data['sale_date'] as Timestamp?;
+      final ts   = data['sale_date'] as Timestamp?;
       if (ts == null) return _period == _Period.all;
       return _inPeriod(ts.toDate().toLocal(), _period);
     }).toList();
 
-    // Apply type filter
+    // Type filter
     if (_typeFilter != 'all') {
       filtered = filtered
-          .where(
-            (d) => (d.data() as Map)['payment_type']?.toString() == _typeFilter,
-      )
+          .where((d) => (d.data() as Map)['payment_type']?.toString() == _typeFilter)
           .toList();
     }
 
-    // Apply search — order id, customer name, customer_uid, customer_id
+    // Search
     if (_search.isNotEmpty) {
       filtered = filtered.where((d) {
-        final data = d.data() as Map<String, dynamic>;
+        final data    = d.data() as Map<String, dynamic>;
         final ordId   = (data['order_id']?.toString()      ?? '').toLowerCase();
         final cust    = (data['customer_name']?.toString() ?? '').toLowerCase();
         final custUid = (data['customer_uid']?.toString()  ?? '').toLowerCase();
         final custId  = (data['customer_id']?.toString()   ?? '').toLowerCase();
-        return ordId.contains(_search) ||
-            cust.contains(_search) ||
-            custUid.contains(_search) ||
-            custId.contains(_search);
+        return ordId.contains(_search) || cust.contains(_search) ||
+            custUid.contains(_search)  || custId.contains(_search);
       }).toList();
     }
 
     final totalCollected = filtered.fold<double>(
-      0,
-          (s, d) => s + ((d.data() as Map)['sale_amount'] as num? ?? 0).toDouble(),
+      0, (s, d) => s + ((d.data() as Map)['sale_amount'] as num? ?? 0).toDouble(),
     );
     final allTotal = allDocs.fold<double>(
-      0,
-          (s, d) => s + ((d.data() as Map)['sale_amount'] as num? ?? 0).toDouble(),
+      0, (s, d) => s + ((d.data() as Map)['sale_amount'] as num? ?? 0).toDouble(),
     );
 
-    // ── Controls header (outside StreamBuilder so TextField never loses focus) ──
     final headerContent = Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Row 1: Summary chips ──────────────────────────────────────
           Row(
             children: [
               _SummaryChip(
@@ -324,8 +284,6 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
             ],
           ),
           const SizedBox(height: 14),
-
-          // ── Row 2: Unified filter bar ─────────────────────────────────
           _UnifiedFilterBar(
             activePeriod: _period,
             activeType: _typeFilter,
@@ -333,8 +291,6 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
             onTypeChanged: (t) => setState(() => _typeFilter = t),
           ),
           const SizedBox(height: 12),
-
-          // ── Row 3: Search field ───────────────────────────────────────
           TextField(
             controller: _searchCtrl,
             onChanged: (v) {
@@ -348,10 +304,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
               prefixIcon: const Icon(Icons.search, size: 16, color: _T.textMuted),
               suffixIcon: _search.isNotEmpty
                   ? GestureDetector(
-                onTap: () {
-                  _searchCtrl.clear();
-                  setState(() => _search = '');
-                },
+                onTap: () { _searchCtrl.clear(); setState(() => _search = ''); },
                 child: const Icon(Icons.clear, size: 16, color: _T.textMuted),
               )
                   : null,
@@ -372,7 +325,6 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
       ),
     );
 
-    // ── Empty state ───────────────────────────────────────────────────────────
     if (filtered.isEmpty) {
       return CustomScrollView(
         slivers: [
@@ -384,33 +336,20 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 72,
-                    height: 72,
+                    width: 72, height: 72,
                     decoration: BoxDecoration(
                       color: _T.headerBg,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: _T.divider),
                     ),
-                    child: const Icon(
-                      Icons.receipt_long_outlined,
-                      size: 32,
-                      color: _T.textMuted,
-                    ),
+                    child: const Icon(Icons.receipt_long_outlined, size: 32, color: _T.textMuted),
                   ),
                   const SizedBox(height: 20),
-                  const Text(
-                    'No sales records found',
-                    style: TextStyle(
-                      color: _T.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  const Text('No sales records found',
+                      style: TextStyle(color: _T.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Try adjusting your filters',
-                    style: TextStyle(color: _T.textSecondary, fontSize: 13),
-                  ),
+                  const Text('Try adjusting your filters',
+                      style: TextStyle(color: _T.textSecondary, fontSize: 13)),
                 ],
               ),
             ),
@@ -419,7 +358,6 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
       );
     }
 
-    // ── Populated list ────────────────────────────────────────────────────────
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: headerContent),
@@ -467,18 +405,12 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
 // =============================================================================
 class _SalesRecordCard extends StatelessWidget {
   final int index;
-  final String orderId;
-  final String custName;
-  final String custId;
-  final String? type;
-  final String? method;
+  final String orderId, custName, custId;
+  final String? type, method;
   final double amount;
   final String date;
-  final Color typeFg;
-  final Color typeBg;
-  final Color typeBorder;
-  final String typeLabel;
-  final String methodLabel;
+  final Color typeFg, typeBg, typeBorder;
+  final String typeLabel, methodLabel;
 
   const _SalesRecordCard({
     required this.index,
@@ -504,27 +436,18 @@ class _SalesRecordCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 6,
-            offset: Offset(0, 2),
-          ),
-        ],
+        boxShadow: const [BoxShadow(color: Color(0x08000000), blurRadius: 6, offset: Offset(0, 2))],
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Top row: order id + amount ─────────────────────────────
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Index dot
                 Container(
-                  width: 22,
-                  height: 22,
+                  width: 22, height: 22,
                   margin: const EdgeInsets.only(right: 10, top: 1),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF3F4F6),
@@ -532,123 +455,62 @@ class _SalesRecordCard extends StatelessWidget {
                     border: Border.all(color: const Color(0xFFE5E7EB)),
                   ),
                   child: Center(
-                    child: Text(
-                      '${index + 1}',
-                      style: const TextStyle(
-                        color: _T.textMuted,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    child: Text('${index + 1}',
+                        style: const TextStyle(color: _T.textMuted, fontSize: 9, fontWeight: FontWeight.w700)),
                   ),
                 ),
-
-                // Order ID + date
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        orderId,
-                        style: const TextStyle(
-                          color: _T.textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
+                      Text(orderId,
+                          style: const TextStyle(color: _T.textPrimary, fontSize: 13,
+                              fontWeight: FontWeight.w700, letterSpacing: -0.2)),
                       const SizedBox(height: 2),
                       Row(
                         children: [
-                          const Icon(
-                            Icons.calendar_today_outlined,
-                            size: 10,
-                            color: _T.textMuted,
-                          ),
+                          const Icon(Icons.calendar_today_outlined, size: 10, color: _T.textMuted),
                           const SizedBox(width: 4),
-                          Text(
-                            date,
-                            style: const TextStyle(
-                              color: _T.textMuted,
-                              fontSize: 11,
-                            ),
-                          ),
+                          Text(date, style: const TextStyle(color: _T.textMuted, fontSize: 11)),
                         ],
                       ),
                     ],
                   ),
                 ),
-
-                // Amount — right-aligned, prominent
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      '₱${amount.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: _T.gold,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
+                    Text('₱${amount.toStringAsFixed(2)}',
+                        style: const TextStyle(color: _T.gold, fontSize: 16,
+                            fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                     const SizedBox(height: 2),
-                    Text(
-                      methodLabel,
-                      style: const TextStyle(
-                        color: _T.textMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    Text(methodLabel,
+                        style: const TextStyle(color: _T.textMuted, fontSize: 10, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ],
             ),
-
             const SizedBox(height: 10),
             Container(height: 1, color: const Color(0xFFF3F4F6)),
             const SizedBox(height: 10),
-
-            // ── Bottom row: customer + type badge ──────────────────────
             Row(
               children: [
-                const Icon(
-                  Icons.person_outline_rounded,
-                  size: 13,
-                  color: _T.textMuted,
-                ),
+                const Icon(Icons.person_outline_rounded, size: 13, color: _T.textMuted),
                 const SizedBox(width: 5),
-
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        custName,
-                        style: const TextStyle(
-                          color: _T.textSecondary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      Text(custName,
+                          style: const TextStyle(color: _T.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis),
                       if (custId.isNotEmpty)
-                        Text(
-                          'ID: $custId',
-                          style: const TextStyle(
-                            color: _T.textMuted,
-                            fontSize: 10,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
+                        Text('ID: $custId',
+                            style: const TextStyle(color: _T.textMuted, fontSize: 10, fontFamily: 'monospace')),
                     ],
                   ),
                 ),
-
                 const SizedBox(width: 8),
-
-                // Payment type badge
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
@@ -656,14 +518,8 @@ class _SalesRecordCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: typeBorder, width: 1),
                   ),
-                  child: Text(
-                    typeLabel,
-                    style: TextStyle(
-                      color: typeFg,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  child: Text(typeLabel,
+                      style: TextStyle(color: typeFg, fontSize: 11, fontWeight: FontWeight.w700)),
                 ),
               ],
             ),
@@ -675,7 +531,7 @@ class _SalesRecordCard extends StatelessWidget {
 }
 
 // =============================================================================
-// Unified Filter Bar — period + type in a single organised panel
+// Unified Filter Bar
 // =============================================================================
 class _UnifiedFilterBar extends StatelessWidget {
   final _Period activePeriod;
@@ -691,11 +547,11 @@ class _UnifiedFilterBar extends StatelessWidget {
   });
 
   static const _typeOptions = [
-    ('all', 'All Types', Color(0xFF374151)),
-    ('downpayment', 'Downpayment', Color(0xFF1D4ED8)),
-    ('balance', 'Balance', Color(0xFFB45309)),
-    ('cash', 'Cash', Color(0xFF15803D)),
-    ('full', 'Full', Color(0xFF6D28D9)),
+    ('all',         'All Types',    Color(0xFF374151)),
+    ('downpayment', 'Downpayment',  Color(0xFF1D4ED8)),
+    ('balance',     'Balance',      Color(0xFFB45309)),
+    ('cash',        'Cash',         Color(0xFF15803D)),
+    ('full',        'Full',         Color(0xFF6D28D9)),
   ];
 
   @override
@@ -710,7 +566,7 @@ class _UnifiedFilterBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Period row ────────────────────────────────────────────────
+          // Period row
           Row(
             children: [
               SizedBox(
@@ -719,15 +575,9 @@ class _UnifiedFilterBar extends StatelessWidget {
                   children: const [
                     Icon(Icons.calendar_today_outlined, size: 12, color: _T.textMuted),
                     SizedBox(width: 5),
-                    Text(
-                      'Period',
-                      style: TextStyle(
-                        color: _T.textMuted,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
+                    Text('Period',
+                        style: TextStyle(color: _T.textMuted, fontSize: 11,
+                            fontWeight: FontWeight.w600, letterSpacing: 0.3)),
                   ],
                 ),
               ),
@@ -747,29 +597,19 @@ class _UnifiedFilterBar extends StatelessWidget {
                             color: isActive ? const Color(0xFF1A1A2E) : Colors.white,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: isActive
-                                  ? const Color(0xFF1A1A2E)
-                                  : const Color(0xFFE5E7EB),
+                              color: isActive ? const Color(0xFF1A1A2E) : const Color(0xFFE5E7EB),
                               width: 1,
                             ),
                             boxShadow: isActive
-                                ? [
-                              const BoxShadow(
-                                color: Color(0x18000000),
-                                blurRadius: 4,
-                                offset: Offset(0, 1),
-                              ),
-                            ]
+                                ? [const BoxShadow(color: Color(0x18000000), blurRadius: 4, offset: Offset(0, 1))]
                                 : [],
                           ),
-                          child: Text(
-                            p.shortLabel,
-                            style: TextStyle(
-                              color: isActive ? Colors.white : _T.textSecondary,
-                              fontSize: 12,
-                              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                            ),
-                          ),
+                          child: Text(p.shortLabel,
+                              style: TextStyle(
+                                color: isActive ? Colors.white : _T.textSecondary,
+                                fontSize: 12,
+                                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                              )),
                         ),
                       );
                     }).toList(),
@@ -778,12 +618,10 @@ class _UnifiedFilterBar extends StatelessWidget {
               ),
             ],
           ),
-
           const SizedBox(height: 10),
           Container(height: 1, color: const Color(0xFFE5E7EB)),
           const SizedBox(height: 10),
-
-          // ── Type row ──────────────────────────────────────────────────
+          // Type row
           Row(
             children: [
               SizedBox(
@@ -792,15 +630,9 @@ class _UnifiedFilterBar extends StatelessWidget {
                   children: const [
                     Icon(Icons.label_outline_rounded, size: 12, color: _T.textMuted),
                     SizedBox(width: 5),
-                    Text(
-                      'Type',
-                      style: TextStyle(
-                        color: _T.textMuted,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
+                    Text('Type',
+                        style: TextStyle(color: _T.textMuted, fontSize: 11,
+                            fontWeight: FontWeight.w600, letterSpacing: 0.3)),
                   ],
                 ),
               ),
@@ -810,7 +642,7 @@ class _UnifiedFilterBar extends StatelessWidget {
                   child: Row(
                     children: _typeOptions.map((opt) {
                       final isActive = activeType == opt.$1;
-                      final accent = opt.$3;
+                      final accent   = opt.$3;
                       return GestureDetector(
                         onTap: () => onTypeChanged(opt.$1),
                         child: AnimatedContainer(
@@ -818,14 +650,10 @@ class _UnifiedFilterBar extends StatelessWidget {
                           margin: const EdgeInsets.only(right: 6),
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                           decoration: BoxDecoration(
-                            color: isActive
-                                ? accent.withValues(alpha: 0.10)
-                                : Colors.white,
+                            color: isActive ? accent.withValues(alpha: 0.10) : Colors.white,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: isActive
-                                  ? accent.withValues(alpha: 0.50)
-                                  : const Color(0xFFE5E7EB),
+                              color: isActive ? accent.withValues(alpha: 0.50) : const Color(0xFFE5E7EB),
                               width: 1,
                             ),
                           ),
@@ -834,23 +662,17 @@ class _UnifiedFilterBar extends StatelessWidget {
                             children: [
                               if (isActive) ...[
                                 Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: accent,
-                                    shape: BoxShape.circle,
-                                  ),
+                                  width: 6, height: 6,
+                                  decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
                                 ),
                                 const SizedBox(width: 5),
                               ],
-                              Text(
-                                opt.$2,
-                                style: TextStyle(
-                                  color: isActive ? accent : _T.textSecondary,
-                                  fontSize: 12,
-                                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                                ),
-                              ),
+                              Text(opt.$2,
+                                  style: TextStyle(
+                                    color: isActive ? accent : _T.textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                                  )),
                             ],
                           ),
                         ),
@@ -867,16 +689,13 @@ class _UnifiedFilterBar extends StatelessWidget {
   }
 }
 
-// ── Summary chip ──────────────────────────────────────────────────────────────
+// ─ Summary chip ──────────────────────────────────────────────────────────────
 class _SummaryChip extends StatelessWidget {
   final String label, value;
   final Color fg, bg, border;
   const _SummaryChip({
-    required this.label,
-    required this.value,
-    required this.fg,
-    required this.bg,
-    required this.border,
+    required this.label, required this.value,
+    required this.fg,    required this.bg,    required this.border,
   });
 
   @override
@@ -890,29 +709,15 @@ class _SummaryChip extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: fg.withValues(alpha: 0.65),
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        Text(label, style: TextStyle(color: fg.withValues(alpha: 0.65), fontSize: 10, fontWeight: FontWeight.w500)),
         const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            color: fg,
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        Text(value, style: TextStyle(color: fg, fontSize: 15, fontWeight: FontWeight.w800)),
       ],
     ),
   );
 }
 
-// ── Filter chip ───────────────────────────────────────────────────────────────
+// ─ Filter chip ───────────────────────────────────────────────────────────────
 class _FilterChip extends StatelessWidget {
   final String label, value, active;
   final ValueChanged<String> onTap;
@@ -930,53 +735,92 @@ class _FilterChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: sel ? const Color(0xFF1A1A2E) : Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: sel ? const Color(0xFF1A1A2E) : _T.divider,
-            width: 1,
-          ),
+          border: Border.all(color: sel ? const Color(0xFF1A1A2E) : _T.divider, width: 1),
           boxShadow: sel
-              ? [
-            const BoxShadow(
-              color: Color(0x20000000),
-              blurRadius: 6,
-              offset: Offset(0, 2),
-            ),
-          ]
+              ? [const BoxShadow(color: Color(0x20000000), blurRadius: 6, offset: Offset(0, 2))]
               : [],
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: sel ? Colors.white : _T.textSecondary,
-            fontSize: 12,
-            fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
+        child: Text(label,
+            style: TextStyle(
+              color: sel ? Colors.white : _T.textSecondary,
+              fontSize: 12,
+              fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+            )),
       ),
     );
   }
 }
 
-// ── Table header cell ─────────────────────────────────────────────────────────
+// ─ Table header cell ─────────────────────────────────────────────────────────
 class _H extends StatelessWidget {
   final String text;
   const _H(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: const TextStyle(
-      color: Color(0xFF374151),
-      fontWeight: FontWeight.w700,
-      fontSize: 11,
-      letterSpacing: 0.4,
-    ),
-  );
+  Widget build(BuildContext context) => Text(text,
+      style: const TextStyle(color: Color(0xFF374151), fontWeight: FontWeight.w700,
+          fontSize: 11, letterSpacing: 0.4));
 }
 
-// =============================================================================
-// AdminSalesReportView — light-themed, with period filter
-// =============================================================================
+// ─ Month bucket ──────────────────────────────────────────────────────────────
+class _MonthBucket {
+  final DateTime month;
+  final String label;
+  double total;
+  _MonthBucket({required this.month, required this.label, required this.total});
+}
+
+// ─ Shared bucket builder ─────────────────────────────────────────────────────
+String _shortMonth(int m) {
+  const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return names[m - 1];
+}
+
+Map<String, _MonthBucket> _buildBucketMap(
+    List<QueryDocumentSnapshot> allDocs,
+    _Period period,
+    ) {
+  final now = DateTime.now();
+  if (period != _Period.all) {
+    // Fixed last-6-months window
+    final map = <String, _MonthBucket>{};
+    for (int i = 0; i < 6; i++) {
+      final m   = DateTime(now.year, now.month - (5 - i));
+      final key = '${m.year}-${m.month.toString().padLeft(2, '0')}';
+      map[key]  = _MonthBucket(month: m, label: _shortMonth(m.month), total: 0);
+    }
+    return map;
+  }
+
+  // All Time: derive buckets from every document
+  final map = <String, _MonthBucket>{};
+  for (final doc in allDocs) {
+    final d  = doc.data() as Map<String, dynamic>;
+    final ts = d['sale_date'] as Timestamp?;
+    if (ts == null) continue;
+    final dt  = ts.toDate();
+    final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+    map.putIfAbsent(
+      key,
+          () => _MonthBucket(
+        month: DateTime(dt.year, dt.month),
+        label: '${_shortMonth(dt.month)} \'${dt.year.toString().substring(2)}',
+        total: 0,
+      ),
+    );
+  }
+  if (map.isEmpty) {
+    // Fallback if no dates at all
+    for (int i = 0; i < 6; i++) {
+      final m   = DateTime(now.year, now.month - (5 - i));
+      final key = '${m.year}-${m.month.toString().padLeft(2, '0')}';
+      map[key]  = _MonthBucket(month: m, label: _shortMonth(m.month), total: 0);
+    }
+  }
+  return map;
+}
+
+// AdminSalesReportView
 class AdminSalesReportView extends StatefulWidget {
   const AdminSalesReportView({super.key});
 
@@ -987,14 +831,6 @@ class AdminSalesReportView extends StatefulWidget {
 class _AdminSalesReportViewState extends State<AdminSalesReportView> {
   _Period _period = _Period.month;
 
-  static String _shortMonth(int m) {
-    const names = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return names[m - 1];
-  }
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
@@ -1004,40 +840,29 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
           .snapshots(),
       builder: (context, salesSnap) {
         if (salesSnap.connectionState == ConnectionState.waiting) {
-          return Center(
-            child: CircularProgressIndicator(
-              color: _T.textPrimary.withValues(alpha: 0.4),
-            ),
-          );
+          return Center(child: CircularProgressIndicator(color: _T.textPrimary.withValues(alpha: 0.4)));
         }
         if (salesSnap.hasError) {
-          return Center(
-            child: Text(
-              'Error: ${salesSnap.error}',
-              style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13),
-            ),
-          );
+          return Center(child: Text('Error: ${salesSnap.error}',
+              style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13)));
         }
 
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('Orders')
-              .where(
-            'status',
-            whereIn: ['pending', 'in_production', 'ready', 'completed'],
-          )
+              .where('status', whereIn: ['pending', 'in_production', 'ready', 'completed'])
               .snapshots(),
           builder: (context, ordersSnap) {
             double outstandingBalance = 0;
             if (ordersSnap.hasData) {
               for (final doc in ordersSnap.data!.docs) {
-                final d = doc.data() as Map<String, dynamic>;
+                final d         = doc.data() as Map<String, dynamic>;
                 final remaining = (d['remaining_balance'] as num?)?.toDouble();
                 if (remaining != null && remaining > 0.01) {
                   outstandingBalance += remaining;
                 } else {
                   final total = (d['total_price'] as num?)?.toDouble() ?? 0;
-                  final paid  = (d['amount_paid'] as num?)?.toDouble() ?? 0;
+                  final paid  = (d['amount_paid']  as num?)?.toDouble() ?? 0;
                   final diff  = total - paid;
                   if (diff > 0.01) outstandingBalance += diff;
                 }
@@ -1045,44 +870,41 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
             }
 
             final allDocs = salesSnap.data?.docs ?? [];
+
+            // Period-filtered docs
             final docs = allDocs.where((doc) {
-              final d = doc.data() as Map<String, dynamic>;
+              final d  = doc.data() as Map<String, dynamic>;
               final ts = d['sale_date'] as Timestamp?;
               if (ts == null) return _period == _Period.all;
               return _inPeriod(ts.toDate().toLocal(), _period);
             }).toList();
 
-            double totalRevenue = 0;
-            double downpaymentTotal = 0;
-            double balanceTotal = 0;
-            final orderIds = <String>{};
+            // Build buckets
+            final bucketMap     = _buildBucketMap(allDocs, _period);
+            final monthBuckets  = bucketMap.values.toList()
+              ..sort((a, b) => a.month.compareTo(b.month));
 
-            final now = DateTime.now();
-            final monthBuckets = List.generate(6, (i) {
-              final m = DateTime(now.year, now.month - (5 - i));
-              return _MonthBucket(month: m, label: _shortMonth(m.month), total: 0);
-            });
+            double totalRevenue      = 0;
+            double downpaymentTotal  = 0;
+            double balanceTotal      = 0;
+            final  orderIds          = <String>{};
 
             for (final doc in docs) {
               final d      = doc.data() as Map<String, dynamic>;
               final amount = (d['sale_amount'] as num?)?.toDouble() ?? 0;
               final type   = d['payment_type']?.toString() ?? '';
-              final ordId  = d['order_id']?.toString() ?? '';
+              final ordId  = d['order_id']?.toString()     ?? '';
 
               totalRevenue += amount;
               if (type == 'downpayment') downpaymentTotal += amount;
-              if (type == 'balance' || type == 'cash') balanceTotal += amount;
+              if (type == 'balance' || type == 'cash' || type == 'full') balanceTotal += amount;
               if (ordId.isNotEmpty) orderIds.add(ordId);
 
               final ts = d['sale_date'] as Timestamp?;
               if (ts != null) {
-                final dt = ts.toDate();
-                for (final b in monthBuckets) {
-                  if (b.month.year == dt.year && b.month.month == dt.month) {
-                    b.total += amount;
-                    break;
-                  }
-                }
+                final dt  = ts.toDate();
+                final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+                if (bucketMap.containsKey(key)) bucketMap[key]!.total += amount;
               }
             }
 
@@ -1091,91 +913,36 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Sales Report',
-                              style: TextStyle(
-                                color: _T.textPrimary,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Revenue breakdown and trends',
-                              style: TextStyle(color: _T.textMuted, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
+                      Text('Sales Report',
+                          style: TextStyle(color: _T.textPrimary, fontSize: 16,
+                              fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                      SizedBox(height: 2),
+                      Text('Revenue breakdown and trends',
+                          style: TextStyle(color: _T.textMuted, fontSize: 12)),
                     ],
                   ),
                   const SizedBox(height: 12),
 
-                  _PeriodFilterBar(
-                    active: _period,
-                    onChanged: (p) => setState(() => _period = p),
-                  ),
+                  _PeriodFilterBar(active: _period, onChanged: (p) => setState(() => _period = p)),
                   const SizedBox(height: 20),
 
-                  LayoutBuilder(
-                    builder: (_, constraints) {
-                      final narrow = constraints.maxWidth < 460;
-                      return Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _AdminReportCard(
-                            label: 'Total Revenue',
-                            value: '₱${totalRevenue.toStringAsFixed(2)}',
-                            color: _T.gold,
-                            bg: const Color(0xFFFFFBEB),
-                            border: const Color(0xFFFDE68A),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Orders',
-                            value: '${orderIds.length}',
-                            color: const Color(0xFF1D4ED8),
-                            bg: const Color(0xFFEFF6FF),
-                            border: const Color(0xFFBFDBFE),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Downpayments',
-                            value: '₱${downpaymentTotal.toStringAsFixed(2)}',
-                            color: const Color(0xFF6D28D9),
-                            bg: const Color(0xFFF5F3FF),
-                            border: const Color(0xFFDDD6FE),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Balance Collected',
-                            value: '₱${balanceTotal.toStringAsFixed(2)}',
-                            color: const Color(0xFF15803D),
-                            bg: const Color(0xFFF0FDF4),
-                            border: const Color(0xFFBBF7D0),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Balance to Collect',
-                            value: '₱${outstandingBalance.toStringAsFixed(2)}',
-                            color: const Color(0xFFDC2626),
-                            bg: const Color(0xFFFEF2F2),
-                            border: const Color(0xFFFECACA),
-                            narrow: narrow,
-                            tooltip: 'Total remaining balance on non-cancelled orders',
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+                  LayoutBuilder(builder: (_, constraints) {
+                    final narrow = constraints.maxWidth < 460;
+                    return Wrap(
+                      spacing: 10, runSpacing: 10,
+                      children: [
+                        _AdminReportCard(label: 'Total Revenue',      value: '₱${totalRevenue.toStringAsFixed(2)}',     color: _T.gold,                  bg: const Color(0xFFFFFBEB), border: const Color(0xFFFDE68A), narrow: narrow),
+                        _AdminReportCard(label: 'Orders',             value: '${orderIds.length}',                       color: const Color(0xFF1D4ED8),  bg: const Color(0xFFEFF6FF), border: const Color(0xFFBFDBFE), narrow: narrow),
+                        _AdminReportCard(label: 'Downpayments',       value: '₱${downpaymentTotal.toStringAsFixed(2)}',  color: const Color(0xFF6D28D9),  bg: const Color(0xFFF5F3FF), border: const Color(0xFFDDD6FE), narrow: narrow),
+                        _AdminReportCard(label: 'Balance Collected',  value: '₱${balanceTotal.toStringAsFixed(2)}',      color: const Color(0xFF15803D),  bg: const Color(0xFFF0FDF4), border: const Color(0xFFBBF7D0), narrow: narrow),
+                        _AdminReportCard(label: 'Balance to Collect', value: '₱${outstandingBalance.toStringAsFixed(2)}',color: const Color(0xFFDC2626),  bg: const Color(0xFFFEF2F2), border: const Color(0xFFFECACA), narrow: narrow,
+                            tooltip: 'Total remaining balance on non-cancelled orders'),
+                      ],
+                    );
+                  }),
                   const SizedBox(height: 24),
 
                   Container(
@@ -1184,13 +951,7 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: _T.divider, width: 1),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x08000000),
-                          blurRadius: 8,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
+                      boxShadow: const [BoxShadow(color: Color(0x08000000), blurRadius: 8, offset: Offset(0, 2))],
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1198,34 +959,23 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                         Row(
                           children: [
                             Container(
-                              width: 28,
-                              height: 28,
+                              width: 28, height: 28,
                               decoration: BoxDecoration(
                                 color: const Color(0xFFEFF6FF),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: const Color(0xFFBFDBFE)),
                               ),
-                              child: const Icon(
-                                Icons.bar_chart_rounded,
-                                color: Color(0xFF1D4ED8),
-                                size: 16,
-                              ),
+                              child: const Icon(Icons.bar_chart_rounded, color: Color(0xFF1D4ED8), size: 16),
                             ),
                             const SizedBox(width: 10),
-                            const Column(
+                            Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                const Text('Monthly Revenue',
+                                    style: TextStyle(color: _T.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
                                 Text(
-                                  'Monthly Revenue',
-                                  style: TextStyle(
-                                    color: _T.textPrimary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                Text(
-                                  'Last 6 months',
-                                  style: TextStyle(color: _T.textMuted, fontSize: 11),
+                                  _period == _Period.all ? 'All time by month' : 'Last 6 months',
+                                  style: const TextStyle(color: _T.textMuted, fontSize: 11),
                                 ),
                               ],
                             ),
@@ -1242,32 +992,18 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
                         const SizedBox(height: 10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: monthBuckets
-                              .map(
-                                (b) => Column(
-                              children: [
+                          children: monthBuckets.map((b) => Column(
+                            children: [
+                              Text(b.label, style: const TextStyle(color: _T.textMuted, fontSize: 10)),
+                              if (b.total > 0) ...[
+                                const SizedBox(height: 2),
                                 Text(
-                                  b.label,
-                                  style: const TextStyle(
-                                    color: _T.textMuted,
-                                    fontSize: 10,
-                                  ),
+                                  '₱${b.total >= 1000 ? '${(b.total / 1000).toStringAsFixed(1)}k' : b.total.toStringAsFixed(0)}',
+                                  style: const TextStyle(color: _T.gold, fontSize: 9, fontWeight: FontWeight.w700),
                                 ),
-                                if (b.total > 0) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '₱${b.total >= 1000 ? '${(b.total / 1000).toStringAsFixed(1)}k' : b.total.toStringAsFixed(0)}',
-                                    style: const TextStyle(
-                                      color: _T.gold,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
                               ],
-                            ),
-                          )
-                              .toList(),
+                            ],
+                          )).toList(),
                         ),
                       ],
                     ),
@@ -1289,12 +1025,9 @@ class _AdminReportCard extends StatelessWidget {
   final String? tooltip;
 
   const _AdminReportCard({
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.bg,
-    required this.border,
-    required this.narrow,
+    required this.label,  required this.value,
+    required this.color,  required this.bg,
+    required this.border, required this.narrow,
     this.tooltip,
   });
 
@@ -1313,36 +1046,19 @@ class _AdminReportCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: color.withValues(alpha: 0.7),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text(label,
+                  style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 11, fontWeight: FontWeight.w500)),
               if (tooltip != null) ...[
                 const SizedBox(width: 4),
                 Tooltip(
                   message: tooltip!,
-                  child: Icon(
-                    Icons.info_outline_rounded,
-                    size: 12,
-                    color: color.withValues(alpha: 0.5),
-                  ),
+                  child: Icon(Icons.info_outline_rounded, size: 12, color: color.withValues(alpha: 0.5)),
                 ),
               ],
             ],
           ),
           const SizedBox(height: 5),
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
+          Text(value, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -1356,61 +1072,40 @@ class _AdminChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (buckets.isEmpty) return;
-    final maxVal = buckets.map((b) => b.total).reduce((a, b) => a > b ? a : b);
+    final maxVal       = buckets.map((b) => b.total).reduce((a, b) => a > b ? a : b);
     final effectiveMax = maxVal == 0 ? 1.0 : maxVal;
-    final n = buckets.length;
-    final stepX = size.width / (n - 1).clamp(1, n);
+    final n            = buckets.length;
+    final stepX        = n <= 1 ? size.width : size.width / (n - 1);
 
-    final gridPaint = Paint()
-      ..color = const Color(0xFFE5E7EB)
-      ..strokeWidth = 1;
+    final gridPaint = Paint()..color = const Color(0xFFE5E7EB)..strokeWidth = 1;
     for (int i = 0; i <= 3; i++) {
       final y = size.height * i / 3;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    final points = List.generate(
-      n,
-          (i) => Offset(
-        i * stepX,
-        size.height - (buckets[i].total / effectiveMax) * size.height * 0.85,
-      ),
-    );
+    final points = List.generate(n, (i) => Offset(
+      i * stepX,
+      size.height - (buckets[i].total / effectiveMax) * size.height * 0.85,
+    ));
 
     final fillPath = Path()..moveTo(points.first.dx, size.height);
     for (final p in points) fillPath.lineTo(p.dx, p.dy);
     fillPath.lineTo(points.last.dx, size.height);
     fillPath.close();
-    canvas.drawPath(
-      fillPath,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF1D4ED8).withValues(alpha: 0.15),
-            const Color(0xFF1D4ED8).withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
-    );
+    canvas.drawPath(fillPath, Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [const Color(0xFF1D4ED8).withValues(alpha: 0.15), const Color(0xFF1D4ED8).withValues(alpha: 0.0)],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)));
 
     final linePath = Path()..moveTo(points.first.dx, points.first.dy);
     for (int i = 1; i < points.length; i++) {
       final prev = points[i - 1];
       final curr = points[i];
-      linePath.cubicTo(
-        (prev.dx + curr.dx) / 2, prev.dy,
-        (prev.dx + curr.dx) / 2, curr.dy,
-        curr.dx, curr.dy,
-      );
+      linePath.cubicTo((prev.dx + curr.dx) / 2, prev.dy, (prev.dx + curr.dx) / 2, curr.dy, curr.dx, curr.dy);
     }
-    canvas.drawPath(
-      linePath,
-      Paint()
-        ..color = const Color(0xFF1D4ED8)
-        ..strokeWidth = 2.5
-        ..style = PaintingStyle.stroke,
-    );
+    canvas.drawPath(linePath, Paint()
+      ..color = const Color(0xFF1D4ED8)..strokeWidth = 2.5..style = PaintingStyle.stroke);
 
     for (final p in points) {
       canvas.drawCircle(p, 5, Paint()..color = Colors.white);
@@ -1422,9 +1117,7 @@ class _AdminChartPainter extends CustomPainter {
   bool shouldRepaint(_AdminChartPainter old) => old.buckets != buckets;
 }
 
-// =============================================================================
-// SalesReportView — dark-themed (employee side), with period filter
-// =============================================================================
+// SalesReportView
 class SalesReportView extends StatefulWidget {
   const SalesReportView({super.key});
 
@@ -1435,14 +1128,6 @@ class SalesReportView extends StatefulWidget {
 class _SalesReportViewState extends State<SalesReportView> {
   _Period _period = _Period.month;
 
-  static String _shortMonth(int m) {
-    const names = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return names[m - 1];
-  }
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
@@ -1452,58 +1137,49 @@ class _SalesReportViewState extends State<SalesReportView> {
           .snapshots(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.white38),
-          );
+          return const Center(child: CircularProgressIndicator(color: Colors.white38));
         }
         if (snap.hasError) {
-          return Center(
-            child: Text(
-              'Error: ${snap.error}',
-              style: const TextStyle(color: Colors.redAccent),
-            ),
-          );
+          return Center(child: Text('Error: ${snap.error}',
+              style: const TextStyle(color: Colors.redAccent)));
         }
 
         final allDocs = snap.data?.docs ?? [];
+
+        // Period-filtered docs
         final docs = allDocs.where((doc) {
-          final d = doc.data() as Map<String, dynamic>;
+          final d  = doc.data() as Map<String, dynamic>;
           final ts = d['sale_date'] as Timestamp?;
           if (ts == null) return _period == _Period.all;
           return _inPeriod(ts.toDate().toLocal(), _period);
         }).toList();
 
-        double totalRevenue = 0;
-        double downpaymentTotal = 0;
-        double balanceTotal = 0;
-        final orderIds = <String>{};
+        // Build buckets
+        final bucketMap    = _buildBucketMap(allDocs, _period);
+        final monthBuckets = bucketMap.values.toList()
+          ..sort((a, b) => a.month.compareTo(b.month));
 
-        final now = DateTime.now();
-        final monthBuckets = List.generate(6, (i) {
-          final m = DateTime(now.year, now.month - (5 - i));
-          return _MonthBucket(month: m, label: _shortMonth(m.month), total: 0);
-        });
+        double totalRevenue     = 0;
+        double downpaymentTotal = 0;
+        double balanceTotal     = 0;
+        final  orderIds         = <String>{};
 
         for (final doc in docs) {
           final d      = doc.data() as Map<String, dynamic>;
           final amount = (d['sale_amount'] as num?)?.toDouble() ?? 0;
           final type   = d['payment_type']?.toString() ?? '';
-          final ordId  = d['order_id']?.toString() ?? '';
+          final ordId  = d['order_id']?.toString()     ?? '';
 
           totalRevenue += amount;
           if (type == 'downpayment') downpaymentTotal += amount;
-          if (type == 'balance' || type == 'cash') balanceTotal += amount;
+          if (type == 'balance' || type == 'cash' || type == 'full') balanceTotal += amount;
           if (ordId.isNotEmpty) orderIds.add(ordId);
 
           final ts = d['sale_date'] as Timestamp?;
           if (ts != null) {
-            final dt = ts.toDate();
-            for (final b in monthBuckets) {
-              if (b.month.year == dt.year && b.month.month == dt.month) {
-                b.total += amount;
-                break;
-              }
-            }
+            final dt  = ts.toDate();
+            final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+            if (bucketMap.containsKey(key)) bucketMap[key]!.total += amount;
           }
         }
 
@@ -1512,83 +1188,54 @@ class _SalesReportViewState extends State<SalesReportView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Sales Report',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              const Text('Sales Report',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
               const SizedBox(height: 12),
 
-              _PeriodFilterBar(
-                active: _period,
-                onChanged: (p) => setState(() => _period = p),
-                dark: true,
-              ),
+              _PeriodFilterBar(active: _period, onChanged: (p) => setState(() => _period = p), dark: true),
               const SizedBox(height: 16),
 
-              LayoutBuilder(
-                builder: (_, constraints) {
-                  final narrow = constraints.maxWidth < 400;
-                  return Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _ReportCard('Total Revenue',      '₱${totalRevenue.toStringAsFixed(2)}',      AppTheme.gold,       narrow),
-                      _ReportCard('Orders',             '${orderIds.length}',                        Colors.blueAccent,   narrow),
-                      _ReportCard('Downpayments',       '₱${downpaymentTotal.toStringAsFixed(2)}',   Colors.blue,         narrow),
-                      _ReportCard('Balance Collected',  '₱${balanceTotal.toStringAsFixed(2)}',       Colors.green,        narrow),
-                    ],
-                  );
-                },
-              ),
+              LayoutBuilder(builder: (_, constraints) {
+                final narrow = constraints.maxWidth < 400;
+                return Wrap(
+                  spacing: 10, runSpacing: 10,
+                  children: [
+                    _ReportCard('Total Revenue',     '₱${totalRevenue.toStringAsFixed(2)}',     AppTheme.gold,     narrow),
+                    _ReportCard('Orders',            '${orderIds.length}',                       Colors.blueAccent, narrow),
+                    _ReportCard('Downpayments',      '₱${downpaymentTotal.toStringAsFixed(2)}',  Colors.blue,       narrow),
+                    _ReportCard('Balance Collected', '₱${balanceTotal.toStringAsFixed(2)}',      Colors.green,      narrow),
+                  ],
+                );
+              }),
               const SizedBox(height: 24),
 
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.bar_chart_rounded, color: Colors.blueAccent, size: 14),
-                  SizedBox(width: 6),
+                  const Icon(Icons.bar_chart_rounded, color: Colors.blueAccent, size: 14),
+                  const SizedBox(width: 6),
                   Text(
-                    'MONTHLY REVENUE',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1,
-                    ),
+                    _period == _Period.all ? 'ALL TIME BY MONTH' : 'MONTHLY REVENUE',
+                    style: const TextStyle(color: Colors.white54, fontSize: 11,
+                        fontWeight: FontWeight.w600, letterSpacing: 1),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
               SizedBox(
                 height: 160,
-                child: CustomPaint(
-                  painter: _ChartPainter(buckets: monthBuckets),
-                  child: Container(),
-                ),
+                child: CustomPaint(painter: _ChartPainter(buckets: monthBuckets), child: Container()),
               ),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: monthBuckets
-                    .map(
-                      (b) => Column(
-                    children: [
-                      Text(
-                        b.label,
-                        style: const TextStyle(color: Colors.white38, fontSize: 10),
-                      ),
-                      if (b.total > 0)
-                        Text(
-                          '₱${b.total.toStringAsFixed(0)}',
-                          style: const TextStyle(color: AppTheme.gold, fontSize: 9),
-                        ),
-                    ],
-                  ),
-                )
-                    .toList(),
+                children: monthBuckets.map((b) => Column(
+                  children: [
+                    Text(b.label, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                    if (b.total > 0)
+                      Text('₱${b.total.toStringAsFixed(0)}',
+                          style: const TextStyle(color: AppTheme.gold, fontSize: 9)),
+                  ],
+                )).toList(),
               ),
             ],
           ),
@@ -1616,25 +1263,12 @@ class _ReportCard extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 11),
-        ),
+        Text(label, style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 11)),
         const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold),
-        ),
+        Text(value, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
       ],
     ),
   );
-}
-
-class _MonthBucket {
-  final DateTime month;
-  final String label;
-  double total;
-  _MonthBucket({required this.month, required this.label, required this.total});
 }
 
 class _ChartPainter extends CustomPainter {
@@ -1644,61 +1278,40 @@ class _ChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (buckets.isEmpty) return;
-    final maxVal = buckets.map((b) => b.total).reduce((a, b) => a > b ? a : b);
+    final maxVal       = buckets.map((b) => b.total).reduce((a, b) => a > b ? a : b);
     final effectiveMax = maxVal == 0 ? 1.0 : maxVal;
-    final n = buckets.length;
-    final stepX = size.width / (n - 1).clamp(1, n);
+    final n            = buckets.length;
+    final stepX        = n <= 1 ? size.width : size.width / (n - 1);
 
-    final gridPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
-      ..strokeWidth = 1;
+    final gridPaint = Paint()..color = Colors.white.withValues(alpha: 0.08)..strokeWidth = 1;
     for (int i = 0; i <= 3; i++) {
       final y = size.height * i / 3;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    final points = List.generate(
-      n,
-          (i) => Offset(
-        i * stepX,
-        size.height - (buckets[i].total / effectiveMax) * size.height * 0.85,
-      ),
-    );
+    final points = List.generate(n, (i) => Offset(
+      i * stepX,
+      size.height - (buckets[i].total / effectiveMax) * size.height * 0.85,
+    ));
 
     final fillPath = Path()..moveTo(points.first.dx, size.height);
     for (final p in points) fillPath.lineTo(p.dx, p.dy);
     fillPath.lineTo(points.last.dx, size.height);
     fillPath.close();
-    canvas.drawPath(
-      fillPath,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.blueAccent.withValues(alpha: 0.3),
-            Colors.blueAccent.withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
-    );
+    canvas.drawPath(fillPath, Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [Colors.blueAccent.withValues(alpha: 0.3), Colors.blueAccent.withValues(alpha: 0.0)],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)));
 
     final linePath = Path()..moveTo(points.first.dx, points.first.dy);
     for (int i = 1; i < points.length; i++) {
       final prev = points[i - 1];
       final curr = points[i];
-      linePath.cubicTo(
-        (prev.dx + curr.dx) / 2, prev.dy,
-        (prev.dx + curr.dx) / 2, curr.dy,
-        curr.dx, curr.dy,
-      );
+      linePath.cubicTo((prev.dx + curr.dx) / 2, prev.dy, (prev.dx + curr.dx) / 2, curr.dy, curr.dx, curr.dy);
     }
-    canvas.drawPath(
-      linePath,
-      Paint()
-        ..color = Colors.blueAccent
-        ..strokeWidth = 2.5
-        ..style = PaintingStyle.stroke,
-    );
+    canvas.drawPath(linePath, Paint()
+      ..color = Colors.blueAccent..strokeWidth = 2.5..style = PaintingStyle.stroke);
 
     final dotBg   = Paint()..color = const Color(0xFF1a1a2e);
     final dotFill = Paint()..color = Colors.blueAccent;
