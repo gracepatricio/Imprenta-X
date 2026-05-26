@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,9 +7,6 @@ import 'package:intl/intl.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 class _G {
-  static const Color surface    = Color(0xEEFFFFFF);
-  static const Color surfaceMid = Color(0xCCFFFFFF);
-  static const Color border     = Color(0x55FFFFFF);
   static const Color primary    = Color(0xFF1A1A2E);
   static const Color textPrimary   = Color(0xFF111827);
   static const Color textSecondary = Color(0xFF4B5563);
@@ -18,7 +14,6 @@ class _G {
   static const Color green  = Color(0xFF16A34A);
   static const Color amber  = Color(0xFFB45309);
   static const Color red    = Color(0xFFDC2626);
-  static const Color purple = Color(0xFF6D28D9);
   static const BoxShadow shadow = BoxShadow(
     color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2),
   );
@@ -102,7 +97,6 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
   int _uploadedCount = 0;
   int _skippedCount  = 0;
   final Set<int> _selected = {};
-  bool _selectAll = true;
 
   // ── Date string → Firestore Timestamp (date only) ─────────────────────────
   static Timestamp? _toTimestamp(String raw) {
@@ -175,9 +169,11 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
       final map = _buildColMap(rows[r]);
       if (map.length >= 5) { headerIdx = r; colMap = map; break; }
     }
-    if (colMap.isEmpty) throw Exception(
-        'Could not detect header row.\nExpected columns like: invoice_number, sale_date, customer_name …'
-    );
+    if (colMap.isEmpty) {
+      throw Exception(
+        'Could not detect header row.\nExpected columns like: invoice_number, sale_date, customer_name …',
+      );
+    }
 
     final result = <_SalesRow>[];
     for (int r = headerIdx + 1; r < rows.length; r++) {
@@ -525,7 +521,7 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
           child: ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
             itemCount: _rows.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 4),
+            separatorBuilder: (_, _) => const SizedBox(height: 4),
             itemBuilder: (_, i) => _buildPreviewRow(i),
           ),
         ),
