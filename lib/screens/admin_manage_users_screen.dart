@@ -192,8 +192,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     if (mounted)
       _showCredentialsDialog(
         role: 'Admin',
-        idLabel: 'UID',
-        idValue: result.uid ?? '',
+        idLabel: 'Admin ID',
+        idValue: result.adminId ?? '',
         password: result.password!,
       );
   }
@@ -492,11 +492,13 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   String _displayId(Map<String, dynamic> data) {
+    if ((data['admin_id'] as String? ?? '').isNotEmpty)
+      return data['admin_id'] as String;
     if ((data['customer_id'] as String? ?? '').isNotEmpty)
       return data['customer_id'] as String;
     if ((data['employee_id'] as String? ?? '').isNotEmpty)
       return data['employee_id'] as String;
-    return data['uid'] as String? ?? '—';
+    return '—';
   }
 
   Color _roleFg(String role) {
@@ -727,11 +729,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       if (constraints.maxWidth < 400) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            searchField,
-            const SizedBox(height: 8),
-            dropdown,
-          ],
+          children: [searchField, const SizedBox(height: 8), dropdown],
         );
       }
 
@@ -795,9 +793,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
               ),
             ),
             Expanded(
-              child: isMobile
-                  ? _buildCardList(docs)
-                  : _buildDesktopTable(docs),
+              child: isMobile ? _buildCardList(docs) : _buildDesktopTable(docs),
             ),
           ],
         );
@@ -970,7 +966,15 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             ),
           ),
           // Actions
-          _buildActionMenu(uid, data, displayId, name, isDisabled, mustChange, role),
+          _buildActionMenu(
+            uid,
+            data,
+            displayId,
+            name,
+            isDisabled,
+            mustChange,
+            role,
+          ),
         ],
       ),
     );

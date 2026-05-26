@@ -71,6 +71,11 @@ class AuthService {
     return 'EMP-${id.toString().padLeft(3, '0')}';
   }
 
+  Future<String> generateAdminId() async {
+    final id = await _getNextCounter('admin');
+    return 'ADM-${id.toString().padLeft(3, '0')}';
+  }
+
   // ── Secondary Firebase App ────────────────────────────────────────────────
 
   Future<FirebaseApp> _createSecondaryApp() async {
@@ -82,9 +87,16 @@ class AuthService {
   }
 
   Future<({String? uid, String? placeholderEmail, String? error})>
-  _createAuthUserSecondary({required String password}) async {
-    final placeholderEmail =
-        '_${DateTime.now().millisecondsSinceEpoch}@imprenta.internal';
+  _createAuthUserSecondary({
+    required String password,
+    required String rolePrefix, // 'adm' or 'emp'
+    required String roleId, // e.g. 'ADM-001' or 'EMP-003'
+  }) async {
+    // Format: adm001@imprenta.sys or emp003@imprenta.sys
+    final numericPart = roleId.split('-').last; // '001'
+    final localPart = '$rolePrefix${numericPart.toLowerCase()}';
+    final placeholderEmail = '$localPart@imprenta.sys';
+
     FirebaseApp? secondaryApp;
     try {
       secondaryApp = await _createSecondaryApp();
@@ -202,7 +214,15 @@ class AuthService {
   Future<({String? password, String? uid, String? employeeId, String? error})>
   createEmployeeAccount() async {
     final tempPassword = generateTemporaryPassword();
-    final authResult = await _createAuthUserSecondary(password: tempPassword);
+
+    // Generate the ID first so we can use it in the placeholder email
+    final employeeId = await generateEmployeeId();
+
+    final authResult = await _createAuthUserSecondary(
+      password: tempPassword,
+      rolePrefix: 'emp',
+      roleId: employeeId,
+    );
     if (authResult.error != null) {
       return (
         password: null,
@@ -216,7 +236,6 @@ class AuthService {
     final placeholderEmail = authResult.placeholderEmail!;
 
     try {
-      final employeeId = await generateEmployeeId();
       await _firestore.collection('AuthIndex').doc(uid).set({
         'placeholder_email': placeholderEmail,
       });
@@ -248,12 +267,25 @@ class AuthService {
     }
   }
 
-  Future<({String? uid, String? password, String? error})>
+  Future<({String? uid, String? password, String? adminId, String? error})>
   createAdminAccount() async {
     final tempPassword = generateTemporaryPassword();
-    final authResult = await _createAuthUserSecondary(password: tempPassword);
+
+    // Generate the ID first so we can use it in the placeholder email
+    final adminId = await generateAdminId();
+
+    final authResult = await _createAuthUserSecondary(
+      password: tempPassword,
+      rolePrefix: 'adm',
+      roleId: adminId,
+    );
     if (authResult.error != null) {
-      return (uid: null, password: null, error: authResult.error);
+      return (
+        uid: null,
+        password: null,
+        adminId: null,
+        error: authResult.error,
+      );
     }
 
     final uid = authResult.uid!;
@@ -268,6 +300,7 @@ class AuthService {
         'full_name': 'New Admin',
         'customer_id': null,
         'employee_id': null,
+        'admin_id': adminId,
         'user_role': 'admin',
         'must_change_password': true,
         'temp_password': tempPassword,
@@ -275,11 +308,12 @@ class AuthService {
         'is_deleted': false,
         'is_disabled': false,
       });
-      return (uid: uid, password: tempPassword, error: null);
+      return (uid: uid, password: tempPassword, adminId: adminId, error: null);
     } catch (e) {
       return (
         uid: null,
         password: null,
+        adminId: null,
         error: 'Account created in Auth but Firestore write failed: $e',
       );
     }
@@ -345,9 +379,17 @@ class AuthService {
 
   Future<String?> _resolveToAuthEmail(String identifier) async {
     print('DEBUG _resolveToAuthEmail: identifier="$identifier"');
-
     if (identifier.contains('@')) {
       print('DEBUG: plain email branch');
+
+      // ── Placeholder email shortcut ──────────────────────────────────────
+      // adm001@imprenta.sys or emp001@imprenta.sys — this IS the Firebase
+      // Auth email, so return it directly without any Firestore lookups.
+      if (identifier.endsWith('@imprenta.sys')) {
+        print('DEBUG: placeholder email — returning as-is');
+        return identifier;
+      }
+      // ───────────────────────────────────────────────────────────────────
 
       try {
         final indexDoc = await _firestore
@@ -377,7 +419,6 @@ class AuthService {
       } catch (e) {
         print('DEBUG: email_index check threw: $e');
       }
-
       try {
         final snap = await _firestore
             .collection('User')
@@ -399,7 +440,6 @@ class AuthService {
       } catch (e) {
         print('DEBUG: User query threw: $e');
       }
-
       print('DEBUG: no User doc found for "$identifier" — returning null');
       return null;
     }
@@ -442,6 +482,29 @@ class AuthService {
         return authEmail;
       } catch (e) {
         print('DEBUG: EMP branch threw: $e');
+        return null;
+      }
+    }
+
+    if (identifier.startsWith('ADM-')) {
+      print('DEBUG: ADM branch');
+      try {
+        final snap = await _firestore
+            .collection('User')
+            .where('admin_id', isEqualTo: identifier)
+            .limit(1)
+            .get();
+        print('DEBUG: ADM query returned ${snap.docs.length} docs');
+        if (snap.docs.isEmpty) return null;
+
+        final uid = snap.docs.first.id;
+        print('DEBUG: ADM uid=$uid');
+
+        final authEmail = await _getPlaceholderEmail(uid);
+        print('DEBUG: ADM authEmail from AuthIndex=$authEmail');
+        return authEmail;
+      } catch (e) {
+        print('DEBUG: ADM branch threw: $e');
         return null;
       }
     }
@@ -778,6 +841,7 @@ class AuthService {
         'user_role': 'employee',
         'employee_id': empId,
         'customer_id': null,
+        'admin_id': null,
       });
       return 'success';
     } catch (_) {
@@ -787,8 +851,10 @@ class AuthService {
 
   Future<String?> promoteToAdmin(String uid) async {
     try {
+      final adminId = await generateAdminId();
       await _firestore.collection('User').doc(uid).update({
         'user_role': 'admin',
+        'admin_id': adminId,
         'customer_id': null,
         'employee_id': null,
       });
@@ -805,6 +871,7 @@ class AuthService {
         'user_role': 'customer',
         'customer_id': customerId,
         'employee_id': null,
+        'admin_id': null,
       });
       return 'success';
     } catch (_) {

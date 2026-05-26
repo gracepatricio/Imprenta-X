@@ -67,9 +67,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     switch (result) {
       case 'customer':
-      // Load the cart for this user now that we know they are authenticated.
-      // FirebaseAuth.instance.currentUser is available immediately after
-      // a successful signInWithEmailAndPassword call inside AuthService.login().
+        // Load the cart for this user now that we know they are authenticated.
+        // FirebaseAuth.instance.currentUser is available immediately after
+        // a successful signInWithEmailAndPassword call inside AuthService.login().
         final uid = FirebaseAuth.instance.currentUser?.uid;
         if (uid != null) {
           await CartManager.loadForUser(uid);
@@ -92,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
         break;
 
       default:
-      // Any other string is an error message from AuthService
+        // Any other string is an error message from AuthService
         _snack(result, isError: true);
     }
   }
@@ -152,11 +152,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           'assets/images/imprentalogo.jpg',
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
-                          const Icon(
-                            Icons.local_print_shop,
-                            color: Colors.white,
-                            size: 18,
-                          ),
+                              const Icon(
+                                Icons.local_print_shop,
+                                color: Colors.white,
+                                size: 18,
+                              ),
                         ),
                       ),
                     ),
@@ -189,7 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           // Identifier:
                           //   Customer  → email or CUS-xxx
                           //   Employee  → email or EMP-xxx
-                          //   Admin     → email or Firebase UID
+                          //   Admin     → email or ADM-xxx
                           TextField(
                             controller: _identifierController,
                             style: const TextStyle(color: Colors.white),
@@ -221,7 +221,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   size: 18,
                                 ),
                                 onPressed: () => setState(
-                                      () => _obscurePassword = !_obscurePassword,
+                                  () => _obscurePassword = !_obscurePassword,
                                 ),
                               ),
                             ),
@@ -261,13 +261,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             style: AppTheme.primaryButton(),
                             child: _isLoading
                                 ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.black,
-                              ),
-                            )
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.black,
+                                    ),
+                                  )
                                 : const Text('Sign In'),
                           ),
 
