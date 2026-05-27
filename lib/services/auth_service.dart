@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
+import 'notification_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -881,9 +882,10 @@ class AuthService {
 
   // ── Sign out ──────────────────────────────────────────────────────────────
 
-  Future<void> signOut() async {
-    await _auth.signOut();
-  }
+Future<void> signOut() async {
+  await NotificationService.clearToken();
+  await _auth.signOut();
+}
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
