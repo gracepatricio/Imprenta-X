@@ -208,6 +208,111 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
     }
   }
 
+  // ── Mark a downpayment record as "balance" by order_id ───────────────────
+  Future<void> _markAsBalance(
+      BuildContext context,
+      String docId,
+      String orderId,
+      double orderTotal,
+      double paidSoFar,
+      ) async {
+    final remaining = orderTotal - paidSoFar;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Mark as Balance Paid',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Order ID: $orderId',
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12,
+                    color: Color(0xFF4B5563))),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _DialogRow('Order Total', '₱${orderTotal.toStringAsFixed(2)}'),
+                  const SizedBox(height: 4),
+                  _DialogRow('Downpayment Paid', '₱${paidSoFar.toStringAsFixed(2)}'),
+                  const Divider(height: 12),
+                  _DialogRow('Remaining Balance', '₱${remaining.toStringAsFixed(2)}',
+                      bold: true, color: const Color(0xFFB45309)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'This will update the existing record\'s status from Downpayment → Balance. No new record will be created.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: Color(0xFF6B7280))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFB45309),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirm Balance Paid'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      // Strictly update the existing record — NEVER add a new one
+      await FirebaseFirestore.instance
+          .collection('Sales_Records')
+          .doc(docId)
+          .update({
+        'payment_type':    'balance',
+        'balance_paid_at': FieldValue.serverTimestamp(),
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Record updated to Balance ✓'),
+            backgroundColor: const Color(0xFF15803D),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating record: $e'),
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_snapshot == null) {
@@ -366,10 +471,12 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
                   (_, i) {
-                final d        = filtered[i].data() as Map<String, dynamic>;
+                final doc      = filtered[i];
+                final d        = doc.data() as Map<String, dynamic>;
                 final type     = d['payment_type']?.toString();
                 final method   = d['payment_method']?.toString();
                 final amount   = (d['sale_amount'] as num?)?.toDouble() ?? 0;
+                final ordTotal = (d['order_total'] as num?)?.toDouble() ?? 0;
                 final orderId  = d['order_id']?.toString() ?? '—';
                 final custName = d['customer_name']?.toString() ?? '—';
                 final custId   = d['customer_id']?.toString() ?? '';
@@ -377,18 +484,29 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
 
                 return _SalesRecordCard(
                   index: i,
+                  docId: doc.id,
                   orderId: orderId,
                   custName: custName,
                   custId: custId,
                   type: type,
                   method: method,
                   amount: amount,
+                  orderTotal: ordTotal,
                   date: date,
                   typeFg: _typeFg(type),
                   typeBg: _typeBg(type),
                   typeBorder: _typeBorder(type),
                   typeLabel: _typeLabel(type),
                   methodLabel: _methodLabel(method),
+                  onMarkBalance: type == 'downpayment'
+                      ? () => _markAsBalance(
+                    context,
+                    doc.id,
+                    orderId,
+                    ordTotal,
+                    amount,
+                  )
+                      : null,
                 );
               },
               childCount: filtered.length,
@@ -405,126 +523,195 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
 // =============================================================================
 class _SalesRecordCard extends StatelessWidget {
   final int index;
-  final String orderId, custName, custId;
+  final String docId, orderId, custName, custId;
   final String? type, method;
-  final double amount;
+  final double amount, orderTotal;
   final String date;
   final Color typeFg, typeBg, typeBorder;
   final String typeLabel, methodLabel;
+  final VoidCallback? onMarkBalance;
 
   const _SalesRecordCard({
     required this.index,
+    required this.docId,
     required this.orderId,
     required this.custName,
     required this.custId,
     required this.type,
     required this.method,
     required this.amount,
+    required this.orderTotal,
     required this.date,
     required this.typeFg,
     required this.typeBg,
     required this.typeBorder,
     required this.typeLabel,
     required this.methodLabel,
+    this.onMarkBalance,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDownpayment = type == 'downpayment';
+    final remaining = orderTotal > 0 ? (orderTotal - amount) : 0.0;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+        border: Border.all(
+          color: isDownpayment
+              ? const Color(0xFFBFDBFE)
+              : const Color(0xFFE5E7EB),
+          width: isDownpayment ? 1.5 : 1,
+        ),
         boxShadow: const [BoxShadow(color: Color(0x08000000), blurRadius: 6, offset: Offset(0, 2))],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        children: [
+          // ── Pending balance banner (downpayment only) ─────────────────
+          if (isDownpayment)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: const BoxDecoration(
+                color: Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule_rounded, size: 11, color: Color(0xFF1D4ED8)),
+                  const SizedBox(width: 5),
+                  const Text('AWAITING BALANCE PAYMENT',
+                      style: TextStyle(color: Color(0xFF1D4ED8), fontSize: 10,
+                          fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                  const Spacer(),
+                  if (remaining > 0)
+                    Text('₱${remaining.toStringAsFixed(2)} remaining',
+                        style: const TextStyle(color: Color(0xFF1D4ED8), fontSize: 10,
+                            fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 22, height: 22,
-                  margin: const EdgeInsets.only(right: 10, top: 1),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3F4F6),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFFE5E7EB)),
-                  ),
-                  child: Center(
-                    child: Text('${index + 1}',
-                        style: const TextStyle(color: _T.textMuted, fontSize: 9, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(orderId,
-                          style: const TextStyle(color: _T.textPrimary, fontSize: 13,
-                              fontWeight: FontWeight.w700, letterSpacing: -0.2)),
-                      const SizedBox(height: 2),
-                      Row(
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 22, height: 22,
+                      margin: const EdgeInsets.only(right: 10, top: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3F4F6),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: Center(
+                        child: Text('${index + 1}',
+                            style: const TextStyle(color: _T.textMuted, fontSize: 9, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.calendar_today_outlined, size: 10, color: _T.textMuted),
-                          const SizedBox(width: 4),
-                          Text(date, style: const TextStyle(color: _T.textMuted, fontSize: 11)),
+                          Text(orderId,
+                              style: const TextStyle(color: _T.textPrimary, fontSize: 13,
+                                  fontWeight: FontWeight.w700, letterSpacing: -0.2)),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              const Icon(Icons.calendar_today_outlined, size: 10, color: _T.textMuted),
+                              const SizedBox(width: 4),
+                              Text(date, style: const TextStyle(color: _T.textMuted, fontSize: 11)),
+                            ],
+                          ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('₱${amount.toStringAsFixed(2)}',
-                        style: const TextStyle(color: _T.gold, fontSize: 16,
-                            fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                    const SizedBox(height: 2),
-                    Text(methodLabel,
-                        style: const TextStyle(color: _T.textMuted, fontSize: 10, fontWeight: FontWeight.w500)),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('₱${amount.toStringAsFixed(2)}',
+                            style: const TextStyle(color: _T.gold, fontSize: 16,
+                                fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                        const SizedBox(height: 2),
+                        Text(methodLabel,
+                            style: const TextStyle(color: _T.textMuted, fontSize: 10, fontWeight: FontWeight.w500)),
+                        if (orderTotal > 0) ...[
+                          const SizedBox(height: 1),
+                          Text('of ₱${orderTotal.toStringAsFixed(2)}',
+                              style: const TextStyle(color: _T.textMuted, fontSize: 10)),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
+                const SizedBox(height: 10),
+                Container(height: 1, color: const Color(0xFFF3F4F6)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(Icons.person_outline_rounded, size: 13, color: _T.textMuted),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(custName,
+                              style: const TextStyle(color: _T.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis),
+                          if (custId.isNotEmpty)
+                            Text('ID: $custId',
+                                style: const TextStyle(color: _T.textMuted, fontSize: 10, fontFamily: 'monospace')),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: typeBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: typeBorder, width: 1),
+                      ),
+                      child: Text(typeLabel,
+                          style: TextStyle(color: typeFg, fontSize: 11, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+
+                // ── Mark as Balance button (downpayment only) ───────────
+                if (isDownpayment && onMarkBalance != null) ...[
+                  const SizedBox(height: 10),
+                  Container(height: 1, color: const Color(0xFFF3F4F6)),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: onMarkBalance,
+                      icon: const Icon(Icons.check_circle_outline_rounded, size: 14),
+                      label: const Text('Mark Balance as Paid'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFB45309),
+                        side: const BorderSide(color: Color(0xFFFDE68A), width: 1.5),
+                        backgroundColor: const Color(0xFFFFFBEB),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 10),
-            Container(height: 1, color: const Color(0xFFF3F4F6)),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Icon(Icons.person_outline_rounded, size: 13, color: _T.textMuted),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(custName,
-                          style: const TextStyle(color: _T.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis),
-                      if (custId.isNotEmpty)
-                        Text('ID: $custId',
-                            style: const TextStyle(color: _T.textMuted, fontSize: 10, fontFamily: 'monospace')),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: typeBg,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: typeBorder, width: 1),
-                  ),
-                  child: Text(typeLabel,
-                      style: TextStyle(color: typeFg, fontSize: 11, fontWeight: FontWeight.w700)),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -714,6 +901,27 @@ class _SummaryChip extends StatelessWidget {
         Text(value, style: TextStyle(color: fg, fontSize: 15, fontWeight: FontWeight.w800)),
       ],
     ),
+  );
+}
+
+// ─ Dialog info row ────────────────────────────────────────────────────────────
+class _DialogRow extends StatelessWidget {
+  final String label, value;
+  final bool bold;
+  final Color? color;
+  const _DialogRow(this.label, this.value, {this.bold = false, this.color});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label,
+          style: TextStyle(fontSize: 12, color: color ?? const Color(0xFF6B7280),
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w500)),
+      Text(value,
+          style: TextStyle(fontSize: 12, color: color ?? const Color(0xFF111827),
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
+    ],
   );
 }
 

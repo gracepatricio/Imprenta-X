@@ -26,7 +26,6 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
   void initState() {
     super.initState();
     _searchCtrl.addListener(_onSearchChanged);
-    // Show all customers immediately before any search is performed
     _loadAllCustomers();
   }
 
@@ -44,7 +43,6 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
     if (q == _searchQuery) return;
     _searchQuery = q;
     if (q.isEmpty) {
-      // Show all customers when the search field is cleared
       setState(() {
         _selectedCustomer = null;
         _activeOrders = [];
@@ -86,7 +84,6 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
   Future<void> _searchCustomers(String query) async {
     setState(() => _loadingCustomers = true);
     try {
-      // Fields from Firestore: full_name, customer_id, email
       final seen    = <String>{};
       final results = <Map<String, dynamic>>[];
 
@@ -103,7 +100,6 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
         }
       }
 
-      // 1. full_name prefix — Title-cased, lowercase, and raw variants
       final variants = <String>{
         query,
         query.toLowerCase(),
@@ -121,7 +117,6 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
             .catchError((_) => null));
       }
 
-      // 2. customer_id prefix search
       addSnap(await _db
           .collection('User')
           .orderBy('customer_id')
@@ -131,7 +126,6 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
           .get()
           .catchError((_) => null));
 
-      // 3. Client-side substring fallback (full_name, customer_id, email)
       if (results.isEmpty) {
         final all = await _db
             .collection('User')
@@ -171,16 +165,11 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
 
     try {
       final uid = customer['uid'] as String;
-      // Employee POS shows pending + in_production + ready so staff can collect
-      // payments at any stage.  Important: orders only appear in the
-      // *customer-facing* order history once an employee has explicitly advanced
-      // the status to 'in_production' or beyond.  Payment completion alone does
-      // NOT trigger that transition — the status field is controlled exclusively
-      // by employee actions (e.g. "Mark as In Production"), never by payment events.
       final snap = await _db
           .collection('Orders')
           .where('customer_uid', isEqualTo: uid)
           .where('status', whereIn: ['pending', 'in_production', 'ready'])
+          .where('payment_status', whereIn: ['unpaid', 'partial'])
           .get()
           .catchError((_) => null);
 
@@ -202,7 +191,6 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
         }
       }
 
-      // Sort by date descending client-side (whereIn can't combine with orderBy)
       orders.sort((a, b) {
         final ta = a['created_at'];
         final tb = b['created_at'];
@@ -236,57 +224,84 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
         order: order,
         onPaymentRecorded: (orderId, newPaid, wasFullyPaid) async {
           final orderSnap = await _db.collection('Orders').doc(orderId).get();
-          final total     = (orderSnap.data()?['total_price'] as num?)?.toDouble() ?? 0;
-          final remaining = total - newPaid;
+          final orderData = orderSnap.data() ?? {};
+          final total     = (orderData['total_price'] as num?)?.toDouble() ?? 0.0;
+          final prevPaid  = (orderData['amount_paid'] as num?)?.toDouble() ?? 0.0;
+          final remaining = (total - newPaid).clamp(0.0, double.infinity);
+          final cashPaid  = newPaid - prevPaid;
+          final custName  = orderData['customer_name']?.toString() ?? '';
 
-          // Update order — payment completion alone does NOT advance status.
-          // The order status (pending → in_production → ready → completed) is
-          // controlled exclusively by employees, not by payment events.
+          // ── 1. Update the Order document ──────────────────────────────
           await _db.collection('Orders').doc(orderId).update({
             'amount_paid':       newPaid,
-            'remaining_balance': remaining.clamp(0, double.infinity),
+            'remaining_balance': remaining,
             'payment_status':    wasFullyPaid ? 'paid' : 'partial',
-            // NOTE: 'status' is intentionally NOT updated here.
-            // Only an employee action (marking "In Production") may advance it.
           });
 
-          // Keep the Invoice in sync with the new payment amounts
-          final invId = orderSnap.data()?['invoice_id']?.toString();
+          // ── 2. Keep Invoice in sync ───────────────────────────────────
+          final invId = orderData['invoice_id']?.toString();
           if (invId != null && invId.isNotEmpty) {
             await _db.collection('Invoices').doc(invId).update({
               'amount_paid':       newPaid,
-              'remaining_balance': remaining.clamp(0, double.infinity),
+              'remaining_balance': remaining,
             }).catchError((_) {});
           }
 
-          final cashPaid = newPaid - ((orderSnap.data()?['amount_paid'] as num?)?.toDouble() ?? 0);
-          final orderTotal = total;
-          final custName   = orderSnap.data()?['customer_name']?.toString() ?? '';
-
-          // Log payment record
+          // ── 3. Log to Payments collection ─────────────────────────────
           await _db.collection('Payments').add({
-            'order_id':            orderId,
-            'amount':              cashPaid,
-            'payment_type':        wasFullyPaid ? 'full' : 'partial',
-            'payment_method':      'cash',
+            'order_id':              orderId,
+            'amount':                cashPaid,
+            'payment_type':          wasFullyPaid ? 'full' : 'partial',
+            'payment_method':        'cash',
             'transaction_reference': 'cash_onsite',
-            'payment_date':        FieldValue.serverTimestamp(),
-            'status':              'paid',
-            'paid_by':             'employee',
+            'payment_date':          FieldValue.serverTimestamp(),
+            'status':                'paid',
+            'paid_by':               'employee',
           });
 
-          // Sales record for cash payment
-          await _db.collection('Sales_Records').add({
-            'order_id':             orderId,
-            'customer_name':        custName,
-            'payment_type':         'cash',
-            'payment_method':       'cash',
-            'transaction_reference': 'cash_onsite',
-            'sale_amount':          cashPaid,
-            'order_total':          orderTotal,
-            'sale_date':            FieldValue.serverTimestamp(),
-          });
-          // Refresh orders list
+          // ── 4. Sales_Records ──────────────────────────────────────────
+          // Always read order_id from the Orders document itself so
+          // the value used for CREATE and FIND is guaranteed identical.
+          final salesOrderId = orderData['order_id']?.toString() ?? orderId;
+
+          // Step 1 — downpayment (no prior payment exists):
+          //   Create exactly ONE record containing only order_id.
+          //   payment_type is set to 'downpayment'.
+          //
+          // Step 2 — balance (prior payment already recorded):
+          //   Query Sales_Records by order_id, find that one record,
+          //   and update payment_type from 'downpayment' to 'balance'.
+          //   NEVER create a second record.
+
+          if (prevPaid == 0) {
+            // ── Downpayment: create the single Sales_Record ───────────
+            await _db.collection('Sales_Records').add({
+              'order_id':     salesOrderId,
+              'payment_type': 'downpayment',
+              'sale_date':    FieldValue.serverTimestamp(),
+            });
+          } else {
+            // ── Balance: find the record by order_id and update it ────
+            final snap = await _db
+                .collection('Sales_Records')
+                .where('order_id', isEqualTo: salesOrderId)
+                .limit(1)
+                .get();
+
+            if (snap.docs.isNotEmpty) {
+              await _db
+                  .collection('Sales_Records')
+                  .doc(snap.docs.first.id)
+                  .update({
+                'payment_type': 'balance',
+                'balance_date': FieldValue.serverTimestamp(),
+              });
+            }
+            // If somehow no record exists yet, do nothing —
+            // do NOT create a new record on a balance payment.
+          }
+
+          // ── 5. Refresh orders panel ───────────────────────────────────
           if (_selectedCustomer != null) {
             _selectCustomer(_selectedCustomer!);
           }
@@ -679,7 +694,6 @@ class _OrderCard extends StatelessWidget {
     final orderId   = rawId.length > 8 ? rawId.substring(0, 8) : rawId;
     final date      = _formatDate(order['date_created']);
 
-    // Any order (walk-in or online) that has not yet met the 50% downpayment.
     final needsDownpayment = paid < (total * 0.50);
 
     return GestureDetector(
@@ -890,10 +904,6 @@ class _PaymentSheetState extends State<_PaymentSheet> {
     setState(() => _change = null);
   }
 
-  /// Returns true when this is a walk-in order that has not yet received
-  /// any downpayment (i.e. the very first payment collection on a fresh order).
-  /// True when this is the very first payment on any order (walk-in or online)
-  /// and the 50% downpayment has not yet been collected.
   bool get _requiresDownpayment => _paid == 0.0;
 
   Future<void> _confirm() async {
@@ -904,9 +914,6 @@ class _PaymentSheetState extends State<_PaymentSheet> {
       return;
     }
 
-    // ── Downpayment rule (all order types) ───────────────────────────────
-    // Before any payment has been collected, the customer must pay at least
-    // 50% of the total — whether the order is walk-in or online.
     if (_requiresDownpayment) {
       final minimumDown = _total * 0.50;
       if (tendered < minimumDown) {
@@ -921,10 +928,9 @@ class _PaymentSheetState extends State<_PaymentSheet> {
             duration: const Duration(seconds: 4),
           ),
         );
-        return; // ← order does NOT push through
+        return;
       }
     }
-    // ─────────────────────────────────────────────────────────────────────
 
     final change = tendered - _remaining;
     final newPaid = _paid + (tendered < _remaining ? tendered : _remaining);
@@ -1008,7 +1014,6 @@ class _PaymentSheetState extends State<_PaymentSheet> {
                     fontSize: 12),
               ),
 
-              // ── Walk-in downpayment notice ──
               if (_requiresDownpayment) ...[
                 const SizedBox(height: 10),
                 Container(
