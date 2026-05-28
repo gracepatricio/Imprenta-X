@@ -11,11 +11,12 @@ import 'screens/customer_homepage.dart';
 import 'screens/employee_homepage.dart';
 import 'screens/admin_homepage.dart';
 import 'screens/change_password_screen.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
+  await NotificationService.initialize();
   // Initialize SharedPreferences cache only — do NOT load any cart yet.
   // The cart is loaded per-user inside AuthService.login() after the user
   // successfully authenticates, so we never mix up carts between accounts.

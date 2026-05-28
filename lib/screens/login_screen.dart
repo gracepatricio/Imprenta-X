@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../services/cart_manager.dart';
+import '../services/notification_service.dart';
 import 'app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -65,31 +66,33 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    switch (result) {
-      case 'customer':
-        // Load the cart for this user now that we know they are authenticated.
-        // FirebaseAuth.instance.currentUser is available immediately after
-        // a successful signInWithEmailAndPassword call inside AuthService.login().
-        final uid = FirebaseAuth.instance.currentUser?.uid;
-        if (uid != null) {
-          await CartManager.loadForUser(uid);
-        }
-        if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/customer');
-        break;
+  switch (result) {
+  case 'customer':
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      await CartManager.loadForUser(uid);
+    }
+    await NotificationService.initialize();
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, '/customer');
+    break;
 
-      case 'employee':
-        Navigator.pushReplacementNamed(context, '/employee');
-        break;
+  case 'employee':
+    await NotificationService.initialize();
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, '/employee');
+    break;
 
-      case 'admin':
-        if (!kIsWeb) {
-          _snack('Admin access is only available on the web.');
-          await _authService.signOut();
-          return;
-        }
-        Navigator.pushReplacementNamed(context, '/admin');
-        break;
+  case 'admin':
+    if (!kIsWeb) {
+      _snack('Admin access is only available on the web.');
+      await _authService.signOut();
+      return;
+    }
+    await NotificationService.initialize();
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, '/admin');
+    break;
 
       default:
         // Any other string is an error message from AuthService

@@ -1,6 +1,7 @@
 // This is a generated file; do not edit or check into version control.
-FLUTTER_ROOT=F:\VScode\flutter
-FLUTTER_APPLICATION_PATH=F:\Coding\Capstone
+FLUTTER_ROOT=C:\Users\Grace\Flutter Projects\Imprenta-X\flutter
+FLUTTER_APPLICATION_PATH=C:\Users\Grace\Flutter Projects\Imprenta-X
+FLUTTER_FRAMEWORK_SWIFT_PACKAGE_PATH=C:\Users\Grace\Flutter Projects\Imprenta-X\macos\Flutter\ephemeral\Packages\.packages\FlutterFramework
 COCOAPODS_PARALLEL_CODE_SIGN=true
 FLUTTER_BUILD_DIR=build
 FLUTTER_BUILD_NAME=1.0.0
