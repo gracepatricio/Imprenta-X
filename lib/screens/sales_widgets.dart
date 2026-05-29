@@ -112,6 +112,110 @@ class _PeriodFilterBar extends StatelessWidget {
   }
 }
 
+// ── Grouped record model ──────────────────────────────────────────────────────
+// Represents all Sales_Records for a single order_id merged into one entry.
+class _GroupedRecord {
+  final String orderId;
+  final String custName;
+  final String custId;
+  final double totalPaid;   // sum of sale_amount across all records for this order
+  final double orderTotal;  // order_total field (same across records)
+  final String paymentType; // derived: 'full' when fully paid, else latest type
+  final String? paymentMethod;
+  final Timestamp? latestDate;
+  final List<DocumentReference> docRefs;
+
+  const _GroupedRecord({
+    required this.orderId,
+    required this.custName,
+    required this.custId,
+    required this.totalPaid,
+    required this.orderTotal,
+    required this.paymentType,
+    required this.paymentMethod,
+    required this.latestDate,
+    required this.docRefs,
+  });
+}
+
+// Groups all raw Sales_Records docs by order_id and derives the combined state.
+List<_GroupedRecord> _groupRecords(List<QueryDocumentSnapshot> docs) {
+  // Accumulate per order_id
+  final Map<String, List<Map<String, dynamic>>> byOrder = {};
+  final Map<String, List<DocumentReference>>    refsByOrder = {};
+
+  for (final doc in docs) {
+    final d       = doc.data() as Map<String, dynamic>;
+    final orderId = d['order_id']?.toString() ?? doc.id;
+    byOrder.putIfAbsent(orderId, () => []).add(d);
+    refsByOrder.putIfAbsent(orderId, () => []).add(doc.reference);
+  }
+
+  final groups = <_GroupedRecord>[];
+
+  for (final orderId in byOrder.keys) {
+    final records = byOrder[orderId]!;
+    final refs    = refsByOrder[orderId]!;
+
+    // Sum all payments for this order; use the latest record's payment_type as-is
+    double totalPaid   = 0;
+    double orderTotal  = 0;
+    String custName    = '—';
+    String custId      = '';
+    String? lastMethod;
+    Timestamp? latestTs;
+    String derivedType = 'downpayment';
+
+    for (final r in records) {
+      totalPaid  += (r['sale_amount'] as num?)?.toDouble() ?? 0;
+      final ot    = (r['order_total'] as num?)?.toDouble() ?? 0;
+      if (ot > orderTotal) orderTotal = ot;
+      if ((r['customer_name']?.toString() ?? '').isNotEmpty) custName = r['customer_name'];
+      if ((r['customer_id']?.toString()   ?? '').isNotEmpty) custId   = r['customer_id'];
+      if ((r['payment_method']?.toString() ?? '').isNotEmpty) lastMethod = r['payment_method'];
+
+      final ts = r['sale_date'] as Timestamp?;
+      if (ts != null && (latestTs == null || ts.compareTo(latestTs) > 0)) {
+        latestTs = ts;
+        // Use the payment_type of the latest record directly —
+        // each payment is written with the correct type already:
+        // 'downpayment' → first partial payment
+        // 'balance'     → customer paid the remaining balance
+        // 'full'        → entire order paid in a single payment
+        final t = r['payment_type']?.toString() ?? '';
+        // Remap legacy 'cash' records (stored before type cleanup) to 'full'
+        if (t == 'cash') {
+          derivedType = 'full';
+        } else if (t.isNotEmpty) {
+          derivedType = t;
+        }
+      }
+    }
+
+    groups.add(_GroupedRecord(
+      orderId:       orderId,
+      custName:      custName,
+      custId:        custId,
+      totalPaid:     totalPaid,
+      orderTotal:    orderTotal,
+      paymentType:   derivedType,
+      paymentMethod: lastMethod,
+      latestDate:    latestTs,
+      docRefs:       refs,
+    ));
+  }
+
+  // Sort by latest payment date descending
+  groups.sort((a, b) {
+    if (a.latestDate == null && b.latestDate == null) return 0;
+    if (a.latestDate == null) return 1;
+    if (b.latestDate == null) return -1;
+    return b.latestDate!.compareTo(a.latestDate!);
+  });
+
+  return groups;
+}
+
 // =============================================================================
 // Sales Record Table
 // =============================================================================
@@ -141,6 +245,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
         .listen((snap) {
       if (mounted) setState(() => _snapshot = snap);
     });
+
   }
 
   @override
@@ -161,8 +266,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
     switch (t) {
       case 'downpayment': return 'Downpayment';
       case 'balance':     return 'Balance';
-      case 'cash':        return 'Cash';
-      case 'full':        return 'Full';
+      case 'full':        return 'Full Payment';
       default:            return (t != null && t.isNotEmpty) ? t : '—';
     }
   }
@@ -171,7 +275,6 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
     switch (t) {
       case 'downpayment': return const Color(0xFF1D4ED8);
       case 'balance':     return const Color(0xFFB45309);
-      case 'cash':        return const Color(0xFF15803D);
       case 'full':        return const Color(0xFF6D28D9);
       default:            return _T.textMuted;
     }
@@ -181,7 +284,6 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
     switch (t) {
       case 'downpayment': return const Color(0xFFEFF6FF);
       case 'balance':     return const Color(0xFFFFFBEB);
-      case 'cash':        return const Color(0xFFF0FDF4);
       case 'full':        return const Color(0xFFF5F3FF);
       default:            return _T.headerBg;
     }
@@ -191,7 +293,6 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
     switch (t) {
       case 'downpayment': return const Color(0xFFBFDBFE);
       case 'balance':     return const Color(0xFFFDE68A);
-      case 'cash':        return const Color(0xFFBBF7D0);
       case 'full':        return const Color(0xFFDDD6FE);
       default:            return _T.divider;
     }
@@ -208,111 +309,6 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
     }
   }
 
-  // ── Mark a downpayment record as "balance" by order_id ───────────────────
-  Future<void> _markAsBalance(
-      BuildContext context,
-      String docId,
-      String orderId,
-      double orderTotal,
-      double paidSoFar,
-      ) async {
-    final remaining = orderTotal - paidSoFar;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Mark as Balance Paid',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Order ID: $orderId',
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12,
-                    color: Color(0xFF4B5563))),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFFBEB),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFFDE68A)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _DialogRow('Order Total', '₱${orderTotal.toStringAsFixed(2)}'),
-                  const SizedBox(height: 4),
-                  _DialogRow('Downpayment Paid', '₱${paidSoFar.toStringAsFixed(2)}'),
-                  const Divider(height: 12),
-                  _DialogRow('Remaining Balance', '₱${remaining.toStringAsFixed(2)}',
-                      bold: true, color: const Color(0xFFB45309)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'This will update the existing record\'s status from Downpayment → Balance. No new record will be created.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: Color(0xFF6B7280))),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFB45309),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm Balance Paid'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      // Strictly update the existing record — NEVER add a new one
-      await FirebaseFirestore.instance
-          .collection('Sales_Records')
-          .doc(docId)
-          .update({
-        'payment_type':    'balance',
-        'balance_paid_at': FieldValue.serverTimestamp(),
-      });
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Record updated to Balance ✓'),
-            backgroundColor: const Color(0xFF15803D),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating record: $e'),
-            backgroundColor: const Color(0xFFDC2626),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_snapshot == null) {
@@ -321,81 +317,96 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
 
     final allDocs = _snapshot!.docs;
 
-    // Period filter
-    var filtered = allDocs.where((d) {
-      final data = d.data() as Map<String, dynamic>;
-      final ts   = data['sale_date'] as Timestamp?;
+    // Group all raw docs by order_id first
+    final allGroups = _groupRecords(allDocs);
+
+    // Period filter — use the group's latest payment date
+    var filtered = allGroups.where((g) {
+      final ts = g.latestDate;
       if (ts == null) return _period == _Period.all;
       return _inPeriod(ts.toDate().toLocal(), _period);
     }).toList();
 
-    // Type filter
+    // Type filter — match against derived paymentType
     if (_typeFilter != 'all') {
       filtered = filtered
-          .where((d) => (d.data() as Map)['payment_type']?.toString() == _typeFilter)
+          .where((g) => g.paymentType == _typeFilter)
           .toList();
     }
 
     // Search
     if (_search.isNotEmpty) {
-      filtered = filtered.where((d) {
-        final data    = d.data() as Map<String, dynamic>;
-        final ordId   = (data['order_id']?.toString()      ?? '').toLowerCase();
-        final cust    = (data['customer_name']?.toString() ?? '').toLowerCase();
-        final custUid = (data['customer_uid']?.toString()  ?? '').toLowerCase();
-        final custId  = (data['customer_id']?.toString()   ?? '').toLowerCase();
-        return ordId.contains(_search) || cust.contains(_search) ||
-            custUid.contains(_search)  || custId.contains(_search);
+      filtered = filtered.where((g) {
+        return g.orderId.toLowerCase().contains(_search) ||
+            g.custName.toLowerCase().contains(_search) ||
+            g.custId.toLowerCase().contains(_search);
       }).toList();
     }
 
-    final totalCollected = filtered.fold<double>(
-      0, (s, d) => s + ((d.data() as Map)['sale_amount'] as num? ?? 0).toDouble(),
-    );
-    final allTotal = allDocs.fold<double>(
-      0, (s, d) => s + ((d.data() as Map)['sale_amount'] as num? ?? 0).toDouble(),
-    );
+    final totalCollected = filtered.fold<double>(0, (s, g) => s + g.totalPaid);
+    final allTotal       = allGroups.fold<double>(0, (s, g) => s + g.totalPaid);
+
+    // Sum remaining balance from all grouped orders still on 'downpayment' status
+    // (i.e. order_total - totalPaid for every group whose latest payment is a downpayment)
+    double paymentToCollect = 0;
+    for (final g in allGroups) {
+      if (g.paymentType == 'downpayment' && g.orderTotal > 0) {
+        final remaining = g.orderTotal - g.totalPaid;
+        if (remaining > 0.01) paymentToCollect += remaining;
+      }
+    }
 
     final headerContent = Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _SummaryChip(
-                label: 'Period Total',
-                value: '₱${totalCollected.toStringAsFixed(2)}',
-                fg: _T.gold,
-                bg: const Color(0xFFFFFBEB),
-                border: const Color(0xFFFDE68A),
-              ),
-              const SizedBox(width: 8),
-              _SummaryChip(
-                label: 'Records',
-                value: '${filtered.length}',
-                fg: const Color(0xFF374151),
-                bg: _T.headerBg,
-                border: _T.divider,
-              ),
-              const SizedBox(width: 8),
-              _SummaryChip(
-                label: 'All-Time',
-                value: '₱${allTotal.toStringAsFixed(2)}',
-                fg: const Color(0xFF6D28D9),
-                bg: const Color(0xFFF5F3FF),
-                border: const Color(0xFFDDD6FE),
-              ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _SummaryChip(
+                  label: 'Period Total',
+                  value: '₱${totalCollected.toStringAsFixed(2)}',
+                  fg: _T.gold,
+                  bg: const Color(0xFFFFFBEB),
+                  border: const Color(0xFFFDE68A),
+                ),
+                const SizedBox(width: 8),
+                _SummaryChip(
+                  label: 'Records',
+                  value: '${filtered.length}',
+                  fg: const Color(0xFF374151),
+                  bg: _T.headerBg,
+                  border: _T.divider,
+                ),
+                const SizedBox(width: 8),
+                _SummaryChip(
+                  label: 'All-Time',
+                  value: '₱${allTotal.toStringAsFixed(2)}',
+                  fg: const Color(0xFF6D28D9),
+                  bg: const Color(0xFFF5F3FF),
+                  border: const Color(0xFFDDD6FE),
+                ),
+                const SizedBox(width: 8),
+                _SummaryChip(
+                  label: 'To Collect',
+                  value: '₱${paymentToCollect.toStringAsFixed(2)}',
+                  fg: const Color(0xFFDC2626),
+                  bg: const Color(0xFFFEF2F2),
+                  border: const Color(0xFFFECACA),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           _UnifiedFilterBar(
             activePeriod: _period,
             activeType: _typeFilter,
             onPeriodChanged: (p) => setState(() => _period = p),
             onTypeChanged: (t) => setState(() => _typeFilter = t),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           TextField(
             controller: _searchCtrl,
             onChanged: (v) {
@@ -471,42 +482,22 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
                   (_, i) {
-                final doc      = filtered[i];
-                final d        = doc.data() as Map<String, dynamic>;
-                final type     = d['payment_type']?.toString();
-                final method   = d['payment_method']?.toString();
-                final amount   = (d['sale_amount'] as num?)?.toDouble() ?? 0;
-                final ordTotal = (d['order_total'] as num?)?.toDouble() ?? 0;
-                final orderId  = d['order_id']?.toString() ?? '—';
-                final custName = d['customer_name']?.toString() ?? '—';
-                final custId   = d['customer_id']?.toString() ?? '';
-                final date     = _fmt(d['sale_date'] as Timestamp?);
-
+                final g = filtered[i];
                 return _SalesRecordCard(
-                  index: i,
-                  docId: doc.id,
-                  orderId: orderId,
-                  custName: custName,
-                  custId: custId,
-                  type: type,
-                  method: method,
-                  amount: amount,
-                  orderTotal: ordTotal,
-                  date: date,
-                  typeFg: _typeFg(type),
-                  typeBg: _typeBg(type),
-                  typeBorder: _typeBorder(type),
-                  typeLabel: _typeLabel(type),
-                  methodLabel: _methodLabel(method),
-                  onMarkBalance: type == 'downpayment'
-                      ? () => _markAsBalance(
-                    context,
-                    doc.id,
-                    orderId,
-                    ordTotal,
-                    amount,
-                  )
-                      : null,
+                  index:       i,
+                  orderId:     g.orderId,
+                  custName:    g.custName,
+                  custId:      g.custId,
+                  type:        g.paymentType,
+                  method:      g.paymentMethod,
+                  totalPaid:   g.totalPaid,
+                  orderTotal:  g.orderTotal,
+                  date:        _fmt(g.latestDate),
+                  typeFg:      _typeFg(g.paymentType),
+                  typeBg:      _typeBg(g.paymentType),
+                  typeBorder:  _typeBorder(g.paymentType),
+                  typeLabel:   _typeLabel(g.paymentType),
+                  methodLabel: _methodLabel(g.paymentMethod),
                 );
               },
               childCount: filtered.length,
@@ -523,23 +514,22 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
 // =============================================================================
 class _SalesRecordCard extends StatelessWidget {
   final int index;
-  final String docId, orderId, custName, custId;
+  final String orderId, custName, custId;
   final String? type, method;
-  final double amount, orderTotal;
+  final double totalPaid;   // cumulative total paid across all records
+  final double orderTotal;  // full order value
   final String date;
   final Color typeFg, typeBg, typeBorder;
   final String typeLabel, methodLabel;
-  final VoidCallback? onMarkBalance;
 
   const _SalesRecordCard({
     required this.index,
-    required this.docId,
     required this.orderId,
     required this.custName,
     required this.custId,
     required this.type,
     required this.method,
-    required this.amount,
+    required this.totalPaid,
     required this.orderTotal,
     required this.date,
     required this.typeFg,
@@ -547,171 +537,135 @@ class _SalesRecordCard extends StatelessWidget {
     required this.typeBorder,
     required this.typeLabel,
     required this.methodLabel,
-    this.onMarkBalance,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDownpayment = type == 'downpayment';
-    final remaining = orderTotal > 0 ? (orderTotal - amount) : 0.0;
+    final isFullyPaid = type == 'full';
+    final hasBalance  = orderTotal > 0 && !isFullyPaid;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDownpayment
-              ? const Color(0xFFBFDBFE)
-              : const Color(0xFFE5E7EB),
-          width: isDownpayment ? 1.5 : 1,
-        ),
+        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
         boxShadow: const [BoxShadow(color: Color(0x08000000), blurRadius: 6, offset: Offset(0, 2))],
       ),
-      child: Column(
-        children: [
-          // ── Pending balance banner (downpayment only) ─────────────────
-          if (isDownpayment)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: const BoxDecoration(
-                color: Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.schedule_rounded, size: 11, color: Color(0xFF1D4ED8)),
-                  const SizedBox(width: 5),
-                  const Text('AWAITING BALANCE PAYMENT',
-                      style: TextStyle(color: Color(0xFF1D4ED8), fontSize: 10,
-                          fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-                  const Spacer(),
-                  if (remaining > 0)
-                    Text('₱${remaining.toStringAsFixed(2)} remaining',
-                        style: const TextStyle(color: Color(0xFF1D4ED8), fontSize: 10,
-                            fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 22, height: 22,
-                      margin: const EdgeInsets.only(right: 10, top: 1),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3F4F6),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
-                      child: Center(
-                        child: Text('${index + 1}',
-                            style: const TextStyle(color: _T.textMuted, fontSize: 9, fontWeight: FontWeight.w700)),
-                      ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(orderId,
-                              style: const TextStyle(color: _T.textPrimary, fontSize: 13,
-                                  fontWeight: FontWeight.w700, letterSpacing: -0.2)),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              const Icon(Icons.calendar_today_outlined, size: 10, color: _T.textMuted),
-                              const SizedBox(width: 4),
-                              Text(date, style: const TextStyle(color: _T.textMuted, fontSize: 11)),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text('₱${amount.toStringAsFixed(2)}',
-                            style: const TextStyle(color: _T.gold, fontSize: 16,
-                                fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                        const SizedBox(height: 2),
-                        Text(methodLabel,
-                            style: const TextStyle(color: _T.textMuted, fontSize: 10, fontWeight: FontWeight.w500)),
-                        if (orderTotal > 0) ...[
-                          const SizedBox(height: 1),
-                          Text('of ₱${orderTotal.toStringAsFixed(2)}',
-                              style: const TextStyle(color: _T.textMuted, fontSize: 10)),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Container(height: 1, color: const Color(0xFFF3F4F6)),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    const Icon(Icons.person_outline_rounded, size: 13, color: _T.textMuted),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(custName,
-                              style: const TextStyle(color: _T.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
-                              overflow: TextOverflow.ellipsis),
-                          if (custId.isNotEmpty)
-                            Text('ID: $custId',
-                                style: const TextStyle(color: _T.textMuted, fontSize: 10, fontFamily: 'monospace')),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: typeBg,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: typeBorder, width: 1),
-                      ),
-                      child: Text(typeLabel,
-                          style: TextStyle(color: typeFg, fontSize: 11, fontWeight: FontWeight.w700)),
-                    ),
-                  ],
-                ),
-
-                // ── Mark as Balance button (downpayment only) ───────────
-                if (isDownpayment && onMarkBalance != null) ...[
-                  const SizedBox(height: 10),
-                  Container(height: 1, color: const Color(0xFFF3F4F6)),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: onMarkBalance,
-                      icon: const Icon(Icons.check_circle_outline_rounded, size: 14),
-                      label: const Text('Mark Balance as Paid'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFB45309),
-                        side: const BorderSide(color: Color(0xFFFDE68A), width: 1.5),
-                        backgroundColor: const Color(0xFFFFFBEB),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                      ),
-                    ),
+                Container(
+                  width: 22, height: 22,
+                  margin: const EdgeInsets.only(right: 10, top: 1),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F4F6),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
                   ),
-                ],
+                  child: Center(
+                    child: Text('${index + 1}',
+                        style: const TextStyle(color: _T.textMuted, fontSize: 9, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(orderId,
+                          style: const TextStyle(color: _T.textPrimary, fontSize: 13,
+                              fontWeight: FontWeight.w700, letterSpacing: -0.2)),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today_outlined, size: 10, color: _T.textMuted),
+                          const SizedBox(width: 4),
+                          Text(date, style: const TextStyle(color: _T.textMuted, fontSize: 11)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // Total paid (cumulative across all payments for this order)
+                    Text('₱${totalPaid.toStringAsFixed(2)}',
+                        style: const TextStyle(color: _T.gold, fontSize: 16,
+                            fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                    if (orderTotal > 0)
+                      Text('of ₱${orderTotal.toStringAsFixed(2)}',
+                          style: const TextStyle(color: _T.textMuted, fontSize: 10)),
+                    const SizedBox(height: 2),
+                    Text(methodLabel,
+                        style: const TextStyle(color: _T.textMuted, fontSize: 10, fontWeight: FontWeight.w500)),
+                  ],
+                ),
               ],
             ),
-          ),
-        ],
+            // Progress bar when partially paid
+            if (hasBalance && orderTotal > 0) ...[
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: (totalPaid / orderTotal).clamp(0.0, 1.0),
+                  minHeight: 5,
+                  backgroundColor: const Color(0xFFE5E7EB),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1D4ED8)),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Paid ₱${totalPaid.toStringAsFixed(2)}',
+                      style: const TextStyle(color: _T.textMuted, fontSize: 10)),
+                  Text('Remaining ₱${(orderTotal - totalPaid).clamp(0, double.infinity).toStringAsFixed(2)}',
+                      style: const TextStyle(color: Color(0xFFB45309), fontSize: 10, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ],
+            const SizedBox(height: 10),
+            Container(height: 1, color: const Color(0xFFF3F4F6)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.person_outline_rounded, size: 13, color: _T.textMuted),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(custName,
+                          style: const TextStyle(color: _T.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis),
+                      if (custId.isNotEmpty)
+                        Text('ID: $custId',
+                            style: const TextStyle(color: _T.textMuted, fontSize: 10, fontFamily: 'monospace')),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: typeBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: typeBorder, width: 1),
+                  ),
+                  child: Text(typeLabel,
+                      style: TextStyle(color: typeFg, fontSize: 11, fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -737,7 +691,6 @@ class _UnifiedFilterBar extends StatelessWidget {
     ('all',         'All Types',    Color(0xFF374151)),
     ('downpayment', 'Downpayment',  Color(0xFF1D4ED8)),
     ('balance',     'Balance',      Color(0xFFB45309)),
-    ('cash',        'Cash',         Color(0xFF15803D)),
     ('full',        'Full',         Color(0xFF6D28D9)),
   ];
 
@@ -901,27 +854,6 @@ class _SummaryChip extends StatelessWidget {
         Text(value, style: TextStyle(color: fg, fontSize: 15, fontWeight: FontWeight.w800)),
       ],
     ),
-  );
-}
-
-// ─ Dialog info row ────────────────────────────────────────────────────────────
-class _DialogRow extends StatelessWidget {
-  final String label, value;
-  final bool bold;
-  final Color? color;
-  const _DialogRow(this.label, this.value, {this.bold = false, this.color});
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Text(label,
-          style: TextStyle(fontSize: 12, color: color ?? const Color(0xFF6B7280),
-              fontWeight: bold ? FontWeight.w700 : FontWeight.w500)),
-      Text(value,
-          style: TextStyle(fontSize: 12, color: color ?? const Color(0xFF111827),
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
-    ],
   );
 }
 

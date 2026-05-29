@@ -274,7 +274,7 @@ class _AdminProfileState extends State<AdminProfile> {
         if (mounted) {
           setState(() {
             _emailError =
-                'Email not verified yet. Please check your inbox and click the link, then try again.';
+            'Email not verified yet. Please check your inbox and click the link, then try again.';
             _checkingVerification = false;
           });
         }
@@ -502,21 +502,21 @@ class _AdminProfileState extends State<AdminProfile> {
     }
   }
 
-  // ── Card decoration ──────────────────────────────────────────────────────────
-  BoxDecoration get _sectionCard => BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(16),
-    border: Border.all(color: const Color(0xFFE8E0D0), width: 1),
-    boxShadow: const [
-      BoxShadow(color: Color(0x0D000000), blurRadius: 12, offset: Offset(0, 2)),
-    ],
-  );
+  // ── Section divider ──────────────────────────────────────────────────────────
+  Widget _section(String title) => Row(children: [
+    Text(title,
+        style: const TextStyle(
+            color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+    const SizedBox(width: 12),
+    Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.2))),
+  ]);
+
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFD4A94D)),
+        child: CircularProgressIndicator(color: Colors.white38),
       );
     }
 
@@ -524,243 +524,228 @@ class _AdminProfileState extends State<AdminProfile> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Page title ──────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.only(bottom: 20),
-            child: Row(
+          const Text(
+            'Manage Account',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Personal Information ─────────────────────────────────────────
+          _section('Personal Information'),
+          const SizedBox(height: 12),
+          _field(label: 'Full Name', ctrl: _nameController),
+          const SizedBox(height: 10),
+
+          // ── Email (changeable) ───────────────────────────────────────────
+          if (!_editingEmail && !_verificationPending) ...[
+            Row(
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5EDD8),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.person_rounded,
-                    color: Color(0xFFD4A94D),
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Profile',
-                  style: TextStyle(
-                    color: Color(0xFF1A1A2E),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
+                Expanded(child: _field(label: 'Email', ctrl: _emailController, readOnly: true)),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => setState(() {
+                    _editingEmail = true;
+                    _emailError = null;
+                    _emailMessage = null;
+                    _emailPasswordCtrl.clear();
+                  }),
+                  icon: const Icon(Icons.edit_outlined, size: 14, color: AppTheme.gold),
+                  label: const Text('Change', style: TextStyle(color: AppTheme.gold, fontSize: 12)),
                 ),
               ],
             ),
-          ),
-
-          // ── Personal Information card ────────────────────────────────────
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: _sectionCard,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          ] else if (_editingEmail && !_verificationPending) ...[
+            _field(label: 'New Email Address', ctrl: _emailController),
+            const SizedBox(height: 10),
+            _pwField(
+              label: 'Current Password (to confirm)',
+              ctrl: _emailPasswordCtrl,
+              show: _showEmailPassword,
+              toggle: () => setState(() => _showEmailPassword = !_showEmailPassword),
+            ),
+            if (_emailError != null) ...[
+              const SizedBox(height: 8),
+              _banner(_emailError!, true),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                _SectionHeader(
-                  label: 'Personal Information',
-                  icon: Icons.person_outline_rounded,
+                TextButton(
+                  onPressed: _savingEmail
+                      ? null
+                      : () => setState(() {
+                    _editingEmail = false;
+                    _emailError = null;
+                    _emailMessage = null;
+                    _emailPasswordCtrl.clear();
+                    _showEmailPassword = false;
+                    _emailController.text = _originalEmail;
+                  }),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white54, fontSize: 13)),
                 ),
-                const SizedBox(height: 20),
-
-                // Full Name field + Save Changes button inline (responsive)
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final wide = constraints.maxWidth > 480;
-                    if (wide) {
-                      // Wide: input and button side by side
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: _buildField(
-                              label: 'Full Name',
-                              controller: _nameController,
-                              hint: 'Enter your full name',
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Spacer to align with input (label height ~18 + gap 8)
-                                const SizedBox(height: 26),
-                                _PrimaryButton(
-                                  label: 'Save Changes',
-                                  loading: _savingInfo,
-                                  onPressed: _savingInfo
-                                      ? null
-                                      : _savePersonalInfo,
-                                  icon: Icons.save_outlined,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    } else {
-                      // Narrow: stack vertically
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildField(
-                            label: 'Full Name',
-                            controller: _nameController,
-                            hint: 'Enter your full name',
-                          ),
-                          const SizedBox(height: 12),
-                          _PrimaryButton(
-                            label: 'Save Changes',
-                            loading: _savingInfo,
-                            onPressed: _savingInfo ? null : _savePersonalInfo,
-                            icon: Icons.save_outlined,
-                          ),
-                        ],
-                      );
-                    }
-                  },
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _savingEmail ? null : _changeEmail,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.gold,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  ),
+                  child: _savingEmail
+                      ? const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54))
+                      : const Text('Send Verification', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                 ),
-
-                // Feedback banners for name
-                if (_infoMessage != null) ...[
-                  const SizedBox(height: 12),
-                  _FeedbackBanner(message: _infoMessage!, isError: false),
-                ],
-                if (_infoError != null) ...[
-                  const SizedBox(height: 12),
-                  _FeedbackBanner(message: _infoError!, isError: true),
-                ],
-
-                const SizedBox(height: 24),
-                const Divider(color: Color(0xFFEEE8DC), thickness: 1),
-                const SizedBox(height: 20),
-
-                // Email sub-section
-                _buildEmailColumn(),
               ],
+            ),
+          ] else if (_verificationPending) ...[
+            _field(label: 'Email', ctrl: _emailController, readOnly: true),
+            const SizedBox(height: 10),
+            _banner(
+              'Verification email sent to $_pendingNewEmail.\nClick the link in your inbox, then tap "I\'ve Verified" below.',
+              false,
+            ),
+            if (_emailError != null) ...[
+              const SizedBox(height: 8),
+              _banner(_emailError!, true),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const SizedBox(width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.gold)),
+                const SizedBox(width: 10),
+                const Text('Waiting for verification…',
+                    style: TextStyle(color: Colors.white54, fontSize: 12)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _checkingVerification
+                      ? null
+                      : () => setState(() {
+                    _verificationPending = false;
+                    _pendingNewEmail = '';
+                    _pendingPassword = '';
+                    _emailError = null;
+                    _emailController.text = _originalEmail;
+                  }),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _checkingVerification ? null : _checkVerification,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.gold,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  ),
+                  child: _checkingVerification
+                      ? const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54))
+                      : const Text("I've Verified", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                ),
+              ],
+            ),
+          ],
+
+          if (_emailMessage != null) ...[
+            const SizedBox(height: 8),
+            _banner(_emailMessage!, false),
+          ],
+
+          if (_infoMessage != null) ...[
+            const SizedBox(height: 8),
+            _banner(_infoMessage!, false),
+          ],
+          if (_infoError != null) ...[
+            const SizedBox(height: 8),
+            _banner(_infoError!, true),
+          ],
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton(
+              onPressed: _savingInfo ? null : _savePersonalInfo,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.gold,
+                foregroundColor: Colors.black,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              ),
+              child: _savingInfo
+                  ? const SizedBox(
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54))
+                  : const Text('Save Name', style: TextStyle(fontWeight: FontWeight.w600)),
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
 
-          // ── Change Password card ─────────────────────────────────────────
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: _sectionCard,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _SectionHeader(
-                  label: 'Change Password',
-                  icon: Icons.lock_outline_rounded,
-                ),
-                const SizedBox(height: 20),
-
-                // Current Password
-                _buildPasswordField(
-                  label: 'Current Password',
-                  controller: _currentPasswordController,
-                  hint: 'Enter your current password',
-                  visible: _showCurrent,
-                  onToggle: () => setState(() => _showCurrent = !_showCurrent),
-                ),
-                const SizedBox(height: 16),
-
-                // New Password + Confirm — responsive row/column
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final wide = constraints.maxWidth > 480;
-                    if (wide) {
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _buildPasswordField(
-                              label: 'New Password',
-                              controller: _newPasswordController,
-                              hint: 'Enter new password',
-                              visible: _showNew,
-                              onToggle: () =>
-                                  setState(() => _showNew = !_showNew),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildPasswordField(
-                              label: 'Re-Enter Password',
-                              controller: _confirmPasswordController,
-                              hint: 'Re-enter new password',
-                              visible: _showConfirm,
-                              onToggle: () =>
-                                  setState(() => _showConfirm = !_showConfirm),
-                            ),
-                          ),
-                        ],
-                      );
-                    } else {
-                      return Column(
-                        children: [
-                          _buildPasswordField(
-                            label: 'New Password',
-                            controller: _newPasswordController,
-                            hint: 'Enter new password',
-                            visible: _showNew,
-                            onToggle: () =>
-                                setState(() => _showNew = !_showNew),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildPasswordField(
-                            label: 'Re-Enter Password',
-                            controller: _confirmPasswordController,
-                            hint: 'Re-enter new password',
-                            visible: _showConfirm,
-                            onToggle: () =>
-                                setState(() => _showConfirm = !_showConfirm),
-                          ),
-                        ],
-                      );
-                    }
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // Password requirements hint
-                _PasswordRequirementsHint(),
-
-                // Feedback banners for password
-                if (_pwMessage != null) ...[
-                  const SizedBox(height: 14),
-                  _FeedbackBanner(message: _pwMessage!, isError: false),
-                ],
-                if (_pwError != null) ...[
-                  const SizedBox(height: 14),
-                  _FeedbackBanner(message: _pwError!, isError: true),
-                ],
-
-                const SizedBox(height: 20),
-
-                // Change Password button — right-aligned
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: _PrimaryButton(
-                    label: 'Change Password',
-                    loading: _savingPassword,
-                    onPressed: _savingPassword ? null : _changePassword,
-                    icon: Icons.lock_reset_outlined,
-                  ),
-                ),
-              ],
+          // ── Change Password ──────────────────────────────────────────────
+          _section('Change Password'),
+          const SizedBox(height: 12),
+          _pwField(
+            label: 'Current Password',
+            ctrl: _currentPasswordController,
+            show: _showCurrent,
+            toggle: () => setState(() => _showCurrent = !_showCurrent),
+          ),
+          const SizedBox(height: 10),
+          _pwField(
+            label: 'New Password',
+            ctrl: _newPasswordController,
+            show: _showNew,
+            toggle: () => setState(() => _showNew = !_showNew),
+          ),
+          const SizedBox(height: 10),
+          _pwField(
+            label: 'Confirm New Password',
+            ctrl: _confirmPasswordController,
+            show: _showConfirm,
+            toggle: () => setState(() => _showConfirm = !_showConfirm),
+          ),
+          const SizedBox(height: 10),
+          _passwordRequirementsHint(),
+          if (_pwMessage != null) ...[
+            const SizedBox(height: 8),
+            _banner(_pwMessage!, false),
+          ],
+          if (_pwError != null) ...[
+            const SizedBox(height: 8),
+            _banner(_pwError!, true),
+          ],
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton(
+              onPressed: _savingPassword ? null : _changePassword,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.gold,
+                foregroundColor: Colors.black,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              ),
+              child: _savingPassword
+                  ? const SizedBox(
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54))
+                  : const Text('Change Password', style: TextStyle(fontWeight: FontWeight.w600)),
             ),
           ),
         ],
@@ -768,588 +753,125 @@ class _AdminProfileState extends State<AdminProfile> {
     );
   }
 
-  // ── Email sub-section ────────────────────────────────────────────────────────
-  Widget _buildEmailColumn() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionHeader(label: 'Email Address', icon: Icons.email_outlined),
-        const SizedBox(height: 14),
+  // ── Input helpers ─────────────────────────────────────────────────────────────
 
-        // Email display field
-        _buildField(
-          label: 'Email',
-          controller: _emailController,
-          hint: 'Enter new email address',
-          readOnly: !_editingEmail || _verificationPending,
-        ),
-        const SizedBox(height: 8),
-
-        // ── Idle: show "Change Email" link ──────────────────────────
-        if (!_editingEmail && !_verificationPending)
-          GestureDetector(
-            onTap: () => setState(() {
-              _editingEmail = true;
-              _emailError = null;
-              _emailMessage = null;
-            }),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5EDD8),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE8D9B0)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.edit_outlined, size: 13, color: Color(0xFFB8882A)),
-                  SizedBox(width: 6),
-                  Text(
-                    'Click to Edit',
-                    style: TextStyle(
-                      color: Color(0xFFB8882A),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        // ── Editing: show password confirm + Send Verification / Cancel ──
-        if (_editingEmail && !_verificationPending) ...[
-          const SizedBox(height: 14),
-          _buildPasswordField(
-            label: 'Current Password',
-            controller: _emailPasswordCtrl,
-            hint: 'Enter your password to confirm',
-            visible: _showEmailPassword,
-            onToggle: () =>
-                setState(() => _showEmailPassword = !_showEmailPassword),
-          ),
-          if (_emailError != null) ...[
-            const SizedBox(height: 10),
-            _FeedbackBanner(message: _emailError!, isError: true),
-          ],
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _PrimaryButton(
-                  label: 'Send Verification',
-                  loading: _savingEmail,
-                  onPressed: _savingEmail ? null : _changeEmail,
-                  icon: Icons.send_outlined,
-                ),
-              ),
-              const SizedBox(width: 10),
-              _SecondaryButton(
-                label: 'Cancel',
-                onPressed: _savingEmail
-                    ? null
-                    : () => setState(() {
-                        _editingEmail = false;
-                        _emailError = null;
-                        _emailMessage = null;
-                        _emailPasswordCtrl.clear();
-                        _showEmailPassword = false;
-                        _emailController.text = _originalEmail;
-                      }),
-              ),
-            ],
-          ),
-        ],
-
-        // ── Pending verification ──────────────────────────────────────
-        if (_verificationPending) ...[
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFFBEB),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFD4A94D), width: 1),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD4A94D).withOpacity(0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.mark_email_unread_outlined,
-                        color: Color(0xFF92400E),
-                        size: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Verification Email Sent',
-                            style: TextStyle(
-                              color: Color(0xFF78350F),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'A verification link was sent to $_pendingNewEmail. Click the link in your inbox, then tap "I\'ve Verified" below.',
-                            style: const TextStyle(
-                              color: Color(0xFF92400E),
-                              fontSize: 12,
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (_emailError != null) ...[
-                  const SizedBox(height: 10),
-                  _FeedbackBanner(message: _emailError!, isError: true),
-                ],
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _PrimaryButton(
-                        label: _checkingVerification
-                            ? 'Checking...'
-                            : "I've Verified",
-                        loading: _checkingVerification,
-                        onPressed: _checkingVerification
-                            ? null
-                            : _checkVerification,
-                        icon: Icons.verified_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    _SecondaryButton(
-                      label: 'Cancel',
-                      onPressed: _checkingVerification
-                          ? null
-                          : () => setState(() {
-                              _verificationPending = false;
-                              _pendingNewEmail = '';
-                              _pendingPassword = '';
-                              _emailError = null;
-                              _emailController.text = _originalEmail;
-                            }),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-
-        // ── Success banner ──────────────────────────────────────────────
-        if (_emailMessage != null) ...[
-          const SizedBox(height: 10),
-          _FeedbackBanner(message: _emailMessage!, isError: false),
-        ],
-      ],
-    );
-  }
-
-  // ── Text field ───────────────────────────────────────────────────────────────
-  Widget _buildField({
+  Widget _field({
     required String label,
-    required TextEditingController controller,
-    required String hint,
+    required TextEditingController ctrl,
     bool readOnly = false,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF4A4A6A),
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
-          ),
+  }) =>
+      TextField(
+        controller: ctrl,
+        readOnly: readOnly,
+        style: TextStyle(
+          color: readOnly ? Colors.white54 : Colors.white,
+          fontSize: 14,
         ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          readOnly: readOnly,
-          style: TextStyle(
-            color: readOnly ? const Color(0xFF7A7A9A) : const Color(0xFF1A1A2E),
-            fontSize: 14,
-          ),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(
-              color: Color(0xFFAAAAAC),
-              fontSize: 13.5,
-            ),
-            filled: true,
-            fillColor: readOnly
-                ? const Color(0xFFF8F6F2)
-                : const Color(0xFFFDFBF8),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 14,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFDED8CC)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFDED8CC)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: Color(0xFFD4A94D),
-                width: 1.8,
-              ),
-            ),
-            disabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFEEEAE2)),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+        decoration: AppTheme.inputDecoration(label),
+      );
 
-  // ── Password field ───────────────────────────────────────────────────────────
-  Widget _buildPasswordField({
+  Widget _pwField({
     required String label,
-    required TextEditingController controller,
-    required String hint,
-    required bool visible,
-    required VoidCallback onToggle,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
+    required TextEditingController ctrl,
+    required bool show,
+    required VoidCallback toggle,
+  }) =>
+      TextField(
+        controller: ctrl,
+        obscureText: !show,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: AppTheme.inputDecoration(
           label,
-          style: const TextStyle(
-            color: Color(0xFF4A4A6A),
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
+          icon: Icons.lock_outline,
+          suffixIcon: IconButton(
+            icon: Icon(
+              show ? Icons.visibility : Icons.visibility_off,
+              color: Colors.white54,
+              size: 18,
+            ),
+            onPressed: toggle,
           ),
         ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          obscureText: !visible,
-          style: const TextStyle(color: Color(0xFF1A1A2E), fontSize: 14),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(
-              color: Color(0xFFAAAAAC),
-              fontSize: 13.5,
-            ),
-            filled: true,
-            fillColor: const Color(0xFFFDFBF8),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 14,
-            ),
-            suffixIcon: IconButton(
-              onPressed: onToggle,
-              icon: Icon(
-                visible
-                    ? Icons.visibility_rounded
-                    : Icons.visibility_off_rounded,
-                color: const Color(0xFF9A9AB0),
-                size: 18,
-              ),
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFDED8CC)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFDED8CC)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: Color(0xFFD4A94D),
-                width: 1.8,
-              ),
-            ),
+      );
+
+  Widget _banner(String msg, bool isError) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: BoxDecoration(
+      color: (isError ? Colors.red : Colors.green).withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(
+        color: (isError ? Colors.red : Colors.green).withValues(alpha: 0.35),
+      ),
+    ),
+    child: Row(children: [
+      Icon(
+        isError ? Icons.error_outline : Icons.check_circle_outline,
+        color: isError ? Colors.redAccent : Colors.greenAccent,
+        size: 15,
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          msg,
+          style: TextStyle(
+            color: isError ? Colors.redAccent : Colors.greenAccent,
+            fontSize: 12,
+            height: 1.4,
           ),
         ),
-      ],
-    );
-  }
-}
+      ),
+    ]),
+  );
 
-// ── Password requirements hint ─────────────────────────────────────────────────
-class _PasswordRequirementsHint extends StatelessWidget {
-  const _PasswordRequirementsHint();
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _passwordRequirementsHint() {
     const reqs = [
       'At least 8 characters',
       'Uppercase and lowercase letters (A–Z, a–z)',
       'At least one number (0–9)',
       'At least one special character (!@#\$%^&* …)',
     ];
-
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F6F2),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8E0D0)),
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
-              Icon(
-                Icons.info_outline_rounded,
-                size: 13,
-                color: Color(0xFF7A7A9A),
-              ),
-              SizedBox(width: 6),
-              Text(
-                'Password requirements',
+          const Row(children: [
+            Icon(Icons.info_outline, size: 13, color: Colors.white38),
+            SizedBox(width: 6),
+            Text('Password requirements',
                 style: TextStyle(
-                  color: Color(0xFF4A4A6A),
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
+                    color: Colors.white54,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 6),
+          ...reqs.map((req) => Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Row(children: [
+              Container(
+                width: 4,
+                height: 4,
+                margin: const EdgeInsets.only(right: 8, left: 2),
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppTheme.gold,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ...reqs.map(
-            (req) => Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 4,
-                    height: 4,
-                    margin: const EdgeInsets.only(right: 8, left: 2),
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Color(0xFFD4A94D),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      req,
-                      style: const TextStyle(
-                        color: Color(0xFF6A6A8A),
-                        fontSize: 11.5,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Primary action button ──────────────────────────────────────────────────────
-class _PrimaryButton extends StatelessWidget {
-  final String label;
-  final bool loading;
-  final VoidCallback? onPressed;
-  final IconData? icon;
-
-  const _PrimaryButton({
-    required this.label,
-    required this.loading,
-    required this.onPressed,
-    this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 44,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFD4A94D),
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: const Color(0xFFE8D09A),
-          elevation: 0,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-        ),
-        child: loading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white70,
-                ),
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (icon != null) ...[
-                    Icon(icon, size: 15, color: Colors.white),
-                    const SizedBox(width: 6),
-                  ],
-                  Text(
-                    label,
+              Expanded(
+                child: Text(req,
                     style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
+                        color: Colors.white38,
+                        fontSize: 11.5,
+                        height: 1.4)),
               ),
-      ),
-    );
-  }
-}
-
-// ── Secondary (outline) button ─────────────────────────────────────────────────
-class _SecondaryButton extends StatelessWidget {
-  final String label;
-  final VoidCallback? onPressed;
-
-  const _SecondaryButton({required this.label, this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 44,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF4A4A6A),
-          side: const BorderSide(color: Color(0xFFCCC8BE)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Reusable Widgets ──────────────────────────────────────────────────────────
-
-class _SectionHeader extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  const _SectionHeader({required this.label, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF5EDD8),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: const Color(0xFFD4A94D), size: 15),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF1A1A2E),
-            fontSize: 14.5,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.2,
-          ),
-        ),
-        const SizedBox(width: 14),
-        const Expanded(child: Divider(color: Color(0xFFEEE8DC), thickness: 1)),
-      ],
-    );
-  }
-}
-
-class _FeedbackBanner extends StatelessWidget {
-  final String message;
-  final bool isError;
-  const _FeedbackBanner({required this.message, required this.isError});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isError ? const Color(0xFFDC2626) : const Color(0xFF166534);
-    final bgColor = isError ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4);
-    final borderColor = isError
-        ? const Color(0xFFFECACA)
-        : const Color(0xFFBBF7D0);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            isError
-                ? Icons.error_outline_rounded
-                : Icons.check_circle_outline_rounded,
-            color: color,
-            size: 16,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                color: color,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w500,
-                height: 1.4,
-              ),
-            ),
-          ),
+            ]),
+          )),
         ],
       ),
     );

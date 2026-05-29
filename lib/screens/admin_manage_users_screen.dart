@@ -4,72 +4,6 @@ import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import 'app_theme.dart';
 
-// ── Liquid Glass Design Tokens (mirrored from AdminInventoryScreen) ───────────
-class _Glass {
-  static const Color surface = Color(0xEEFFFFFF);
-  static const Color surfaceMid = Color(0xCCFFFFFF);
-  static const Color surfaceThin = Color(0x99FFFFFF);
-  static const Color surfaceRow = Color(0xBBFFFFFF);
-
-  static const Color borderTop = Color(0xEEFFFFFF);
-  static const Color borderMid = Color(0x55FFFFFF);
-  static const Color borderDim = Color(0x28FFFFFF);
-
-  static const Color textPrimary = Color(0xFF111827);
-  static const Color textSecondary = Color(0xBB111827);
-  static const Color textMuted = Color(0x77111827);
-
-  static const BoxShadow elevatedShadow = BoxShadow(
-    color: Color(0x1A000000),
-    blurRadius: 20,
-    spreadRadius: -2,
-    offset: Offset(0, 6),
-  );
-  static const BoxShadow rowShadow = BoxShadow(
-    color: Color(0x0D000000),
-    blurRadius: 8,
-    spreadRadius: 0,
-    offset: Offset(0, 2),
-  );
-
-  // Role palette
-  static const Color adminFg = Color(0xFF5B21B6);
-  static const Color adminBg = Color(0x157C3AED);
-  static const Color adminBorder = Color(0x457C3AED);
-  static const Color empFg = Color(0xFF0F766E);
-  static const Color empBg = Color(0x150D9488);
-  static const Color empBorder = Color(0x450D9488);
-  static const Color cusFg = Color(0xFF1D4ED8);
-  static const Color cusBg = Color(0x151D4ED8);
-  static const Color cusBorder = Color(0x451D4ED8);
-
-  static BoxDecoration card({double radius = 14, bool elevated = false}) =>
-      BoxDecoration(
-        color: surfaceMid,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: borderMid, width: 0.8),
-        boxShadow: [elevated ? elevatedShadow : rowShadow],
-      );
-
-  static BoxDecoration pill({Color? tint}) => BoxDecoration(
-    color: tint != null ? tint.withValues(alpha: 0.12) : surfaceThin,
-    borderRadius: BorderRadius.circular(99),
-    border: Border.all(
-      color: tint != null ? tint.withValues(alpha: 0.40) : borderMid,
-      width: 0.8,
-    ),
-    boxShadow: [rowShadow],
-  );
-
-  // Dialog card
-  static BoxDecoration dialog() => BoxDecoration(
-    color: surface,
-    borderRadius: BorderRadius.circular(20),
-    border: Border.all(color: borderMid, width: 0.8),
-    boxShadow: const [elevatedShadow],
-  );
-}
-
 // =============================================================================
 class ManageUsersScreen extends StatefulWidget {
   const ManageUsersScreen({super.key});
@@ -110,10 +44,10 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       final q = _searchQuery.toLowerCase();
       final matchesSearch =
           q.isEmpty ||
-          name.contains(q) ||
-          email.contains(q) ||
-          cusId.contains(q) ||
-          empId.contains(q);
+              name.contains(q) ||
+              email.contains(q) ||
+              cusId.contains(q) ||
+              empId.contains(q);
       final matchesRole =
           _roleFilter == 'All' || role == _roleFilter.toLowerCase();
       return matchesSearch && matchesRole;
@@ -209,7 +143,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withValues(alpha: 0.25),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -217,16 +151,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
         content: Container(
           width: 400,
-          decoration: _Glass.dialog(),
+          decoration: _darkDialog(),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _DialogHeader(
+              _DarkDialogHeader(
                 icon: Icons.check_circle_outline,
-                iconBg: const Color(0xFF2E7D32),
+                iconColor: Colors.greenAccent,
                 title: '$role Account Created',
               ),
-              Divider(height: 1, color: _Glass.borderMid),
+              Divider(height: 1, color: Colors.white.withValues(alpha: 0.12)),
               Padding(
                 padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
                 child: Column(
@@ -235,19 +169,19 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     const Text(
                       'Hand these credentials to the new user.\nThey will be required to change their password on first login.',
                       style: TextStyle(
-                        color: _Glass.textSecondary,
+                        color: Colors.white60,
                         fontSize: 12,
                         height: 1.5,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _CredentialRow(
+                    _DarkCredentialRow(
                       label: idLabel,
                       value: idValue,
                       onCopy: () => _snack('$idLabel copied'),
                     ),
                     const SizedBox(height: 10),
-                    _CredentialRow(
+                    _DarkCredentialRow(
                       label: 'Temp Password',
                       value: password,
                       onCopy: () => _snack('Password copied'),
@@ -260,23 +194,18 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: AppTheme.gold.withValues(alpha: 0.30),
-                          width: 0.8,
                         ),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: AppTheme.gold,
-                            size: 13,
-                          ),
+                          Icon(Icons.info_outline, color: AppTheme.gold, size: 13),
                           const SizedBox(width: 8),
                           const Expanded(
                             child: Text(
                               'The password is also stored and can be retrieved from the user\'s record if needed.',
                               style: TextStyle(
-                                color: _Glass.textSecondary,
+                                color: Colors.white54,
                                 fontSize: 11,
                                 height: 1.4,
                               ),
@@ -288,10 +217,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     const SizedBox(height: 18),
                     Align(
                       alignment: Alignment.centerRight,
-                      child: _GlassButton(
-                        label: 'Done',
-                        isPrimary: true,
+                      child: ElevatedButton(
                         onPressed: () => Navigator.pop(ctx),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.gold,
+                          foregroundColor: Colors.black,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                        ),
+                        child: const Text('Done', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                       ),
                     ),
                   ],
@@ -304,15 +239,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     );
   }
 
-  Future<void> _showTempPassword(
-    String uid,
-    String role,
-    String displayId,
-  ) async {
-    final doc = await FirebaseFirestore.instance
-        .collection('User')
-        .doc(uid)
-        .get();
+  Future<void> _showTempPassword(String uid, String role, String displayId) async {
+    final doc = await FirebaseFirestore.instance.collection('User').doc(uid).get();
     final tempPw = doc.data()?['temp_password'] as String?;
     if (!mounted) return;
     if (tempPw == null || tempPw.isEmpty) {
@@ -321,7 +249,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
     showDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.25),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -329,27 +257,27 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
         content: Container(
           width: 380,
-          decoration: _Glass.dialog(),
+          decoration: _darkDialog(),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _DialogHeader(
+              _DarkDialogHeader(
                 icon: Icons.key_rounded,
-                iconBg: AppTheme.gold,
+                iconColor: AppTheme.gold,
                 title: 'Temporary Password',
               ),
-              Divider(height: 1, color: _Glass.borderMid),
+              Divider(height: 1, color: Colors.white.withValues(alpha: 0.12)),
               Padding(
                 padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
                 child: Column(
                   children: [
-                    _CredentialRow(
+                    _DarkCredentialRow(
                       label: 'ID',
                       value: displayId,
                       onCopy: () => _snack('ID copied'),
                     ),
                     const SizedBox(height: 10),
-                    _CredentialRow(
+                    _DarkCredentialRow(
                       label: 'Temp Password',
                       value: tempPw,
                       onCopy: () => _snack('Password copied'),
@@ -357,10 +285,15 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     const SizedBox(height: 16),
                     Align(
                       alignment: Alignment.centerRight,
-                      child: _GlassButton(
-                        label: 'Close',
-                        isPrimary: false,
+                      child: OutlinedButton(
                         onPressed: () => Navigator.pop(ctx),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        ),
+                        child: const Text('Close', style: TextStyle(fontSize: 13)),
                       ),
                     ),
                   ],
@@ -374,39 +307,30 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }
 
   Future<void> _confirmDeleteUser(String uid, String name) async {
-    final confirmed = await _showGlassConfirm(
+    final confirmed = await _showDarkConfirm(
       icon: Icons.warning_amber_rounded,
-      iconBg: const Color(0xFFC62828),
+      iconColor: Colors.redAccent,
       title: 'Delete User',
-      body:
-          'Are you sure you want to permanently delete "$name"?\n\nThis will remove their account, profile, and all associated data. This cannot be undone.',
+      body: 'Are you sure you want to permanently delete "$name"?\n\nThis will remove their account, profile, and all associated data. This cannot be undone.',
       confirmLabel: 'Delete',
-      confirmColor: const Color(0xFFC62828),
+      confirmColor: Colors.red.shade700,
     );
     if (confirmed == true) {
       final err = await _authService.deleteUser(uid);
       if (mounted)
         _snack(
-          err == 'success'
-              ? 'User deleted.'
-              : (err ?? 'Failed to delete user.'),
+          err == 'success' ? 'User deleted.' : (err ?? 'Failed to delete user.'),
           isError: err != 'success',
         );
     }
   }
 
-  Future<void> _confirmToggleDisable(
-    String uid,
-    String name,
-    bool currentlyDisabled,
-  ) async {
+  Future<void> _confirmToggleDisable(String uid, String name, bool currentlyDisabled) async {
     final action = currentlyDisabled ? 'enable' : 'disable';
-    final actionColor = currentlyDisabled
-        ? const Color(0xFF2E7D32)
-        : const Color(0xFFF57F17);
-    final confirmed = await _showGlassConfirm(
+    final actionColor = currentlyDisabled ? Colors.green.shade600 : Colors.orange.shade700;
+    final confirmed = await _showDarkConfirm(
       icon: currentlyDisabled ? Icons.lock_open_rounded : Icons.block_rounded,
-      iconBg: actionColor,
+      iconColor: actionColor,
       title: '${action[0].toUpperCase()}${action.substring(1)} User',
       body: 'Are you sure you want to $action "$name"?',
       confirmLabel: '${action[0].toUpperCase()}${action.substring(1)}',
@@ -424,9 +348,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
   }
 
-  Future<bool?> _showGlassConfirm({
+  Future<bool?> _showDarkConfirm({
     required IconData icon,
-    required Color iconBg,
+    required Color iconColor,
     required String title,
     required String body,
     required String confirmLabel,
@@ -434,7 +358,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }) {
     return showDialog<bool>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.25),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -442,12 +366,12 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
         content: Container(
           width: 380,
-          decoration: _Glass.dialog(),
+          decoration: _darkDialog(),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _DialogHeader(icon: icon, iconBg: iconBg, title: title),
-              Divider(height: 1, color: _Glass.borderMid),
+              _DarkDialogHeader(icon: icon, iconColor: iconColor, title: title),
+              Divider(height: 1, color: Colors.white.withValues(alpha: 0.12)),
               Padding(
                 padding: const EdgeInsets.fromLTRB(22, 16, 22, 20),
                 child: Column(
@@ -456,7 +380,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     Text(
                       body,
                       style: const TextStyle(
-                        color: _Glass.textSecondary,
+                        color: Colors.white60,
                         fontSize: 13,
                         height: 1.5,
                       ),
@@ -465,17 +389,27 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        _GlassButton(
-                          label: 'Cancel',
-                          isPrimary: false,
+                        OutlinedButton(
                           onPressed: () => Navigator.pop(ctx, false),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white70,
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                          ),
+                          child: const Text('Cancel', style: TextStyle(fontSize: 13)),
                         ),
                         const SizedBox(width: 8),
-                        _GlassButton(
-                          label: confirmLabel,
-                          isPrimary: true,
-                          tint: confirmColor,
+                        ElevatedButton(
                           onPressed: () => Navigator.pop(ctx, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: confirmColor,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                          ),
+                          child: Text(confirmLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                         ),
                       ],
                     ),
@@ -491,57 +425,49 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
+  BoxDecoration _darkDialog() => BoxDecoration(
+    color: const Color(0xFF1a1a2e),
+    borderRadius: BorderRadius.circular(20),
+    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, 8))],
+  );
+
   String _displayId(Map<String, dynamic> data) {
-    if ((data['admin_id'] as String? ?? '').isNotEmpty)
-      return data['admin_id'] as String;
-    if ((data['customer_id'] as String? ?? '').isNotEmpty)
-      return data['customer_id'] as String;
-    if ((data['employee_id'] as String? ?? '').isNotEmpty)
-      return data['employee_id'] as String;
+    if ((data['admin_id'] as String? ?? '').isNotEmpty) return data['admin_id'] as String;
+    if ((data['customer_id'] as String? ?? '').isNotEmpty) return data['customer_id'] as String;
+    if ((data['employee_id'] as String? ?? '').isNotEmpty) return data['employee_id'] as String;
     return '—';
   }
 
   Color _roleFg(String role) {
     switch (role) {
-      case 'admin':
-        return _Glass.adminFg;
-      case 'employee':
-        return _Glass.empFg;
-      default:
-        return _Glass.cusFg;
+      case 'admin': return const Color(0xFFCDB4FF);
+      case 'employee': return const Color(0xFF6EE7B7);
+      default: return const Color(0xFF93C5FD);
     }
   }
 
   Color _roleBg(String role) {
     switch (role) {
-      case 'admin':
-        return _Glass.adminBg;
-      case 'employee':
-        return _Glass.empBg;
-      default:
-        return _Glass.cusBg;
+      case 'admin': return const Color(0x207C3AED);
+      case 'employee': return const Color(0x200D9488);
+      default: return const Color(0x201D4ED8);
     }
   }
 
   Color _roleBorder(String role) {
     switch (role) {
-      case 'admin':
-        return _Glass.adminBorder;
-      case 'employee':
-        return _Glass.empBorder;
-      default:
-        return _Glass.cusBorder;
+      case 'admin': return const Color(0x507C3AED);
+      case 'employee': return const Color(0x500D9488);
+      default: return const Color(0x501D4ED8);
     }
   }
 
   IconData _roleIcon(String role) {
     switch (role) {
-      case 'admin':
-        return Icons.admin_panel_settings_rounded;
-      case 'employee':
-        return Icons.badge_rounded;
-      default:
-        return Icons.person_rounded;
+      case 'admin': return Icons.admin_panel_settings_rounded;
+      case 'employee': return Icons.badge_rounded;
+      default: return Icons.person_rounded;
     }
   }
 
@@ -556,20 +482,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isError ? Icons.error_outline : Icons.check_circle_outline,
-              color: Colors.white,
-              size: 15,
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(msg)),
-          ],
-        ),
-        backgroundColor: isError
-            ? const Color(0xCCC62828)
-            : const Color(0xCC2E7D32),
+        content: Row(children: [
+          Icon(
+            isError ? Icons.error_outline : Icons.check_circle_outline,
+            color: Colors.white,
+            size: 15,
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(msg)),
+        ]),
+        backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -594,19 +516,15 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             stream: FirebaseFirestore.instance.collection('User').snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting)
-                return Center(
-                  child: CircularProgressIndicator(
-                    color: _Glass.textMuted,
-                    strokeWidth: 2,
-                  ),
+                return const Center(
+                  child: CircularProgressIndicator(color: Colors.white38, strokeWidth: 2),
                 );
               if (snapshot.hasError)
                 return _emptyState('Error: ${snapshot.error}');
               final allDocs = snapshot.data?.docs ?? [];
               final filtered = _filtered(allDocs);
               if (allDocs.isEmpty) return _emptyState('No users found.');
-              if (filtered.isEmpty)
-                return _emptyState('No users match your search.');
+              if (filtered.isEmpty) return _emptyState('No users match your search.');
               return _buildTable(filtered, allDocs.length);
             },
           ),
@@ -617,22 +535,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
   Widget _buildHeader() => Row(
     children: [
-      Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: _Glass.surfaceThin,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: _Glass.borderMid, width: 0.8),
-          boxShadow: const [_Glass.rowShadow],
-        ),
-        child: const Icon(
-          Icons.people_alt_rounded,
-          size: 16,
-          color: _Glass.textSecondary,
-        ),
-      ),
-      const SizedBox(width: 10),
       const Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -640,29 +542,25 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             Text(
               'Manage Users',
               style: TextStyle(
-                color: _Glass.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.4,
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
               ),
             ),
             Text(
               'User accounts & access control',
-              style: TextStyle(color: _Glass.textMuted, fontSize: 10.5),
+              style: TextStyle(color: Colors.white38, fontSize: 11),
             ),
           ],
         ),
       ),
       if (_isCreating)
-        Padding(
-          padding: const EdgeInsets.only(right: 10),
+        const Padding(
+          padding: EdgeInsets.only(right: 10),
           child: SizedBox(
             width: 16,
             height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: _Glass.textMuted,
-            ),
+            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white38),
           ),
         ),
       _CreateButton(
@@ -680,41 +578,30 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         child: TextField(
           controller: _searchController,
           onChanged: (v) => setState(() => _searchQuery = v),
-          style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+          style: const TextStyle(color: Colors.white, fontSize: 13),
           decoration: InputDecoration(
             hintText: 'Search by name, email or ID…',
-            hintStyle: const TextStyle(color: _Glass.textMuted, fontSize: 12.5),
-            prefixIcon: const Icon(
-              Icons.search_rounded,
-              color: _Glass.textMuted,
-              size: 17,
-            ),
+            hintStyle: const TextStyle(color: Colors.white38, fontSize: 12.5),
+            prefixIcon: const Icon(Icons.search_rounded, color: Colors.white38, size: 17),
             suffixIcon: _searchQuery.isNotEmpty
                 ? IconButton(
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color: _Glass.textMuted,
-                      size: 15,
-                    ),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() => _searchQuery = '');
-                    },
-                  )
+              icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 15),
+              onPressed: () {
+                _searchController.clear();
+                setState(() => _searchQuery = '');
+              },
+            )
                 : null,
             contentPadding: const EdgeInsets.symmetric(vertical: 0),
             filled: true,
-            fillColor: _Glass.surfaceThin,
+            fillColor: Colors.white.withValues(alpha: 0.07),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: _Glass.borderMid, width: 0.8),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: AppTheme.gold.withValues(alpha: 0.7),
-                width: 1.2,
-              ),
+              borderSide: BorderSide(color: AppTheme.gold.withValues(alpha: 0.7), width: 1.2),
             ),
           ),
         ),
@@ -732,7 +619,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           children: [searchField, const SizedBox(height: 8), dropdown],
         );
       }
-
       return Row(
         children: [
           Expanded(child: searchField),
@@ -756,27 +642,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 children: [
                   Text(
                     '${docs.length} user${docs.length == 1 ? '' : 's'}',
-                    style: const TextStyle(
-                      color: _Glass.textMuted,
-                      fontSize: 11.5,
-                    ),
+                    style: const TextStyle(color: Colors.white38, fontSize: 11.5),
                   ),
                   if (_searchQuery.isNotEmpty || _roleFilter != 'All') ...[
-                    Text(
-                      ' of $totalCount total',
-                      style: const TextStyle(
-                        color: _Glass.textMuted,
-                        fontSize: 11.5,
-                      ),
-                    ),
+                    Text(' of $totalCount total',
+                        style: const TextStyle(color: Colors.white38, fontSize: 11.5)),
                     const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () {
                         _searchController.clear();
-                        setState(() {
-                          _searchQuery = '';
-                          _roleFilter = 'All';
-                        });
+                        setState(() { _searchQuery = ''; _roleFilter = 'All'; });
                       },
                       child: Text(
                         'Clear filters',
@@ -809,9 +684,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final doc = docs[i];
-        final data = Map<String, dynamic>.from(
-          doc.data() as Map<String, dynamic>,
-        );
+        final data = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
         data['uid'] = doc.id;
         return _buildUserCard(doc.id, data);
       },
@@ -821,9 +694,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   Widget _buildUserCard(String uid, Map<String, dynamic> data) {
     final displayId = _displayId(data);
     final name = data['full_name'] as String? ?? '—';
-    final email = (data['email'] as String? ?? '').isEmpty
-        ? '(not set)'
-        : data['email'] as String;
+    final email = (data['email'] as String? ?? '').isEmpty ? '(not set)' : data['email'] as String;
     final role = data['user_role'] as String? ?? '—';
     final isDisabled = data['is_disabled'] == true;
     final mustChange = data['must_change_password'] == true;
@@ -832,7 +703,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     final roleBorder = _roleBorder(role);
 
     return Container(
-      decoration: _Glass.card(radius: 14),
+      decoration: AppTheme.glassCard(opacity: 0.12, radius: 14),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [
@@ -843,16 +714,12 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             decoration: BoxDecoration(
               color: roleBg,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: roleBorder, width: 0.8),
+              border: Border.all(color: roleBorder),
             ),
             alignment: Alignment.center,
             child: Text(
               _initials(name),
-              style: TextStyle(
-                color: roleColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(color: roleColor, fontSize: 14, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(width: 12),
@@ -867,7 +734,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                       child: Text(
                         name,
                         style: const TextStyle(
-                          color: _Glass.textPrimary,
+                          color: Colors.white,
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                         ),
@@ -877,26 +744,14 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     if (mustChange) ...[
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: AppTheme.gold.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(5),
-                          border: Border.all(
-                            color: AppTheme.gold.withValues(alpha: 0.35),
-                            width: 0.8,
-                          ),
+                          border: Border.all(color: AppTheme.gold.withValues(alpha: 0.35)),
                         ),
-                        child: Text(
-                          'Pending',
-                          style: TextStyle(
-                            color: AppTheme.gold,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        child: Text('Pending',
+                            style: TextStyle(color: AppTheme.gold, fontSize: 9, fontWeight: FontWeight.w700)),
                       ),
                     ],
                     const SizedBox(width: 6),
@@ -904,9 +759,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                       width: 7,
                       height: 7,
                       decoration: BoxDecoration(
-                        color: isDisabled
-                            ? const Color(0xFFF57F17)
-                            : const Color(0xFF2E7D32),
+                        color: isDisabled ? Colors.orange : Colors.greenAccent,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -916,31 +769,22 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
                         color: roleBg,
                         borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: roleBorder, width: 0.8),
+                        border: Border.all(color: roleBorder),
                       ),
                       child: Text(
-                        role.isNotEmpty
-                            ? role[0].toUpperCase() + role.substring(1)
-                            : '—',
-                        style: TextStyle(
-                          color: roleColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        role.isNotEmpty ? role[0].toUpperCase() + role.substring(1) : '—',
+                        style: TextStyle(color: roleColor, fontSize: 10, fontWeight: FontWeight.w700),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       displayId,
                       style: const TextStyle(
-                        color: _Glass.textMuted,
+                        color: Colors.white38,
                         fontSize: 11,
                         fontFamily: 'monospace',
                         fontWeight: FontWeight.w500,
@@ -952,13 +796,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 Text(
                   email,
                   style: TextStyle(
-                    color: email == '(not set)'
-                        ? _Glass.textMuted
-                        : _Glass.textSecondary,
+                    color: email == '(not set)' ? Colors.white24 : Colors.white60,
                     fontSize: 11.5,
-                    fontStyle: email == '(not set)'
-                        ? FontStyle.italic
-                        : FontStyle.normal,
+                    fontStyle: email == '(not set)' ? FontStyle.italic : FontStyle.normal,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -966,15 +806,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             ),
           ),
           // Actions
-          _buildActionMenu(
-            uid,
-            data,
-            displayId,
-            name,
-            isDisabled,
-            mustChange,
-            role,
-          ),
+          _buildActionMenu(uid, data, displayId, name, isDisabled, mustChange, role),
         ],
       ),
     );
@@ -982,29 +814,22 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
   Widget _buildDesktopTable(List<QueryDocumentSnapshot> docs) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        decoration: BoxDecoration(
-          color: _Glass.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: _Glass.borderMid, width: 0.8),
-          boxShadow: const [_Glass.rowShadow],
-        ),
+        decoration: AppTheme.glassCard(opacity: 0.13, radius: 16),
         child: Column(
           children: [
             _buildTableHeader(),
-            Container(height: 0.8, color: _Glass.borderMid),
+            Container(height: 0.8, color: Colors.white.withValues(alpha: 0.1)),
             Expanded(
               child: ListView.separated(
                 physics: const BouncingScrollPhysics(),
                 itemCount: docs.length,
                 separatorBuilder: (_, __) =>
-                    Container(height: 0.8, color: _Glass.borderMid),
+                    Container(height: 0.8, color: Colors.white.withValues(alpha: 0.07)),
                 itemBuilder: (_, i) {
                   final doc = docs[i];
-                  final data = Map<String, dynamic>.from(
-                    doc.data() as Map<String, dynamic>,
-                  );
+                  final data = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
                   data['uid'] = doc.id;
                   return _buildTableRow(doc.id, data, i.isEven);
                 },
@@ -1036,7 +861,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
               Text(
                 label.toUpperCase(),
                 style: TextStyle(
-                  color: active ? const Color(0xFF111827) : _Glass.textMuted,
+                  color: active ? AppTheme.gold : Colors.white38,
                   fontSize: 10.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.8,
@@ -1045,12 +870,10 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
               const SizedBox(width: 3),
               Icon(
                 active
-                    ? (_sortAscending
-                          ? Icons.arrow_upward_rounded
-                          : Icons.arrow_downward_rounded)
+                    ? (_sortAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded)
                     : Icons.unfold_more_rounded,
                 size: 11,
-                color: active ? _Glass.textSecondary : _Glass.textMuted,
+                color: active ? AppTheme.gold : Colors.white24,
               ),
             ],
           ),
@@ -1059,7 +882,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
 
     return Container(
-      color: const Color(0xF2F4F6F8),
+      color: Colors.white.withValues(alpha: 0.06),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       child: Row(
         children: [
@@ -1079,9 +902,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   Widget _buildTableRow(String uid, Map<String, dynamic> data, bool isEven) {
     final displayId = _displayId(data);
     final name = data['full_name'] as String? ?? '—';
-    final email = (data['email'] as String? ?? '').isEmpty
-        ? '(not set)'
-        : data['email'] as String;
+    final email = (data['email'] as String? ?? '').isEmpty ? '(not set)' : data['email'] as String;
     final role = data['user_role'] as String? ?? '—';
     final isDisabled = data['is_disabled'] == true;
     final mustChange = data['must_change_password'] == true;
@@ -1090,9 +911,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     final roleBorder = _roleBorder(role);
 
     return Container(
-      color: isEven
-          ? _Glass.surfaceThin.withValues(alpha: 0.4)
-          : Colors.transparent,
+      color: isEven ? Colors.white.withValues(alpha: 0.03) : Colors.transparent,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       child: Row(
         children: [
@@ -1103,16 +922,12 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             decoration: BoxDecoration(
               color: roleBg,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: roleBorder, width: 0.8),
+              border: Border.all(color: roleBorder),
             ),
             alignment: Alignment.center,
             child: Text(
               _initials(name),
-              style: TextStyle(
-                color: roleColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(color: roleColor, fontSize: 12, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(width: 12),
@@ -1126,7 +941,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   child: Text(
                     name,
                     style: const TextStyle(
-                      color: _Glass.textPrimary,
+                      color: Colors.white,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1136,35 +951,19 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 if (mustChange) ...[
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: AppTheme.gold.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(5),
-                      border: Border.all(
-                        color: AppTheme.gold.withValues(alpha: 0.35),
-                        width: 0.8,
-                      ),
+                      border: Border.all(color: AppTheme.gold.withValues(alpha: 0.35)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.schedule_rounded,
-                          color: AppTheme.gold,
-                          size: 9,
-                        ),
+                        Icon(Icons.schedule_rounded, color: AppTheme.gold, size: 9),
                         const SizedBox(width: 3),
-                        Text(
-                          'Pending',
-                          style: TextStyle(
-                            color: AppTheme.gold,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        Text('Pending',
+                            style: TextStyle(color: AppTheme.gold, fontSize: 9, fontWeight: FontWeight.w700)),
                       ],
                     ),
                   ),
@@ -1183,7 +982,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 decoration: BoxDecoration(
                   color: roleBg,
                   borderRadius: BorderRadius.circular(7),
-                  border: Border.all(color: roleBorder, width: 0.8),
+                  border: Border.all(color: roleBorder),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1191,14 +990,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     Icon(_roleIcon(role), color: roleColor, size: 10),
                     const SizedBox(width: 4),
                     Text(
-                      role.isNotEmpty
-                          ? role[0].toUpperCase() + role.substring(1)
-                          : '—',
-                      style: TextStyle(
-                        color: roleColor,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      role.isNotEmpty ? role[0].toUpperCase() + role.substring(1) : '—',
+                      style: TextStyle(color: roleColor, fontSize: 10.5, fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
@@ -1212,7 +1005,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             child: Text(
               displayId,
               style: const TextStyle(
-                color: _Glass.textMuted,
+                color: Colors.white38,
                 fontSize: 11,
                 fontFamily: 'monospace',
                 fontWeight: FontWeight.w500,
@@ -1227,13 +1020,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             child: Text(
               email,
               style: TextStyle(
-                color: email == '(not set)'
-                    ? _Glass.textMuted
-                    : _Glass.textSecondary,
+                color: email == '(not set)' ? Colors.white24 : Colors.white60,
                 fontSize: 12,
-                fontStyle: email == '(not set)'
-                    ? FontStyle.italic
-                    : FontStyle.normal,
+                fontStyle: email == '(not set)' ? FontStyle.italic : FontStyle.normal,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -1248,9 +1037,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   width: 7,
                   height: 7,
                   decoration: BoxDecoration(
-                    color: isDisabled
-                        ? const Color(0xFFF57F17)
-                        : const Color(0xFF2E7D32),
+                    color: isDisabled ? Colors.orange : Colors.greenAccent,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -1258,9 +1045,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 Text(
                   isDisabled ? 'Disabled' : 'Active',
                   style: TextStyle(
-                    color: isDisabled
-                        ? const Color(0xFFF57F17)
-                        : const Color(0xFF2E7D32),
+                    color: isDisabled ? Colors.orange : Colors.greenAccent,
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1274,15 +1059,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             width: 48,
             child: Align(
               alignment: Alignment.centerRight,
-              child: _buildActionMenu(
-                uid,
-                data,
-                displayId,
-                name,
-                isDisabled,
-                mustChange,
-                role,
-              ),
+              child: _buildActionMenu(uid, data, displayId, name, isDisabled, mustChange, role),
             ),
           ),
         ],
@@ -1291,58 +1068,46 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }
 
   Widget _buildActionMenu(
-    String uid,
-    Map<String, dynamic> data,
-    String displayId,
-    String name,
-    bool isDisabled,
-    bool mustChange,
-    String role,
-  ) {
+      String uid,
+      Map<String, dynamic> data,
+      String displayId,
+      String name,
+      bool isDisabled,
+      bool mustChange,
+      String role,
+      ) {
     return PopupMenuButton<String>(
-      icon: const Icon(
-        Icons.more_vert_rounded,
-        color: _Glass.textMuted,
-        size: 18,
-      ),
-      color: _Glass.surface,
+      icon: const Icon(Icons.more_vert_rounded, color: Colors.white38, size: 18),
+      color: const Color(0xFF1a1a2e),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: _Glass.borderMid, width: 0.8),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
       ),
       elevation: 16,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
+      shadowColor: Colors.black.withValues(alpha: 0.4),
       offset: const Offset(0, 4),
       itemBuilder: (_) => [
         if (mustChange && (role == 'employee' || role == 'admin'))
           PopupMenuItem(
             value: 'show_password',
-            child: _menuItem(
-              Icons.key_rounded,
-              'View Temp Password',
-              AppTheme.gold,
-            ),
+            child: _menuItem(Icons.key_rounded, 'View Temp Password', AppTheme.gold),
           ),
         PopupMenuItem(
           value: 'toggle_disable',
           child: _menuItem(
             isDisabled ? Icons.lock_open_rounded : Icons.block_rounded,
             isDisabled ? 'Enable User' : 'Disable User',
-            isDisabled ? const Color(0xFF2E7D32) : const Color(0xFFF57F17),
+            isDisabled ? Colors.greenAccent : Colors.orange,
           ),
         ),
         PopupMenuItem(
           value: 'copy_id',
-          child: _menuItem(Icons.copy_rounded, 'Copy ID', _Glass.textSecondary),
+          child: _menuItem(Icons.copy_rounded, 'Copy ID', Colors.white60),
         ),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'delete',
-          child: _menuItem(
-            Icons.delete_outline_rounded,
-            'Delete User',
-            const Color(0xFFC62828),
-          ),
+          child: _menuItem(Icons.delete_outline_rounded, 'Delete User', Colors.redAccent),
         ),
       ],
       onSelected: (action) async {
@@ -1369,14 +1134,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     children: [
       Icon(icon, color: color, size: 15),
       const SizedBox(width: 10),
-      Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
+      Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500)),
     ],
   );
 
@@ -1387,34 +1145,25 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         Container(
           width: 64,
           height: 64,
-          decoration: _Glass.card(radius: 20, elevated: true),
-          child: const Icon(
-            Icons.people_outline_rounded,
-            size: 28,
-            color: _Glass.textMuted,
-          ),
+          decoration: AppTheme.glassCard(opacity: 0.12, radius: 20),
+          child: const Icon(Icons.people_outline_rounded, size: 28, color: Colors.white24),
         ),
         const SizedBox(height: 16),
-        Text(
-          message,
-          style: const TextStyle(color: _Glass.textSecondary, fontSize: 13),
-        ),
+        Text(message, style: const TextStyle(color: Colors.white54, fontSize: 13)),
         if (_searchQuery.isNotEmpty || _roleFilter != 'All') ...[
           const SizedBox(height: 10),
           GestureDetector(
             onTap: () {
               _searchController.clear();
-              setState(() {
-                _searchQuery = '';
-                _roleFilter = 'All';
-              });
+              setState(() { _searchQuery = ''; _roleFilter = 'All'; });
             },
-            child: const Text(
+            child: Text(
               'Clear filters',
               style: TextStyle(
-                color: _Glass.textMuted,
+                color: AppTheme.gold,
                 fontSize: 12,
                 decoration: TextDecoration.underline,
+                decorationColor: AppTheme.gold,
               ),
             ),
           ),
@@ -1425,88 +1174,14 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 }
 
 // =============================================================================
-// Shared glass widgets
+// Shared dark widgets
 // =============================================================================
 
-class _GlassButton extends StatelessWidget {
-  final String label;
-  final IconData? icon;
-  final bool isPrimary;
-  final bool isLoading;
-  final Color? tint;
-  final VoidCallback? onPressed;
-
-  const _GlassButton({
-    required this.label,
-    this.icon,
-    required this.isPrimary,
-    this.isLoading = false,
-    this.tint,
-    this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = tint != null
-        ? tint!.withValues(alpha: 0.90)
-        : isPrimary
-        ? const Color(0xDD1A1A2E)
-        : _Glass.surfaceThin;
-    final fg = (isPrimary || tint != null)
-        ? Colors.white
-        : _Glass.textSecondary;
-    final border = isPrimary || tint != null
-        ? const Color(0x44FFFFFF)
-        : _Glass.borderMid;
-
-    return GestureDetector(
-      onTap: onPressed,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(color: border, width: 0.8),
-          boxShadow: const [_Glass.rowShadow],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isLoading)
-              SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(strokeWidth: 2, color: fg),
-              )
-            else if (icon != null)
-              Icon(icon, size: 13, color: fg),
-            if (icon != null || isLoading) const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: fg,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Dialog header ──────────────────────────────────────────────────────────────
-class _DialogHeader extends StatelessWidget {
+class _DarkDialogHeader extends StatelessWidget {
   final IconData icon;
-  final Color iconBg;
+  final Color iconColor;
   final String title;
-  const _DialogHeader({
-    required this.icon,
-    required this.iconBg,
-    required this.title,
-  });
+  const _DarkDialogHeader({required this.icon, required this.iconColor, required this.title});
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1517,20 +1192,17 @@ class _DialogHeader extends StatelessWidget {
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: iconBg.withValues(alpha: 0.15),
+            color: iconColor.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(9),
-            border: Border.all(
-              color: iconBg.withValues(alpha: 0.35),
-              width: 0.8,
-            ),
+            border: Border.all(color: iconColor.withValues(alpha: 0.35)),
           ),
-          child: Icon(icon, color: iconBg, size: 17),
+          child: Icon(icon, color: iconColor, size: 17),
         ),
         const SizedBox(width: 12),
         Text(
           title,
           style: const TextStyle(
-            color: _Glass.textPrimary,
+            color: Colors.white,
             fontWeight: FontWeight.w700,
             fontSize: 15,
           ),
@@ -1540,25 +1212,19 @@ class _DialogHeader extends StatelessWidget {
   );
 }
 
-// ── Credential row ─────────────────────────────────────────────────────────────
-class _CredentialRow extends StatelessWidget {
+class _DarkCredentialRow extends StatelessWidget {
   final String label;
   final String value;
   final VoidCallback onCopy;
-  const _CredentialRow({
-    required this.label,
-    required this.value,
-    required this.onCopy,
-  });
+  const _DarkCredentialRow({required this.label, required this.value, required this.onCopy});
 
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
     decoration: BoxDecoration(
-      color: _Glass.surfaceThin,
+      color: Colors.white.withValues(alpha: 0.06),
       borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: _Glass.borderMid, width: 0.8),
-      boxShadow: const [_Glass.rowShadow],
+      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
     ),
     child: Row(
       children: [
@@ -1569,7 +1235,7 @@ class _CredentialRow extends StatelessWidget {
               Text(
                 label.toUpperCase(),
                 style: const TextStyle(
-                  color: _Glass.textMuted,
+                  color: Colors.white38,
                   fontSize: 9,
                   letterSpacing: 1.2,
                   fontWeight: FontWeight.w700,
@@ -1579,7 +1245,7 @@ class _CredentialRow extends StatelessWidget {
               Text(
                 value,
                 style: const TextStyle(
-                  color: _Glass.textPrimary,
+                  color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.4,
@@ -1600,10 +1266,7 @@ class _CredentialRow extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppTheme.gold.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: AppTheme.gold.withValues(alpha: 0.35),
-                width: 0.8,
-              ),
+              border: Border.all(color: AppTheme.gold.withValues(alpha: 0.35)),
             ),
             child: Icon(Icons.copy_rounded, color: AppTheme.gold, size: 13),
           ),
@@ -1613,27 +1276,18 @@ class _CredentialRow extends StatelessWidget {
   );
 }
 
-// ── Role dropdown ──────────────────────────────────────────────────────────────
 class _RoleDropdown extends StatelessWidget {
   final String value;
   final List<String> roles;
   final ValueChanged<String> onChanged;
-  const _RoleDropdown({
-    required this.value,
-    required this.roles,
-    required this.onChanged,
-  });
+  const _RoleDropdown({required this.value, required this.roles, required this.onChanged});
 
   Color _dot(String role) {
     switch (role) {
-      case 'Admin':
-        return _Glass.adminFg;
-      case 'Employee':
-        return _Glass.empFg;
-      case 'Customer':
-        return _Glass.cusFg;
-      default:
-        return _Glass.textMuted;
+      case 'Admin': return const Color(0xFFCDB4FF);
+      case 'Employee': return const Color(0xFF6EE7B7);
+      case 'Customer': return const Color(0xFF93C5FD);
+      default: return Colors.white38;
     }
   }
 
@@ -1642,74 +1296,51 @@ class _RoleDropdown extends StatelessWidget {
     height: 42,
     padding: const EdgeInsets.symmetric(horizontal: 12),
     decoration: BoxDecoration(
-      color: _Glass.surfaceThin,
+      color: Colors.white.withValues(alpha: 0.07),
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: _Glass.borderMid, width: 0.8),
-      boxShadow: const [_Glass.rowShadow],
+      border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
     ),
     child: DropdownButtonHideUnderline(
       child: DropdownButton<String>(
         value: value,
-        dropdownColor: _Glass.surface,
+        dropdownColor: const Color(0xFF1a1a2e),
         borderRadius: BorderRadius.circular(12),
-        style: const TextStyle(color: _Glass.textPrimary, fontSize: 12.5),
-        icon: const Icon(
-          Icons.keyboard_arrow_down_rounded,
-          color: _Glass.textMuted,
-          size: 17,
-        ),
+        style: const TextStyle(color: Colors.white, fontSize: 12.5),
+        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white38, size: 17),
         isDense: true,
-        items: roles
-            .map(
-              (role) => DropdownMenuItem<String>(
-                value: role,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (role != 'All') ...[
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color: _dot(role),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 7),
-                    ] else ...[
-                      const Icon(
-                        Icons.people_outline_rounded,
-                        color: _Glass.textMuted,
-                        size: 13,
-                      ),
-                      const SizedBox(width: 7),
-                    ],
-                    Text(
-                      role == 'All' ? 'All Roles' : role,
-                      style: TextStyle(
-                        color: role == 'All'
-                            ? _Glass.textSecondary
-                            : _dot(role),
-                        fontWeight: role == value
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ],
+        items: roles.map((role) => DropdownMenuItem<String>(
+          value: role,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (role != 'All') ...[
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(color: _dot(role), shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 7),
+              ] else ...[
+                const Icon(Icons.people_outline_rounded, color: Colors.white38, size: 13),
+                const SizedBox(width: 7),
+              ],
+              Text(
+                role == 'All' ? 'All Roles' : role,
+                style: TextStyle(
+                  color: role == 'All' ? Colors.white60 : _dot(role),
+                  fontWeight: role == value ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 12.5,
                 ),
               ),
-            )
-            .toList(),
-        onChanged: (v) {
-          if (v != null) onChanged(v);
-        },
+            ],
+          ),
+        )).toList(),
+        onChanged: (v) { if (v != null) onChanged(v); },
       ),
     ),
   );
 }
 
-// ── Create button ─────────────────────────────────────────────────────────────
 class _CreateButton extends StatefulWidget {
   final bool isCreating;
   final VoidCallback onCreateEmployee;
@@ -1734,10 +1365,7 @@ class _CreateButtonState extends State<_CreateButton>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 180),
-    );
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 180));
     _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
   }
 
@@ -1777,10 +1405,10 @@ class _CreateButtonState extends State<_CreateButton>
                   width: 210,
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: _Glass.surface,
+                    color: const Color(0xFF1a1a2e),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: _Glass.borderMid, width: 0.8),
-                    boxShadow: const [_Glass.elevatedShadow],
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 6))],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1790,24 +1418,18 @@ class _CreateButtonState extends State<_CreateButton>
                         icon: Icons.admin_panel_settings_rounded,
                         label: 'Create Admin',
                         subtitle: 'Full system access',
-                        color: _Glass.adminFg,
-                        bg: _Glass.adminBg,
-                        onTap: () {
-                          _removeOverlay();
-                          widget.onCreateAdmin();
-                        },
+                        color: const Color(0xFFCDB4FF),
+                        bg: const Color(0x207C3AED),
+                        onTap: () { _removeOverlay(); widget.onCreateAdmin(); },
                       ),
                       const SizedBox(height: 4),
                       _dropdownOption(
                         icon: Icons.badge_rounded,
                         label: 'Create Employee',
                         subtitle: 'Staff-level access',
-                        color: _Glass.empFg,
-                        bg: _Glass.empBg,
-                        onTap: () {
-                          _removeOverlay();
-                          widget.onCreateEmployee();
-                        },
+                        color: const Color(0xFF6EE7B7),
+                        bg: const Color(0x200D9488),
+                        onTap: () { _removeOverlay(); widget.onCreateEmployee(); },
                       ),
                     ],
                   ),
@@ -1845,10 +1467,7 @@ class _CreateButtonState extends State<_CreateButton>
           Container(
             width: 32,
             height: 32,
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(8),
-            ),
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
             alignment: Alignment.center,
             child: Icon(icon, color: color, size: 14),
           ),
@@ -1857,18 +1476,8 @@ class _CreateButtonState extends State<_CreateButton>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  style: const TextStyle(color: _Glass.textMuted, fontSize: 10),
-                ),
+                Text(label, style: TextStyle(color: color, fontSize: 12.5, fontWeight: FontWeight.w700)),
+                Text(subtitle, style: const TextStyle(color: Colors.white38, fontSize: 10)),
               ],
             ),
           ),
@@ -1887,10 +1496,9 @@ class _CreateButtonState extends State<_CreateButton>
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         decoration: BoxDecoration(
-          color: const Color(0xDD1A1A2E),
+          color: AppTheme.gold.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(99),
-          border: Border.all(color: const Color(0x44FFFFFF), width: 0.8),
-          boxShadow: const [_Glass.rowShadow],
+          border: Border.all(color: AppTheme.gold.withValues(alpha: 0.4)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1898,20 +1506,12 @@ class _CreateButtonState extends State<_CreateButton>
             AnimatedRotation(
               turns: isOpen ? 0.125 : 0,
               duration: const Duration(milliseconds: 180),
-              child: const Icon(
-                Icons.add_rounded,
-                size: 14,
-                color: Colors.white,
-              ),
+              child: const Icon(Icons.add_rounded, size: 14, color: AppTheme.gold),
             ),
             const SizedBox(width: 6),
             const Text(
               'Create User',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: AppTheme.gold, fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ],
         ),
