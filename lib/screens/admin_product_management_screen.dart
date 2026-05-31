@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -7,48 +8,65 @@ import 'app_theme.dart';
 
 // ── Breakpoint ────────────────────────────────────────────────────────────────
 const double _kNarrow = 700.0;
+const double _kCompact = 480.0;
 
-// ── Amber color constant ──────────────────────────────────────────────────────
-const Color _amber = Color.fromRGBO(180, 83, 9, 1);
+// ── Amber / navy — shared with admin_logs_screen ──────────────────────────────
+const Color _amber = Color(0xFFB45309);
+const Color _navyBlue = Color(0xFF0F1A2E);
 
 // ── Liquid Glass Design Tokens ────────────────────────────────────────────────
 class _Glass {
-  static const Color surface = Color(0xEEFFFFFF);
-  static const Color surfaceMid = Color(0xCCFFFFFF);
-  static const Color surfaceThin = Color(0x99FFFFFF);
+  static const Color surface = Color(0xF8FFFFFF);
+  static const Color surfaceMid = Color(0xF0FFFFFF);
+  static const Color surfaceThin = Color(0xA0FFFFFF);
 
-  static const Color borderMid = Color(0x55FFFFFF);
-  static const Color borderDim = Color(0x28FFFFFF);
+  static const Color borderMid = Color(0x70FFFFFF);
+  static const Color borderDim = Color(0x30FFFFFF);
 
-  static const Color textPrimary = Color(0xFF111827);
-  static const Color textSecondary = Color(0xBB111827);
-  static const Color textMuted = Color(0x77111827);
+  static const Color textPrimary = Color(0xFF0F172A);
+  static const Color textSecondary = Color(0xCC0F172A);
+  static const Color textMuted = Color(0x880F172A);
+
+  static const Color accentEmerald = Color(0xFF10B981);
+  static const Color accentRose = Color(0xFFEF4444);
+  static const Color accentViolet = Color(0xFF8B5CF6);
 
   static const BoxShadow elevatedShadow = BoxShadow(
-    color: Color(0x1A000000),
-    blurRadius: 20,
-    spreadRadius: -2,
-    offset: Offset(0, 6),
+    color: Color(0x22000000),
+    blurRadius: 32,
+    spreadRadius: -4,
+    offset: Offset(0, 8),
   );
   static const BoxShadow rowShadow = BoxShadow(
-    color: Color(0x0D000000),
-    blurRadius: 8,
-    spreadRadius: 0,
-    offset: Offset(0, 2),
+    color: Color(0x10000000),
+    blurRadius: 10,
+    offset: Offset(0, 3),
   );
 
-  static BoxDecoration card({
-    Color? color,
-    double radius = 14,
+  static BoxDecoration glass({
+    double radius = 16,
     bool elevated = false,
+    Color? tintBorder,
   }) => BoxDecoration(
-    color: color ?? surfaceMid,
+    color: surfaceMid,
     borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: borderMid, width: 0.8),
+    border: Border.all(color: tintBorder ?? borderMid, width: 0.9),
     boxShadow: [elevated ? elevatedShadow : rowShadow],
   );
 
-  // Input field decoration matching glass aesthetic
+  static BoxDecoration solidPill(Color color, {bool glow = false}) =>
+      BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(99),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: glow ? 0.38 : 0.22),
+            blurRadius: glow ? 16 : 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      );
+
   static InputDecoration field(
     String hint, {
     IconData? icon,
@@ -61,21 +79,57 @@ class _Glass {
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: borderMid, width: 0.8),
+      borderSide: const BorderSide(color: borderMid, width: 0.9),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: AppTheme.gold.withValues(alpha: 0.7)),
+      borderSide: BorderSide(color: _amber.withValues(alpha: 0.7)),
     ),
     errorBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: Color(0xFFE53935)),
+      borderSide: const BorderSide(color: accentRose),
     ),
     focusedErrorBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: Color(0xFFE53935)),
+      borderSide: const BorderSide(color: accentRose),
     ),
-    errorStyle: const TextStyle(fontSize: 10, color: Color(0xFFE53935)),
+    errorStyle: const TextStyle(fontSize: 10, color: accentRose),
+  );
+}
+
+// =============================================================================
+// Reusable frosted-glass card wrapper (matches admin_logs)
+// =============================================================================
+class _BlurCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final double radius;
+  final bool elevated;
+  final Color? tintBorder;
+
+  const _BlurCard({
+    required this.child,
+    this.padding,
+    this.radius = 18,
+    this.elevated = false,
+    this.tintBorder,
+  });
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(radius),
+    child: BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+      child: Container(
+        decoration: _Glass.glass(
+          radius: radius,
+          elevated: elevated,
+          tintBorder: tintBorder,
+        ),
+        padding: padding,
+        child: child,
+      ),
+    ),
   );
 }
 
@@ -103,107 +157,114 @@ class _AdminProductManagementScreenState
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < _kNarrow;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header panel ─────────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-              decoration: BoxDecoration(
-                color: _Glass.surfaceMid,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: _Glass.borderMid, width: 0.8),
-                boxShadow: const [_Glass.rowShadow],
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Unified header card (matches admin_logs pattern) ─────────────────
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
+              decoration: _Glass.glass(radius: 20, elevated: true),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Title row — stacks on narrow
-                  if (isNarrow) ...[
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Product Management',
-                          style: TextStyle(
-                            color: _Glass.textPrimary,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.4,
-                          ),
+                  // Title row
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: _navyBlue,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Manage catalog, pricing, and availability',
-                          style: TextStyle(
-                            color: _Glass.textMuted,
-                            fontSize: 11,
-                          ),
+                        child: const Icon(
+                          Icons.storefront_outlined,
+                          color: Colors.white,
+                          size: 16,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    _GlassButton(
-                      label: 'Add Product',
-                      icon: Icons.add_rounded,
-                      isPrimary: true,
-                      onPressed: () => _openProductForm(context, null),
-                    ),
-                  ] else ...[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Product Management',
-                                style: TextStyle(
-                                  color: _Glass.textPrimary,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.4,
-                                ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Product Management',
+                              style: TextStyle(
+                                color: _Glass.textPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
                               ),
-                              SizedBox(height: 1),
+                            ),
+                            SizedBox(height: 1),
+                            Text(
+                              'Manage catalog, pricing, and availability',
+                              style: TextStyle(
+                                color: _Glass.textMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Add Product pill button
+                      GestureDetector(
+                        onTap: () => _openProductForm(context, null),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 9,
+                          ),
+                          decoration: _Glass.solidPill(_navyBlue, glow: true),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.add_rounded,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                              SizedBox(width: 6),
                               Text(
-                                'Manage catalog, pricing, and availability',
+                                'Add Product',
                                 style: TextStyle(
-                                  color: _Glass.textMuted,
-                                  fontSize: 11,
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        _GlassButton(
-                          label: 'Add Product',
-                          icon: Icons.add_rounded,
-                          isPrimary: true,
-                          onPressed: () => _openProductForm(context, null),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
 
                   const SizedBox(height: 14),
+                  Divider(height: 1, color: _Glass.borderDim),
+                  const SizedBox(height: 12),
 
-                  // Category filter chips — always horizontally scrollable
+                  // Category filter pills — no ClipRRect so glows aren't cut
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        _GlassChip(
+                        _CategoryPill(
                           label: 'All',
                           isActive: _categoryFilter == null,
                           onTap: () => setState(() => _categoryFilter = null),
                         ),
                         ..._categories.map(
-                          (c) => _GlassChip(
+                          (c) => _CategoryPill(
                             label: c,
                             isActive: _categoryFilter == c,
                             onTap: () => setState(
@@ -219,85 +280,85 @@ class _AdminProductManagementScreenState
                 ],
               ),
             ),
+          ),
+        ),
 
-            const SizedBox(height: 8),
+        const SizedBox(height: 10),
 
-            // ── Product list panel ────────────────────────────────────────────
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: _Glass.surface,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: _Glass.borderMid, width: 0.8),
-                  boxShadow: const [_Glass.rowShadow],
-                ),
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: _categoryFilter != null
-                      ? FirebaseFirestore.instance
-                            .collection('Products')
-                            .where('category', isEqualTo: _categoryFilter)
-                            .snapshots()
-                      : FirebaseFirestore.instance
-                            .collection('Products')
-                            .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(
-                        child: CircularProgressIndicator(
-                          color: _Glass.textPrimary.withValues(alpha: 0.4),
+        // ── Product list ─────────────────────────────────────────────────────
+        Expanded(
+          child: _BlurCard(
+            radius: 20,
+            elevated: true,
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _categoryFilter != null
+                  ? FirebaseFirestore.instance
+                        .collection('Products')
+                        .where('category', isEqualTo: _categoryFilter)
+                        .snapshots()
+                  : FirebaseFirestore.instance
+                        .collection('Products')
+                        .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(
+                    child: CircularProgressIndicator(
+                      color: _navyBlue.withValues(alpha: 0.4),
+                      strokeWidth: 2,
+                    ),
+                  );
+                }
+
+                final docs = snapshot.data?.docs ?? [];
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: _Glass.glass(radius: 22),
+                          child: const Icon(
+                            Icons.storefront_outlined,
+                            size: 32,
+                            color: _Glass.textMuted,
+                          ),
                         ),
-                      );
-                    }
-
-                    final docs = snapshot.data?.docs ?? [];
-                    if (docs.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 72,
-                              height: 72,
-                              decoration: _Glass.card(
-                                radius: 20,
-                                elevated: true,
-                              ),
-                              child: const Icon(
-                                Icons.storefront_outlined,
-                                size: 32,
-                                color: _Glass.textMuted,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            const Text(
-                              'No products yet',
-                              style: TextStyle(
-                                color: _Glass.textPrimary,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Tap "Add Product" to create the first product',
-                              style: TextStyle(
-                                color: _Glass.textSecondary,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 20),
+                        const Text(
+                          'No products yet',
+                          style: TextStyle(
+                            color: _Glass.textPrimary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      );
-                    }
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Tap "Add Product" to create the first product',
+                          style: TextStyle(
+                            color: _Glass.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
 
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isCompact = constraints.maxWidth < _kCompact;
                     return ListView.builder(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(12),
                       itemCount: docs.length,
                       itemBuilder: (_, i) {
                         final data = docs[i].data() as Map<String, dynamic>;
                         return _ProductTile(
                           data: data,
                           docId: docs[i].id,
+                          isCompact: isCompact,
                           onEdit: () => _openProductForm(context, {
                             'id': docs[i].id,
                             ...data,
@@ -311,12 +372,12 @@ class _AdminProductManagementScreenState
                       },
                     );
                   },
-                ),
-              ),
+                );
+              },
             ),
-          ],
-        );
-      },
+          ),
+        ),
+      ],
     );
   }
 
@@ -334,7 +395,7 @@ class _AdminProductManagementScreenState
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.25),
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: _Glass.surface,
         elevation: 32,
         shadowColor: Colors.black.withValues(alpha: 0.3),
@@ -342,32 +403,62 @@ class _AdminProductManagementScreenState
           borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: _Glass.borderMid, width: 1),
         ),
-        title: const Text(
-          'Delete Product',
-          style: TextStyle(
-            color: _Glass.textPrimary,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-          ),
+        title: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _Glass.accentRose.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _Glass.accentRose.withValues(alpha: 0.30),
+                ),
+              ),
+              child: const Icon(
+                Icons.warning_amber_rounded,
+                color: _Glass.accentRose,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'Delete Product',
+              style: TextStyle(
+                color: _Glass.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
         content: Text(
           'Are you sure you want to delete "$name"? This cannot be undone.',
-          style: const TextStyle(color: _Glass.textSecondary, fontSize: 13),
+          style: const TextStyle(
+            color: _Glass.textSecondary,
+            fontSize: 13,
+            height: 1.5,
+          ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              foregroundColor: _Glass.textSecondary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+          GestureDetector(
+            onTap: () => Navigator.pop(ctx),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+              decoration: _Glass.glass(radius: 99),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  color: _Glass.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
+          GestureDetector(
+            onTap: () async {
+              Navigator.pop(ctx);
               await FirebaseFirestore.instance
                   .collection('Products')
                   .doc(docId)
@@ -376,25 +467,28 @@ class _AdminProductManagementScreenState
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('"$name" deleted'),
-                    backgroundColor: Colors.red.shade700,
+                    backgroundColor: _Glass.accentRose,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(14),
                     ),
+                    margin: const EdgeInsets.all(16),
                   ),
                 );
               }
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade600.withValues(alpha: 0.85),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shadowColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+              decoration: _Glass.solidPill(_Glass.accentRose),
+              child: const Text(
+                'Delete',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-            child: const Text('Delete'),
           ),
         ],
       ),
@@ -403,17 +497,60 @@ class _AdminProductManagementScreenState
 }
 
 // =============================================================================
-// Product tile — liquid glass row
+// Category filter pill (no ClipRRect — shadows render fully)
+// =============================================================================
+class _CategoryPill extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _CategoryPill({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeInOut,
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      decoration: isActive
+          ? _Glass.solidPill(_navyBlue, glow: true)
+          : BoxDecoration(
+              color: _Glass.surfaceThin,
+              borderRadius: BorderRadius.circular(99),
+              border: Border.all(color: _Glass.borderMid, width: 0.9),
+            ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: isActive ? Colors.white : _Glass.textSecondary,
+          fontSize: 13,
+          fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+        ),
+      ),
+    ),
+  );
+}
+
+// =============================================================================
+// Product tile — liquid glass row, responsive
 // =============================================================================
 class _ProductTile extends StatelessWidget {
   final Map<String, dynamic> data;
   final String docId;
+  final bool isCompact;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _ProductTile({
     required this.data,
     required this.docId,
+    required this.isCompact,
     required this.onEdit,
     required this.onDelete,
   });
@@ -432,12 +569,7 @@ class _ProductTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: _Glass.surfaceMid,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _Glass.borderMid, width: 0.8),
-        boxShadow: const [_Glass.rowShadow],
-      ),
+      decoration: _Glass.glass(radius: 14),
       child: Row(
         children: [
           // Thumbnail
@@ -447,7 +579,7 @@ class _ProductTile extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               color: _Glass.surfaceThin,
-              border: Border.all(color: _Glass.borderMid, width: 0.8),
+              border: Border.all(color: _Glass.borderMid, width: 0.9),
             ),
             clipBehavior: Clip.antiAlias,
             child: imageUrl.isNotEmpty
@@ -468,7 +600,7 @@ class _ProductTile extends StatelessWidget {
           ),
           const SizedBox(width: 12),
 
-          // Info
+          // Info — Expanded so it never overflows
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -477,39 +609,66 @@ class _ProductTile extends StatelessWidget {
                   name,
                   style: const TextStyle(
                     color: _Glass.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 1),
+                const SizedBox(height: 2),
                 Text(
                   cat,
-                  style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                  style: const TextStyle(color: _Glass.textMuted, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 5),
-                Row(
+                const SizedBox(height: 6),
+                // Chips row — wrap so narrow screens don't overflow
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (isFeatured) ...[
-                      const Icon(
-                        Icons.star_rounded,
-                        color: _amber, // ← was AppTheme.gold
-                        size: 13,
+                    if (isFeatured)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _amber.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(
+                            color: _amber.withValues(alpha: 0.40),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.star_rounded, color: _amber, size: 11),
+                            SizedBox(width: 3),
+                            Text(
+                              'Featured',
+                              style: TextStyle(
+                                color: _amber,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(width: 4),
-                    ],
-                    if (price != null) ...[
+                    if (price != null)
                       Text(
                         '₱$price${unit.isNotEmpty ? ' $unit' : ''}',
                         style: const TextStyle(
-                          color: _amber, // ← was AppTheme.gold
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                          color: _amber,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                    ],
                     // Availability badge
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -518,13 +677,13 @@ class _ProductTile extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: isAvailable
-                            ? const Color(0xFF2E7D32).withValues(alpha: 0.12)
-                            : const Color(0xFFC62828).withValues(alpha: 0.12),
+                            ? _Glass.accentEmerald.withValues(alpha: 0.12)
+                            : _Glass.accentRose.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(99),
                         border: Border.all(
                           color: isAvailable
-                              ? const Color(0xFF2E7D32).withValues(alpha: 0.35)
-                              : const Color(0xFFC62828).withValues(alpha: 0.35),
+                              ? _Glass.accentEmerald.withValues(alpha: 0.40)
+                              : _Glass.accentRose.withValues(alpha: 0.40),
                           width: 0.8,
                         ),
                       ),
@@ -533,9 +692,9 @@ class _ProductTile extends StatelessWidget {
                         '${hasOverride ? ' (manual)' : ''}',
                         style: TextStyle(
                           color: isAvailable
-                              ? const Color(0xFF2E7D32)
-                              : const Color(0xFFC62828),
-                          fontSize: 9.5,
+                              ? _Glass.accentEmerald
+                              : _Glass.accentRose,
+                          fontSize: 10,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -548,76 +707,145 @@ class _ProductTile extends StatelessWidget {
 
           const SizedBox(width: 10),
 
-          // Edit button
-          GestureDetector(
-            onTap: onEdit,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: const Color(0xDD1A1A2E),
-                borderRadius: BorderRadius.circular(99),
-                border: Border.all(color: const Color(0x44FFFFFF), width: 0.8),
-                boxShadow: const [_Glass.rowShadow],
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.edit_outlined, color: Colors.white, size: 13),
-                  SizedBox(width: 5),
-                  Text(
-                    'Edit',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 8),
-
-          // Delete button
-          GestureDetector(
-            onTap: onDelete,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(99),
-                border: Border.all(
-                  color: Colors.red.withValues(alpha: 0.35),
-                  width: 0.8,
+          // Action buttons — icon-only on compact, pill on wider
+          if (isCompact)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _IconPill(
+                  icon: Icons.edit_outlined,
+                  color: _navyBlue,
+                  onTap: onEdit,
                 ),
-                boxShadow: const [_Glass.rowShadow],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.delete_outline_rounded,
-                    color: Colors.red.shade500,
-                    size: 13,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    'Delete',
-                    style: TextStyle(
-                      color: Colors.red.shade500,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
+                const SizedBox(width: 6),
+                _IconPill(
+                  icon: Icons.delete_outline_rounded,
+                  color: _Glass.accentRose,
+                  onTap: onDelete,
+                ),
+              ],
+            )
+          else
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _PillActionButton(
+                  label: 'Edit',
+                  icon: Icons.edit_outlined,
+                  bgColor: _navyBlue,
+                  textColor: Colors.white,
+                  onTap: onEdit,
+                ),
+                const SizedBox(width: 8),
+                _PillActionButton(
+                  label: 'Delete',
+                  icon: Icons.delete_outline_rounded,
+                  bgColor: _Glass.accentRose.withValues(alpha: 0.10),
+                  textColor: _Glass.accentRose,
+                  borderColor: _Glass.accentRose.withValues(alpha: 0.35),
+                  onTap: onDelete,
+                ),
+              ],
             ),
-          ),
         ],
       ),
     );
   }
+}
+
+// ── Icon-only pill (compact) ──────────────────────────────────────────────────
+class _IconPill extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _IconPill({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: color == _navyBlue ? 1.0 : 0.10),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: color == _navyBlue
+              ? Colors.white.withValues(alpha: 0.25)
+              : color.withValues(alpha: 0.35),
+          width: 0.8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.18),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Icon(
+        icon,
+        color: color == _navyBlue ? Colors.white : color,
+        size: 15,
+      ),
+    ),
+  );
+}
+
+// ── Labeled pill action button ────────────────────────────────────────────────
+class _PillActionButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color bgColor;
+  final Color textColor;
+  final Color? borderColor;
+  final VoidCallback onTap;
+
+  const _PillActionButton({
+    required this.label,
+    required this.icon,
+    required this.bgColor,
+    required this.textColor,
+    this.borderColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(
+          color: borderColor ?? Colors.white.withValues(alpha: 0.25),
+          width: 0.8,
+        ),
+        boxShadow: [_Glass.rowShadow],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: textColor),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 // =============================================================================
@@ -776,7 +1004,10 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         'is_available': computedAvailable,
         'availability_override': _availabilityOverride,
         'featured': _isFeatured,
-        'material_options': _optionControllers.map((c) => c.text.trim()).where((s) => s.isNotEmpty).toList(),
+        'material_options': _optionControllers
+            .map((c) => c.text.trim())
+            .where((s) => s.isNotEmpty)
+            .toList(),
         'bill_of_materials': _bom,
         'bulk_pricing': _bulkPricing,
         'updated_at': FieldValue.serverTimestamp(),
@@ -797,22 +1028,24 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
           content: Text(
             '${_nameCtrl.text.trim()} ${isEdit ? 'updated' : 'created'}',
           ),
-          backgroundColor: const Color(0xFF2E7D32),
+          backgroundColor: _Glass.accentEmerald,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
+          margin: const EdgeInsets.all(16),
         ),
       );
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: _Glass.accentRose,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
+          margin: const EdgeInsets.all(16),
         ),
       );
       if (mounted) setState(() => _saving = false);
@@ -836,23 +1069,22 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         height: MediaQuery.of(context).size.height * 0.88,
         child: Column(
           children: [
-            // ── Dialog title bar ──────────────────────────────────────────────
+            // ── Dialog title bar ────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
               child: Row(
                 children: [
                   Container(
-                    width: 32,
-                    height: 32,
+                    width: 34,
+                    height: 34,
                     decoration: BoxDecoration(
-                      color: const Color(0x1A1A1A2E),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _Glass.borderMid),
+                      color: _navyBlue,
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       isEdit ? Icons.edit_outlined : Icons.add_box_outlined,
-                      color: _Glass.textSecondary,
-                      size: 16,
+                      color: Colors.white,
+                      size: 15,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -861,30 +1093,35 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       isEdit ? 'Edit Product' : 'Add Product',
                       style: const TextStyle(
                         color: _Glass.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color: _Glass.textMuted,
-                      size: 18,
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: _Glass.surfaceThin,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _Glass.borderMid, width: 0.9),
+                      ),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        color: _Glass.textMuted,
+                        size: 15,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            Divider(color: _Glass.borderMid, height: 16, thickness: 0.8),
+            const Divider(color: _Glass.borderMid, height: 16, thickness: 0.8),
 
-            // ── Scrollable form body ──────────────────────────────────────────
+            // ── Scrollable form body ────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
@@ -906,7 +1143,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                               color: _Glass.surfaceThin,
                               border: Border.all(
                                 color: _Glass.borderMid,
-                                width: 0.8,
+                                width: 0.9,
                               ),
                             ),
                             clipBehavior: Clip.antiAlias,
@@ -935,10 +1172,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _GlassButton(
+                              _FormPillButton(
                                 label: 'Upload Image',
                                 icon: Icons.upload_file_outlined,
-                                isPrimary: false,
                                 onPressed: _pickImage,
                               ),
                               if (_pickedImageBytes != null ||
@@ -952,7 +1188,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                   child: const Text(
                                     'Remove',
                                     style: TextStyle(
-                                      color: Color(0xFFC62828),
+                                      color: _Glass.accentRose,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -1122,7 +1358,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 16),
 
-                      // ── Availability ────────────────────────────────────────
+                      // ── Availability ────────────────────────────────────
                       _SectionLabel('Availability'),
                       const SizedBox(height: 8),
                       Container(
@@ -1132,7 +1368,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: _Glass.borderMid,
-                            width: 0.8,
+                            width: 0.9,
                           ),
                         ),
                         child: Column(
@@ -1170,7 +1406,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                         ? _isAvailable
                                         : null,
                                   ),
-                                  activeColor: AppTheme.gold,
+                                  activeColor: _amber,
                                 ),
                               ],
                             ),
@@ -1196,7 +1432,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                     onChanged: (v) => setState(
                                       () => _availabilityOverride = v,
                                     ),
-                                    activeColor: const Color(0xFF2E7D32),
+                                    activeColor: _Glass.accentEmerald,
                                   ),
                                 ],
                               ),
@@ -1223,7 +1459,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                     value: _isAvailable,
                                     onChanged: (v) =>
                                         setState(() => _isAvailable = v),
-                                    activeColor: const Color(0xFF2E7D32),
+                                    activeColor: _Glass.accentEmerald,
                                   ),
                                 ],
                               ),
@@ -1233,7 +1469,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 12),
 
-                      // ── Featured toggle ─────────────────────────────────────
+                      // ── Featured toggle ─────────────────────────────────
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 14,
@@ -1241,23 +1477,21 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                         ),
                         decoration: BoxDecoration(
                           color: _isFeatured
-                              ? AppTheme.gold.withValues(alpha: 0.08)
+                              ? _amber.withValues(alpha: 0.08)
                               : _Glass.surfaceThin,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: _isFeatured
-                                ? AppTheme.gold.withValues(alpha: 0.4)
+                                ? _amber.withValues(alpha: 0.40)
                                 : _Glass.borderMid,
-                            width: 0.8,
+                            width: 0.9,
                           ),
                         ),
                         child: Row(
                           children: [
                             Icon(
                               Icons.star_outline_rounded,
-                              color: _isFeatured
-                                  ? AppTheme.gold
-                                  : _Glass.textMuted,
+                              color: _isFeatured ? _amber : _Glass.textMuted,
                               size: 18,
                             ),
                             const SizedBox(width: 10),
@@ -1269,7 +1503,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                     'Feature on Homepage',
                                     style: TextStyle(
                                       color: _isFeatured
-                                          ? AppTheme.gold
+                                          ? _amber
                                           : _Glass.textSecondary,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
@@ -1288,22 +1522,21 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                             Switch(
                               value: _isFeatured,
                               onChanged: (v) => setState(() => _isFeatured = v),
-                              activeColor: AppTheme.gold,
+                              activeColor: _amber,
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 18),
 
-                      // ── Material Options ────────────────────────────────────
+                      // ── Material Options ────────────────────────────────
                       Row(
                         children: [
                           _SectionLabel('Material Options'),
                           const Spacer(),
-                          _GlassButton(
+                          _FormPillButton(
                             label: 'Add Option',
                             icon: Icons.add_rounded,
-                            isPrimary: false,
                             onPressed: () => setState(() {
                               _materialOptions.add('');
                               _optionControllers.add(TextEditingController());
@@ -1313,8 +1546,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'e.g. "13oz", "10oz" — customers choose one when ordering. '
-                        'Link each option to a BOM material using "For option" below.',
+                        'e.g. "13oz", "10oz" — customers choose one when ordering.',
                         style: TextStyle(color: _Glass.textMuted, fontSize: 11),
                       ),
                       const SizedBox(height: 8),
@@ -1345,21 +1577,21 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                   decoration: _Glass.field(
                                     'Option name, e.g. 13oz',
                                   ),
-                                  onChanged: (v) {
-                                    _materialOptions[entry.key] = v;
-                                  },
+                                  onChanged: (v) =>
+                                      _materialOptions[entry.key] = v,
                                 ),
                               ),
                               const SizedBox(width: 6),
                               IconButton(
                                 icon: Icon(
                                   Icons.remove_circle_outline,
-                                  color: Colors.red.shade400,
+                                  color: _Glass.accentRose,
                                   size: 18,
                                 ),
                                 onPressed: () => setState(() {
                                   _materialOptions.removeAt(entry.key);
-                                  _optionControllers.removeAt(entry.key)
+                                  _optionControllers
+                                      .removeAt(entry.key)
                                       .dispose();
                                 }),
                                 padding: EdgeInsets.zero,
@@ -1370,15 +1602,14 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       }),
                       const SizedBox(height: 18),
 
-                      // ── Bill of Materials ───────────────────────────────────
+                      // ── Bill of Materials ───────────────────────────────
                       Row(
                         children: [
                           _SectionLabel('Bill of Materials'),
                           const Spacer(),
-                          _GlassButton(
+                          _FormPillButton(
                             label: 'Add Material',
                             icon: Icons.add_rounded,
-                            isPrimary: false,
                             onPressed: _materialsLoaded ? _addBomItem : null,
                           ),
                         ],
@@ -1391,9 +1622,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 8),
                       if (_bom.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: const Text(
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8),
+                          child: Text(
                             'No BOM set. Add materials to enable automatic inventory deduction.',
                             style: TextStyle(
                               color: _Glass.textMuted,
@@ -1414,15 +1645,14 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 18),
 
-                      // ── Bulk Pricing ────────────────────────────────────────
+                      // ── Bulk Pricing ────────────────────────────────────
                       Row(
                         children: [
                           _SectionLabel('Bulk Pricing (Optional)'),
                           const Spacer(),
-                          _GlassButton(
+                          _FormPillButton(
                             label: 'Add Tier',
                             icon: Icons.add_rounded,
-                            isPrimary: false,
                             onPressed: () => setState(() {
                               _bulkPricing.add({
                                 'min_quantity': 10,
@@ -1461,33 +1691,74 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
               ),
             ),
 
-            // ── Action bar ────────────────────────────────────────────────────
+            // ── Action bar ────────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 border: Border(
-                  top: BorderSide(color: _Glass.borderMid, width: 0.8),
+                  top: BorderSide(color: _Glass.borderMid, width: 0.9),
                 ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(
-                    onPressed: _saving ? null : () => Navigator.pop(context),
-                    style: TextButton.styleFrom(
-                      foregroundColor: _Glass.textSecondary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                  GestureDetector(
+                    onTap: _saving ? null : () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
+                      decoration: _Glass.glass(radius: 99),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: _Glass.textSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                    child: const Text('Cancel'),
                   ),
                   const SizedBox(width: 10),
-                  _GlassButton(
-                    label: isEdit ? 'Save Changes' : 'Create Product',
-                    isPrimary: true,
-                    isLoading: _saving,
-                    onPressed: _saving ? null : _save,
+                  GestureDetector(
+                    onTap: _saving ? null : _save,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
+                      decoration: _Glass.solidPill(_navyBlue, glow: true),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_saving)
+                            const SizedBox(
+                              width: 13,
+                              height: 13,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          else
+                            const Icon(
+                              Icons.check_rounded,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                          const SizedBox(width: 6),
+                          Text(
+                            isEdit ? 'Save Changes' : 'Create Product',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1513,7 +1784,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
 }
 
 // =============================================================================
-// BOM edit row — glass
+// BOM edit row
 // =============================================================================
 class _BomEditRow extends StatefulWidget {
   final Map<String, dynamic> item;
@@ -1550,8 +1821,6 @@ class _BomEditRowState extends State<_BomEditRow> {
     _qtyCtrl = TextEditingController(
       text: widget.item['quantity_per_unit']?.toString() ?? '1',
     );
-    // Do NOT auto-replace unrecognised material IDs — keep the ID so the
-    // admin can see and fix it rather than silently corrupting the BOM.
   }
 
   @override
@@ -1585,7 +1854,7 @@ class _BomEditRowState extends State<_BomEditRow> {
             IconButton(
               icon: Icon(
                 Icons.remove_circle_outline,
-                color: Colors.red.shade400,
+                color: _Glass.accentRose,
                 size: 16,
               ),
               onPressed: widget.onRemove,
@@ -1599,8 +1868,6 @@ class _BomEditRowState extends State<_BomEditRow> {
     final valueExists = widget.allMaterials.any(
       (m) => (m['material_id'] ?? m['id'])?.toString() == _materialId,
     );
-
-    // Get the linked material's stock_unit for the hint label
     String unitHint = '';
     if (valueExists) {
       final mat = widget.allMaterials.firstWhere(
@@ -1611,9 +1878,9 @@ class _BomEditRowState extends State<_BomEditRow> {
       unitHint = su == 'sqft' ? 'sqft / sqft ordered' : 'pcs / piece ordered';
     }
 
-    // Build the "for option" dropdown items
-    // Filter out empty strings to avoid duplicate values with the "All options" item (value: '')
-    final validOptions = widget.materialOptions.where((o) => o.isNotEmpty).toList();
+    final validOptions = widget.materialOptions
+        .where((o) => o.isNotEmpty)
+        .toList();
     final optionItems = <DropdownMenuItem<String>>[
       const DropdownMenuItem(
         value: '',
@@ -1651,7 +1918,6 @@ class _BomEditRowState extends State<_BomEditRow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row 1: Material dropdown + remove button
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -1676,10 +1942,7 @@ class _BomEditRowState extends State<_BomEditRow> {
                       decoration: BoxDecoration(
                         color: _Glass.surface,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: _Glass.borderMid,
-                          width: 0.8,
-                        ),
+                        border: Border.all(color: _Glass.borderMid, width: 0.8),
                       ),
                       child: DropdownButton<String>(
                         value: valueExists ? _materialId : null,
@@ -1739,7 +2002,7 @@ class _BomEditRowState extends State<_BomEditRow> {
               IconButton(
                 icon: Icon(
                   Icons.remove_circle_outline,
-                  color: Colors.red.shade400,
+                  color: _Glass.accentRose,
                   size: 18,
                 ),
                 onPressed: widget.onRemove,
@@ -1749,7 +2012,6 @@ class _BomEditRowState extends State<_BomEditRow> {
             ],
           ),
           const SizedBox(height: 8),
-          // Row 2: Qty/unit + For material option
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -1805,10 +2067,7 @@ class _BomEditRowState extends State<_BomEditRow> {
                       decoration: BoxDecoration(
                         color: _Glass.surface,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: _Glass.borderMid,
-                          width: 0.8,
-                        ),
+                        border: Border.all(color: _Glass.borderMid, width: 0.8),
                       ),
                       child: DropdownButton<String>(
                         value: forOptionValue,
@@ -1823,9 +2082,7 @@ class _BomEditRowState extends State<_BomEditRow> {
                         onChanged: validOptions.isEmpty
                             ? null
                             : (val) {
-                                setState(
-                                  () => _forMaterialOption = val ?? '',
-                                );
+                                setState(() => _forMaterialOption = val ?? '');
                                 _notify();
                               },
                       ),
@@ -1842,7 +2099,7 @@ class _BomEditRowState extends State<_BomEditRow> {
 }
 
 // =============================================================================
-// Bulk pricing row — glass
+// Bulk pricing row
 // =============================================================================
 class _BulkPricingRow extends StatefulWidget {
   final Map<String, dynamic> item;
@@ -1901,40 +2158,62 @@ class _BulkPricingRowState extends State<_BulkPricingRow> {
       decoration: BoxDecoration(
         color: _Glass.surfaceThin,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _Glass.borderMid, width: 0.8),
+        border: Border.all(color: _Glass.borderMid, width: 0.9),
       ),
       child: Column(
         children: [
-          // Tier label + remove
           Row(
             children: [
-              Text(
-                'Tier ${widget.index + 1}',
-                style: const TextStyle(
-                  color: _amber, // ← was AppTheme.gold
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: _amber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: _amber.withValues(alpha: 0.35),
+                    width: 0.8,
+                  ),
+                ),
+                child: Text(
+                  'Tier ${widget.index + 1}',
+                  style: const TextStyle(
+                    color: _amber,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               const Spacer(),
-              IconButton(
-                icon: Icon(
-                  Icons.remove_circle_outline,
-                  color: Colors.red.shade400,
-                  size: 16,
+              GestureDetector(
+                onTap: widget.onRemove,
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: _Glass.accentRose.withValues(alpha: 0.10),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: _Glass.accentRose.withValues(alpha: 0.35),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.remove_rounded,
+                    color: _Glass.accentRose,
+                    size: 14,
+                  ),
                 ),
-                onPressed: widget.onRemove,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Row(
             children: [
-              // Min qty
               SizedBox(
-                width: 100,
+                width: 90,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1961,7 +2240,6 @@ class _BulkPricingRowState extends State<_BulkPricingRow> {
                 ),
               ),
               const SizedBox(width: 8),
-              // Discount type
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2002,14 +2280,13 @@ class _BulkPricingRowState extends State<_BulkPricingRow> {
                 ),
               ),
               const SizedBox(width: 8),
-              // Value
               SizedBox(
                 width: 90,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _discountType == 'rate' ? 'Rate (%)' : 'Amount (₱)',
+                      _discountType == 'rate' ? 'Rate (%)' : 'Amt (₱)',
                       style: const TextStyle(
                         color: _Glass.textMuted,
                         fontSize: 10,
@@ -2053,115 +2330,57 @@ class _BulkPricingRowState extends State<_BulkPricingRow> {
 }
 
 // =============================================================================
-// Shared glass widgets
+// Shared small widgets
 // =============================================================================
 
-/// Pill button — primary (dark navy) or ghost (glass thin)
-class _GlassButton extends StatelessWidget {
+/// Ghost pill button used inside the form dialog
+class _FormPillButton extends StatelessWidget {
   final String label;
   final IconData? icon;
-  final bool isPrimary;
-  final bool isLoading;
   final VoidCallback? onPressed;
 
-  const _GlassButton({
-    required this.label,
-    this.icon,
-    required this.isPrimary,
-    this.isLoading = false,
-    this.onPressed,
-  });
+  const _FormPillButton({required this.label, this.icon, this.onPressed});
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-        decoration: BoxDecoration(
-          color: isPrimary ? const Color(0xDD1A1A2E) : _Glass.surfaceThin,
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(
-            color: isPrimary ? const Color(0x44FFFFFF) : _Glass.borderMid,
-            width: 0.8,
-          ),
-          boxShadow: const [_Glass.rowShadow],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isLoading)
-              SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: isPrimary ? Colors.white : _Glass.textSecondary,
-                ),
-              )
-            else if (icon != null)
-              Icon(
-                icon,
-                size: 14,
-                color: isPrimary ? Colors.white : _Glass.textSecondary,
-              ),
-            if (icon != null || isLoading) const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isPrimary ? Colors.white : _Glass.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onPressed,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: onPressed != null
+            ? _Glass.surfaceThin
+            : _Glass.surfaceThin.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: _Glass.borderMid, width: 0.9),
+        boxShadow: const [_Glass.rowShadow],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(
+              icon,
+              size: 13,
+              color: onPressed != null
+                  ? _Glass.textSecondary
+                  : _Glass.textMuted,
             ),
+            const SizedBox(width: 5),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Category filter chip
-class _GlassChip extends StatelessWidget {
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _GlassChip({
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? const Color(0xEE1A1A2E) : _Glass.surfaceThin,
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(
-            color: isActive ? const Color(0x33FFFFFF) : _Glass.borderMid,
-            width: 0.8,
+          Text(
+            label,
+            style: TextStyle(
+              color: onPressed != null
+                  ? _Glass.textSecondary
+                  : _Glass.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          boxShadow: const [_Glass.rowShadow],
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? Colors.white : _Glass.textSecondary,
-            fontSize: 11,
-            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 /// Small bold section label inside the dialog form

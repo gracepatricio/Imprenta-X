@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -5,42 +6,74 @@ import 'app_theme.dart';
 import 'sales_widgets.dart';
 import 'invoice_screen.dart';
 
-// ── Liquid Glass Design Tokens ────────────────────────────────────────────────
-class _Glass {
-  static const Color surface = Color(0xEEFFFFFF);
-  static const Color surfaceMid = Color(0xCCFFFFFF);
-  static const Color surfaceThin = Color(0x99FFFFFF);
+// =============================================================================
+// Design Tokens — Liquid Glass (matches Account screen)
+// =============================================================================
+class _G {
+  static const Color navyBlue = Color(0xFF0F1A2E);
+  static const Color surface = Color(0xF8FFFFFF);
+  static const Color surfaceMid = Color(0xF0FFFFFF);
+  static const Color surfaceThin = Color(0xA0FFFFFF);
 
-  static const Color borderMid = Color(0x55FFFFFF);
-  static const Color borderDim = Color(0x28FFFFFF);
+  static const Color borderMid = Color(0x70FFFFFF);
+  static const Color borderDim = Color(0x30FFFFFF);
+  static const Color borderSolid = Color(0xFFE5E7EB);
 
-  static const Color textPrimary = Color(0xFF111827);
-  static const Color textSecondary = Color(0xFF4B5563);
-  static const Color textMuted = Color(0xFF9CA3AF);
+  static const Color textPrimary = Color(0xFF0F172A);
+  static const Color textSecondary = Color(0xCC0F172A);
+  static const Color textMuted = Color(0x880F172A);
+
+  static const Color accentBlue = Color(0xFF3B82F6);
+  static const Color accentViolet = Color(0xFF8B5CF6);
+  static const Color accentEmerald = Color(0xFF10B981);
+  static const Color accentAmber = Color(0xFFF59E0B);
+  static const Color accentRose = Color(0xFFEF4444);
+  static const Color amber = Color(0xFFB45309);
 
   static const BoxShadow elevatedShadow = BoxShadow(
-    color: Color(0x1A000000),
-    blurRadius: 20,
-    spreadRadius: -2,
-    offset: Offset(0, 6),
+    color: Color(0x22000000),
+    blurRadius: 32,
+    spreadRadius: -4,
+    offset: Offset(0, 8),
   );
   static const BoxShadow rowShadow = BoxShadow(
-    color: Color(0x0D000000),
-    blurRadius: 8,
-    spreadRadius: 0,
-    offset: Offset(0, 2),
+    color: Color(0x10000000),
+    blurRadius: 10,
+    offset: Offset(0, 3),
   );
 
-  static BoxDecoration card({
-    Color? color,
-    double radius = 14,
+  static BoxDecoration glass({
+    double radius = 16,
     bool elevated = false,
+    Color? tintBorder,
   }) => BoxDecoration(
-    color: color ?? surfaceMid,
+    color: surfaceMid,
     borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: borderMid, width: 0.8),
+    border: Border.all(color: tintBorder ?? borderMid, width: 0.9),
     boxShadow: [elevated ? elevatedShadow : rowShadow],
   );
+
+  static BoxDecoration pill({Color? tint}) => BoxDecoration(
+    color: tint != null ? tint.withValues(alpha: 0.15) : surfaceThin,
+    borderRadius: BorderRadius.circular(99),
+    border: Border.all(
+      color: tint != null ? tint.withValues(alpha: 0.50) : borderMid,
+      width: 0.9,
+    ),
+  );
+
+  static BoxDecoration solidPill(Color color, {bool glow = false}) =>
+      BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(99),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: glow ? 0.38 : 0.22),
+            blurRadius: glow ? 16 : 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      );
 
   static InputDecoration field(
     String hint, {
@@ -50,54 +83,70 @@ class _Glass {
     hintStyle: const TextStyle(color: textMuted, fontSize: 13),
     prefixIcon: icon != null ? Icon(icon, size: 16, color: textMuted) : null,
     filled: true,
-    fillColor: const Color(0xFFF9FAFB),
+    fillColor: surface,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: Color(0xFFE5E7EB), width: 1),
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: borderMid, width: 0.9),
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: AppTheme.gold.withValues(alpha: 0.7)),
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: navyBlue, width: 1.5),
     ),
   );
 }
 
-// ── iOS-style design tokens ───────────────────────────────────────────────────
-class _iOS {
-  static const Color groupedBg = Color(0xFFF2F2F7);
-  static const Color cellBg = Colors.white;
-  static const Color separator = Color(0xFFE5E5EA);
-  static const Color label = Color(0xFF000000);
-  static const Color label2 = Color(0xFF3C3C43);
-  static const Color label3 = Color(0xFF8E8E93);
-  static const Color tint = Color(0xFF007AFF);
+// Reusable frosted-glass card wrapper
+class _BlurCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final double radius;
+  final bool elevated;
+  final Color? tintBorder;
 
-  static const BoxShadow cardShadow = BoxShadow(
-    color: Color(0x0A000000),
-    blurRadius: 12,
-    spreadRadius: 0,
-    offset: Offset(0, 2),
-  );
+  const _BlurCard({
+    required this.child,
+    this.padding,
+    this.radius = 18,
+    this.elevated = false,
+    this.tintBorder,
+  });
 
-  static BoxDecoration groupedCard({double radius = 12}) => BoxDecoration(
-    color: cellBg,
+  @override
+  Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(radius),
-    boxShadow: const [cardShadow],
+    child: BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+      child: Container(
+        decoration: _G.glass(
+          radius: radius,
+          elevated: elevated,
+          tintBorder: tintBorder,
+        ),
+        padding: padding,
+        child: child,
+      ),
+    ),
   );
 }
 
-// ── Sub-menu tab enum ─────────────────────────────────────────────────────────
+// =============================================================================
+// Sub-menu tab enum
+// =============================================================================
 enum _LogsTab { jobQueue, salesRecord, employeeActivity, customerFeedback }
 
 // =============================================================================
-// Sub-menu tab bar
+// AdminLogsScreen — unified header + tabs
 // =============================================================================
-class _SubMenuTabBar extends StatelessWidget {
-  final _LogsTab activeTab;
-  final ValueChanged<_LogsTab> onTabChanged;
+class AdminLogsScreen extends StatefulWidget {
+  const AdminLogsScreen({super.key});
 
-  const _SubMenuTabBar({required this.activeTab, required this.onTabChanged});
+  @override
+  State<AdminLogsScreen> createState() => _AdminLogsScreenState();
+}
+
+class _AdminLogsScreenState extends State<AdminLogsScreen> {
+  _LogsTab _activeTab = _LogsTab.jobQueue;
 
   static const _tabs = [
     (_LogsTab.jobQueue, 'Job Queue', Icons.queue_outlined),
@@ -113,166 +162,6 @@ class _SubMenuTabBar extends StatelessWidget {
       Icons.rate_review_outlined,
     ),
   ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-        boxShadow: const [_Glass.rowShadow],
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: _tabs.map((t) {
-            final isActive = activeTab == t.$1;
-            return GestureDetector(
-              onTap: () => onTabChanged(t.$1),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? const Color(0xFF1A1A2E)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      t.$3,
-                      size: 14,
-                      color: isActive ? Colors.white : _Glass.textSecondary,
-                    ),
-                    const SizedBox(width: 7),
-                    Text(
-                      t.$2,
-                      style: TextStyle(
-                        color: isActive ? Colors.white : _Glass.textSecondary,
-                        fontSize: 13,
-                        fontWeight: isActive
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// AdminLogsScreen
-// =============================================================================
-class AdminLogsScreen extends StatefulWidget {
-  const AdminLogsScreen({super.key});
-
-  @override
-  State<AdminLogsScreen> createState() => _AdminLogsScreenState();
-}
-
-class _AdminLogsScreenState extends State<AdminLogsScreen> {
-  _LogsTab _activeTab = _LogsTab.jobQueue;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SubMenuTabBar(
-          activeTab: _activeTab,
-          onTabChanged: (tab) => setState(() => _activeTab = tab),
-        ),
-
-        const SizedBox(height: 8),
-
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-          decoration: BoxDecoration(
-            color: _Glass.surfaceMid,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _Glass.borderMid, width: 0.8),
-            boxShadow: const [_Glass.rowShadow],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A2E),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  _iconForTab(_activeTab),
-                  color: Colors.white,
-                  size: 16,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _titleForTab(_activeTab),
-                      style: const TextStyle(
-                        color: _Glass.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      _subtitleForTab(_activeTab),
-                      style: const TextStyle(
-                        color: _Glass.textMuted,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 8),
-
-        Expanded(
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color.fromARGB(240, 253, 253, 253),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: _Glass.borderMid, width: 0.8),
-              boxShadow: const [_Glass.rowShadow],
-            ),
-            child: _buildContent(),
-          ),
-        ),
-      ],
-    );
-  }
 
   IconData _iconForTab(_LogsTab t) {
     switch (t) {
@@ -313,6 +202,148 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
     }
   }
 
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Unified header card ────────────────────────────────────────────
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
+              decoration: _G.glass(radius: 20, elevated: true),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title row
+                  Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: _G.navyBlue,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          _iconForTab(_activeTab),
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _titleForTab(_activeTab),
+                              style: const TextStyle(
+                                color: _G.textPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              _subtitleForTab(_activeTab),
+                              style: const TextStyle(
+                                color: _G.textMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Divider
+                  Divider(height: 1, color: _G.borderDim),
+
+                  const SizedBox(height: 12),
+
+                  // Tab pills
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: _tabs.map((t) {
+                        final isActive = _activeTab == t.$1;
+                        return GestureDetector(
+                          onTap: () => setState(() => _activeTab = t.$1),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeInOut,
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 9,
+                            ),
+                            decoration: isActive
+                                ? _G.solidPill(_G.navyBlue, glow: true)
+                                : BoxDecoration(
+                                    color: _G.surfaceThin,
+                                    borderRadius: BorderRadius.circular(99),
+                                    border: Border.all(
+                                      color: _G.borderMid,
+                                      width: 0.9,
+                                    ),
+                                  ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  t.$3,
+                                  size: 13,
+                                  color: isActive
+                                      ? Colors.white
+                                      : _G.textSecondary,
+                                ),
+                                const SizedBox(width: 7),
+                                Text(
+                                  t.$2,
+                                  style: TextStyle(
+                                    color: isActive
+                                        ? Colors.white
+                                        : _G.textSecondary,
+                                    fontSize: 13,
+                                    fontWeight: isActive
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // ── Content area ───────────────────────────────────────────────────
+        Expanded(
+          child: _BlurCard(radius: 20, elevated: true, child: _buildContent()),
+        ),
+      ],
+    );
+  }
+
   Widget _buildContent() {
     switch (_activeTab) {
       case _LogsTab.jobQueue:
@@ -328,7 +359,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
 }
 
 // =============================================================================
-// Job Queue Tab  —  iOS redesign
+// Job Queue Tab
 // =============================================================================
 enum _QueueSubTab { pending, active, ready, cancelled, history }
 
@@ -377,11 +408,11 @@ class _JobQueueTabState extends State<_JobQueueTab> {
             Row(
               children: [
                 Expanded(
-                  child: _IOSSegmentControl<_QueueSubTab>(
+                  child: _PillSegmentControl<_QueueSubTab>(
                     selected: _sub,
                     items: _statusTabs
                         .map(
-                          (t) => _IOSSegmentItem(
+                          (t) => _PillSegmentItem(
                             value: t.$1,
                             label: t.$2,
                             icon: t.$3,
@@ -392,20 +423,15 @@ class _JobQueueTabState extends State<_JobQueueTab> {
                     onChanged: (v) => setState(() => _sub = v),
                   ),
                 ),
-
                 const SizedBox(width: 10),
-
                 GestureDetector(
                   onTap: () => setState(() => _sub = _QueueSubTab.history),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
+                      horizontal: 16,
                       vertical: 9,
                     ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6D28D9),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    decoration: _G.solidPill(_G.accentViolet),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -421,7 +447,6 @@ class _JobQueueTabState extends State<_JobQueueTab> {
                             color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            letterSpacing: -0.1,
                           ),
                         ),
                       ],
@@ -467,13 +492,13 @@ class _JobQueueTabState extends State<_JobQueueTab> {
   }
 }
 
-// ── iOS Segment Control widget ────────────────────────────────────────────────
-class _IOSSegmentItem<T> {
+// ── Pill Segment Control ──────────────────────────────────────────────────────
+class _PillSegmentItem<T> {
   final T value;
   final String label;
   final IconData icon;
   final Color accent;
-  const _IOSSegmentItem({
+  const _PillSegmentItem({
     required this.value,
     required this.label,
     required this.icon,
@@ -481,12 +506,12 @@ class _IOSSegmentItem<T> {
   });
 }
 
-class _IOSSegmentControl<T> extends StatelessWidget {
+class _PillSegmentControl<T> extends StatelessWidget {
   final T selected;
-  final List<_IOSSegmentItem<T>> items;
+  final List<_PillSegmentItem<T>> items;
   final ValueChanged<T> onChanged;
 
-  const _IOSSegmentControl({
+  const _PillSegmentControl({
     required this.selected,
     required this.items,
     required this.onChanged,
@@ -495,13 +520,15 @@ class _IOSSegmentControl<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(3),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFEFF4),
-        borderRadius: BorderRadius.circular(10),
+        color: _G.surfaceThin,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: _G.borderMid, width: 0.9),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: items.map((item) {
@@ -511,42 +538,44 @@ class _IOSSegmentControl<T> extends StatelessWidget {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeInOut,
-                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                margin: const EdgeInsets.symmetric(horizontal: 2),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 13,
-                  vertical: 6,
+                  horizontal: 14,
+                  vertical: 7,
                 ),
-                decoration: BoxDecoration(
-                  color: isActive ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(7),
-                  boxShadow: isActive
-                      ? [
+                decoration: isActive
+                    ? BoxDecoration(
+                        color: item.accent,
+                        borderRadius: BorderRadius.circular(99),
+                        boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                            color: item.accent.withValues(alpha: 0.30),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
                           ),
-                        ]
-                      : null,
-                ),
+                        ],
+                      )
+                    : const BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.all(Radius.circular(99)),
+                      ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       item.icon,
                       size: 12,
-                      color: isActive ? item.accent : _iOS.label3,
+                      color: isActive ? Colors.white : _G.textMuted,
                     ),
                     const SizedBox(width: 5),
                     Text(
                       item.label,
                       style: TextStyle(
-                        color: isActive ? item.accent : _iOS.label3,
+                        color: isActive ? Colors.white : _G.textSecondary,
                         fontSize: 12,
                         fontWeight: isActive
-                            ? FontWeight.w600
+                            ? FontWeight.w700
                             : FontWeight.w500,
-                        letterSpacing: -0.1,
                       ),
                     ),
                   ],
@@ -560,12 +589,10 @@ class _IOSSegmentControl<T> extends StatelessWidget {
   }
 }
 
-// ── Single-status queue list ──────────────────────────────────────────────────
+// ── Queue status list ─────────────────────────────────────────────────────────
 class _QueueStatusList extends StatelessWidget {
   final String jobStatus;
   const _QueueStatusList({required this.jobStatus});
-
-  static const Color _amber = Color(0xFFB45309);
 
   static String _fmtDate(dynamic ts) {
     if (ts == null) return '—';
@@ -602,17 +629,13 @@ class _QueueStatusList extends StatelessWidget {
       case 'cancelled':
         return const Color(0xFFDC2626);
       default:
-        return _Glass.textMuted;
+        return _G.textMuted;
     }
   }
 
   String _statusLabel(String s) {
-    switch (s) {
-      case 'completed':
-        return 'Ready';
-      default:
-        return s[0].toUpperCase() + s.substring(1);
-    }
+    if (s == 'completed') return 'Ready';
+    return s[0].toUpperCase() + s.substring(1);
   }
 
   @override
@@ -626,7 +649,8 @@ class _QueueStatusList extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
             child: CircularProgressIndicator(
-              color: _Glass.textPrimary.withValues(alpha: 0.4),
+              color: _G.navyBlue.withValues(alpha: 0.5),
+              strokeWidth: 2,
             ),
           );
         }
@@ -634,7 +658,7 @@ class _QueueStatusList extends StatelessWidget {
           return Center(
             child: Text(
               'Error: ${snapshot.error}',
-              style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13),
+              style: const TextStyle(color: _G.accentRose, fontSize: 13),
             ),
           );
         }
@@ -659,30 +683,26 @@ class _QueueStatusList extends StatelessWidget {
                 Container(
                   width: 64,
                   height: 64,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFEFF4),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
+                  decoration: _G.glass(radius: 20),
                   child: const Icon(
                     Icons.queue_outlined,
                     size: 28,
-                    color: _iOS.label3,
+                    color: _G.textMuted,
                   ),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   'No $jobStatus jobs',
                   style: const TextStyle(
-                    color: _iOS.label,
+                    color: _G.textPrimary,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    letterSpacing: -0.3,
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                const Text(
                   'Jobs assigned to this status will appear here.',
-                  style: TextStyle(color: _iOS.label3, fontSize: 13),
+                  style: TextStyle(color: _G.textMuted, fontSize: 13),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -698,18 +718,17 @@ class _QueueStatusList extends StatelessWidget {
               child: Text(
                 '${docs.length} JOB${docs.length == 1 ? '' : 'S'}',
                 style: const TextStyle(
-                  color: _iOS.label3,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
+                  color: _G.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
                 ),
               ),
             ),
-
             Expanded(
               child: ListView.separated(
                 itemCount: docs.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
                   final data = docs[i].data() as Map<String, dynamic>;
                   final orderId = data['order_id']?.toString() ?? '—';
@@ -723,18 +742,18 @@ class _QueueStatusList extends StatelessWidget {
                   final dateStr = _fmtDate(data['created_at']);
                   final statusColor = _statusColor(status);
                   final productSummary = products.isEmpty
-                      ? '—'
+                      ? null
                       : products
                             .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
                             .join(', ');
 
-                  return _IOSJobCard(
+                  return _JobCard(
                     index: i + 1,
                     orderId: orderId,
                     customer: customer,
                     statusLabel: _statusLabel(status),
                     statusColor: statusColor,
-                    productSummary: products.isNotEmpty ? productSummary : null,
+                    productSummary: productSummary,
                     dateStr: dateStr,
                     total: total,
                   );
@@ -748,8 +767,8 @@ class _QueueStatusList extends StatelessWidget {
   }
 }
 
-// ── iOS Job Card ──────────────────────────────────────────────────────────────
-class _IOSJobCard extends StatelessWidget {
+// ── Job Card (glass) ──────────────────────────────────────────────────────────
+class _JobCard extends StatelessWidget {
   final int index;
   final String orderId;
   final String customer;
@@ -759,7 +778,7 @@ class _IOSJobCard extends StatelessWidget {
   final String dateStr;
   final double total;
 
-  const _IOSJobCard({
+  const _JobCard({
     required this.index,
     required this.orderId,
     required this.customer,
@@ -770,49 +789,35 @@ class _IOSJobCard extends StatelessWidget {
     required this.total,
   });
 
-  static const Color _amber = Color(0xFFB45309);
-
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
-          width: 32,
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: _G.amber.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+            border: Border.all(color: _G.amber.withValues(alpha: 0.35)),
+          ),
           child: Center(
-            child: Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                color: _amber.withValues(alpha: 0.10),
-                shape: BoxShape.circle,
-                border: Border.all(color: _amber.withValues(alpha: 0.35)),
-              ),
-              child: Center(
-                child: Text(
-                  '$index',
-                  style: const TextStyle(
-                    color: _amber,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+            child: Text(
+              '$index',
+              style: const TextStyle(
+                color: _G.amber,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
         ),
-
-        const SizedBox(width: 6),
-
+        const SizedBox(width: 8),
         Expanded(
-          child: Container(
+          child: _BlurCard(
+            radius: 14,
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E5EA), width: 0.8),
-              boxShadow: const [_iOS.cardShadow],
-            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -825,7 +830,7 @@ class _IOSJobCard extends StatelessWidget {
                           Text(
                             orderId,
                             style: const TextStyle(
-                              color: _iOS.label,
+                              color: _G.textPrimary,
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
                               letterSpacing: -0.2,
@@ -835,7 +840,7 @@ class _IOSJobCard extends StatelessWidget {
                           Text(
                             customer,
                             style: const TextStyle(
-                              color: _iOS.label2,
+                              color: _G.textSecondary,
                               fontSize: 12,
                             ),
                           ),
@@ -844,12 +849,16 @@ class _IOSJobCard extends StatelessWidget {
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 3,
+                        horizontal: 11,
+                        vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.10),
+                        color: statusColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(99),
+                        border: Border.all(
+                          color: statusColor.withValues(alpha: 0.35),
+                          width: 0.8,
+                        ),
                       ),
                       child: Text(
                         statusLabel,
@@ -862,38 +871,38 @@ class _IOSJobCard extends StatelessWidget {
                     ),
                   ],
                 ),
-
                 if (productSummary != null) ...[
                   const SizedBox(height: 8),
                   Text(
                     productSummary!,
-                    style: const TextStyle(color: _iOS.label2, fontSize: 13),
+                    style: const TextStyle(
+                      color: _G.textSecondary,
+                      fontSize: 13,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
-
                 const SizedBox(height: 10),
-                Container(height: 0.5, color: _iOS.separator),
+                Divider(height: 0.8, color: _G.borderDim),
                 const SizedBox(height: 10),
-
                 Row(
                   children: [
                     const Icon(
                       Icons.calendar_today_outlined,
                       size: 11,
-                      color: _iOS.label3,
+                      color: _G.textMuted,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       dateStr,
-                      style: const TextStyle(color: _iOS.label3, fontSize: 12),
+                      style: const TextStyle(color: _G.textMuted, fontSize: 12),
                     ),
                     const Spacer(),
                     Text(
                       '₱${total.toStringAsFixed(2)}',
                       style: const TextStyle(
-                        color: _amber,
+                        color: _G.amber,
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
                       ),
@@ -910,7 +919,7 @@ class _IOSJobCard extends StatelessWidget {
 }
 
 // =============================================================================
-// Admin Order History — with Customer ID search + invoice + total/paid/balance
+// Admin Order History
 // =============================================================================
 class _AdminOrderHistory extends StatefulWidget {
   final VoidCallback onBack;
@@ -985,21 +994,17 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
       case 'ready':
         return const Color(0xFF16A34A);
       case 'completed':
-        return const Color(0xFF6D28D9);
+        return _G.accentViolet;
       case 'cancelled':
-        return const Color(0xFFDC2626);
+        return _G.accentRose;
       default:
-        return _Glass.textMuted;
+        return _G.textMuted;
     }
   }
 
   String _statusLabel(String s) {
-    switch (s) {
-      case 'in_production':
-        return 'Active';
-      default:
-        return s[0].toUpperCase() + s.substring(1);
-    }
+    if (s == 'in_production') return 'Active';
+    return s[0].toUpperCase() + s.substring(1);
   }
 
   String _fmtDate(dynamic ts) {
@@ -1035,178 +1040,185 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
       case 'ready':
         return const Color(0xFF16A34A);
       case 'cancelled':
-        return const Color(0xFFDC2626);
+        return _G.accentRose;
       case 'completed':
-        return const Color(0xFF6D28D9);
+        return _G.accentViolet;
       default:
-        return const Color(0xFF1A1A2E);
+        return _G.navyBlue;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final dropdownAccent = _filterAccent(_statusFilter);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Top bar: Back + Search + Filter ─────────────────────────────
         Row(
           children: [
             GestureDetector(
               onTap: widget.onBack,
               child: Container(
                 height: 38,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFEFF4),
-                  borderRadius: BorderRadius.circular(10),
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: _G.glass(radius: 99),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.chevron_left_rounded,
                       size: 18,
-                      color: _iOS.label2,
+                      color: _G.textSecondary,
                     ),
                     SizedBox(width: 2),
                     Text(
                       'Back',
                       style: TextStyle(
-                        color: _iOS.label2,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: -0.2,
+                        color: _G.textSecondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-
             const SizedBox(width: 10),
-
-            // FIXED: Search now includes customer_uid / customer ID
             Expanded(
-              child: Container(
-                height: 38,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFEFF4),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: TextField(
-                  controller: _searchCtrl,
-                  onChanged: (v) =>
-                      setState(() => _search = v.trim().toLowerCase()),
-                  style: const TextStyle(
-                    color: _iOS.label,
-                    fontSize: 14,
-                    letterSpacing: -0.1,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Search by Order ID or Customer Name',
-                    hintStyle: TextStyle(color: _iOS.label3, fontSize: 13),
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      size: 16,
-                      color: _iOS.label3,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    height: 38,
+                    decoration: _G.glass(radius: 14),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (v) =>
+                          setState(() => _search = v.trim().toLowerCase()),
+                      style: const TextStyle(
+                        color: _G.textPrimary,
+                        fontSize: 13,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Search by Order ID or Customer Name',
+                        hintStyle: const TextStyle(
+                          color: _G.textMuted,
+                          fontSize: 12.5,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          size: 16,
+                          color: _G.textMuted,
+                        ),
+                        suffixIcon: _search.isNotEmpty
+                            ? GestureDetector(
+                                onTap: () {
+                                  _searchCtrl.clear();
+                                  setState(() => _search = '');
+                                },
+                                child: const Icon(
+                                  Icons.clear,
+                                  size: 15,
+                                  color: _G.textMuted,
+                                ),
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                        ),
+                      ),
                     ),
-                    suffixIcon: _search.isNotEmpty
-                        ? GestureDetector(
-                            onTap: () {
-                              _searchCtrl.clear();
-                              setState(() => _search = '');
-                            },
-                            child: const Icon(
-                              Icons.clear,
-                              size: 16,
-                              color: _iOS.label3,
-                            ),
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
                   ),
                 ),
               ),
             ),
-
             const SizedBox(width: 10),
-
-            Container(
-              height: 38,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: _statusFilter == 'all'
-                    ? const Color(0xFF1A1A2E)
-                    : dropdownAccent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _statusFilter,
-                  isDense: true,
-                  icon: const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'sans-serif',
-                    letterSpacing: -0.1,
-                  ),
-                  dropdownColor: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  items: _statusOpts.map((opt) {
-                    final accent = _filterAccent(opt.$1);
-                    return DropdownMenuItem<String>(
-                      value: opt.$1,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              color: accent,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            opt.$2,
-                            style: const TextStyle(
-                              color: _iOS.label,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: _statusFilter == 'all'
+                        ? _G.navyBlue
+                        : _filterAccent(_statusFilter),
+                    borderRadius: BorderRadius.circular(99),
+                    boxShadow: [
+                      BoxShadow(
+                        color:
+                            (_statusFilter == 'all'
+                                    ? _G.navyBlue
+                                    : _filterAccent(_statusFilter))
+                                .withValues(alpha: 0.30),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
                       ),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _statusFilter = val);
-                  },
-                  selectedItemBuilder: (_) => _statusOpts.map((opt) {
-                    return Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          opt.$2,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                    ],
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _statusFilter,
+                      isDense: true,
+                      icon: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                      dropdownColor: _G.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      items: _statusOpts.map((opt) {
+                        final accent = _filterAccent(opt.$1);
+                        return DropdownMenuItem<String>(
+                          value: opt.$1,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  color: accent,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                opt.$2,
+                                style: const TextStyle(
+                                  color: _G.textPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _statusFilter = val);
+                      },
+                      selectedItemBuilder: (_) => _statusOpts
+                          .map(
+                            (opt) => Text(
+                              opt.$2,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1223,7 +1235,8 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                   !snap.hasData) {
                 return Center(
                   child: CircularProgressIndicator(
-                    color: _Glass.textPrimary.withValues(alpha: 0.4),
+                    color: _G.navyBlue.withValues(alpha: 0.5),
+                    strokeWidth: 2,
                   ),
                 );
               }
@@ -1231,17 +1244,12 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                 return Center(
                   child: Text(
                     'Error: ${snap.error}',
-                    style: const TextStyle(
-                      color: Color(0xFFDC2626),
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: _G.accentRose, fontSize: 12),
                   ),
                 );
               }
 
               var docs = snap.data ?? [];
-
-              // FIXED: search checks order_id, customer_name, AND customer_uid
               if (_search.isNotEmpty) {
                 docs = docs.where((d) {
                   final data = d.data() as Map<String, dynamic>;
@@ -1249,11 +1257,11 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                       .toLowerCase();
                   final name = (data['customer_name']?.toString() ?? '')
                       .toLowerCase();
-                  final customerId = (data['customer_uid']?.toString() ?? '')
+                  final cid = (data['customer_uid']?.toString() ?? '')
                       .toLowerCase();
                   return id.contains(_search) ||
                       name.contains(_search) ||
-                      customerId.contains(_search);
+                      cid.contains(_search);
                 }).toList();
               }
 
@@ -1265,30 +1273,26 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                       Container(
                         width: 64,
                         height: 64,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFEFF4),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
+                        decoration: _G.glass(radius: 20),
                         child: const Icon(
                           Icons.history,
                           size: 28,
-                          color: _iOS.label3,
+                          color: _G.textMuted,
                         ),
                       ),
                       const SizedBox(height: 14),
                       const Text(
                         'No orders found',
                         style: TextStyle(
-                          color: _iOS.label,
+                          color: _G.textPrimary,
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          letterSpacing: -0.3,
                         ),
                       ),
                       const SizedBox(height: 4),
                       const Text(
                         'Try adjusting the filter or search.',
-                        style: TextStyle(color: _iOS.label3, fontSize: 13),
+                        style: TextStyle(color: _G.textMuted, fontSize: 13),
                       ),
                     ],
                   ),
@@ -1303,10 +1307,10 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                     child: Text(
                       '${docs.length} ORDER${docs.length == 1 ? '' : 'S'}',
                       style: const TextStyle(
-                        color: _iOS.label3,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
+                        color: _G.textMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
                       ),
                     ),
                   ),
@@ -1314,7 +1318,7 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                     child: ListView.separated(
                       padding: const EdgeInsets.only(bottom: 16),
                       itemCount: docs.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (_, i) {
                         final doc = docs[i];
                         final data = doc.data() as Map<String, dynamic>;
@@ -1335,16 +1339,15 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                                 ?.cast<Map<String, dynamic>>() ??
                             [];
                         final dateStr = _fmtDate(data['created_at']);
-                        final statusColor = _statusColor(status);
                         final invoiceId = data['invoice_id']?.toString();
 
-                        return _IOSOrderHistoryCard(
+                        return _OrderHistoryCard(
                           docId: doc.id,
                           orderId: orderLabel,
                           customer: customer,
                           dateStr: dateStr,
                           statusLabel: _statusLabel(status),
-                          statusColor: statusColor,
+                          statusColor: _statusColor(status),
                           products: products,
                           paid: paid,
                           total: total,
@@ -1364,8 +1367,8 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
   }
 }
 
-// ── iOS Order History Card — with total/paid/balance + View Invoice ───────────
-class _IOSOrderHistoryCard extends StatelessWidget {
+// ── Order History Card ────────────────────────────────────────────────────────
+class _OrderHistoryCard extends StatelessWidget {
   final String docId;
   final String orderId;
   final String customer;
@@ -1378,7 +1381,7 @@ class _IOSOrderHistoryCard extends StatelessWidget {
   final double remaining;
   final String? invoiceId;
 
-  const _IOSOrderHistoryCard({
+  const _OrderHistoryCard({
     required this.docId,
     required this.orderId,
     required this.customer,
@@ -1392,24 +1395,18 @@ class _IOSOrderHistoryCard extends StatelessWidget {
     this.invoiceId,
   });
 
-  static const Color _amber = Color(0xFFB45309);
-
   @override
   Widget build(BuildContext context) {
     final fullyPaid = remaining < 0.01;
 
-    return Container(
+    return _BlurCard(
+      radius: 14,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E5EA), width: 0.8),
-        boxShadow: const [_iOS.cardShadow],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min, // ← don't stretch taller than needed
         children: [
-          // Header row
+          // ── Header row: order ID + status badge ──────────────────────────
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1420,7 +1417,7 @@ class _IOSOrderHistoryCard extends StatelessWidget {
                     Text(
                       orderId,
                       style: const TextStyle(
-                        color: _iOS.label,
+                        color: _G.textPrimary,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -0.2,
@@ -1429,17 +1426,27 @@ class _IOSOrderHistoryCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       '$customer · $dateStr',
-                      style: const TextStyle(color: _iOS.label2, fontSize: 12),
+                      style: const TextStyle(
+                        color: _G.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.10),
+                  color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.35),
+                    width: 0.8,
+                  ),
                 ),
                 child: Text(
                   statusLabel,
@@ -1453,72 +1460,96 @@ class _IOSOrderHistoryCard extends StatelessWidget {
             ],
           ),
 
+          // ── Products ──────────────────────────────────────────────────────
           if (products.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               products
                   .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
                   .join(', '),
-              style: const TextStyle(color: _iOS.label2, fontSize: 13),
+              style: const TextStyle(color: _G.textSecondary, fontSize: 13),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ],
 
           const SizedBox(height: 10),
-          Container(height: 0.5, color: _iOS.separator),
+          Divider(height: 0.8, color: _G.borderDim),
           const SizedBox(height: 10),
 
-          // IMPROVED: Total / Paid / Balance — full-width row with better spacing
-          IntrinsicHeight(
-            child: Row(
-              children: [
-                Expanded(
-                  child: _HistoryChipWide(
-                    label: 'Total',
-                    value: '₱${total.toStringAsFixed(2)}',
-                    color: const Color(0xFF374151),
-                    bgColor: const Color(0xFFF9FAFB),
-                    borderColor: const Color(0xFFE5E7EB),
+          // ── Payment chips ─────────────────────────────────────────────────
+          // Uses LayoutBuilder so chips reflow to 2-column on narrow screens.
+          LayoutBuilder(
+            builder: (_, constraints) {
+              // Threshold: if each of 3 chips can't fit comfortably (~90px
+              // each + gaps), reflow into a 2-col Wrap instead.
+              final canFitThree = constraints.maxWidth >= 280;
+
+              final totalChip = _PayChip(
+                label: 'Total',
+                value: '₱${total.toStringAsFixed(2)}',
+                color: _G.textPrimary,
+                bgColor: _G.surfaceThin,
+                borderColor: _G.borderMid,
+              );
+              final paidChip = _PayChip(
+                label: 'Paid',
+                value: '₱${paid.toStringAsFixed(2)}',
+                color: _G.accentEmerald,
+                bgColor: const Color(0xFFF0FDF4),
+                borderColor: const Color(0xFFBBF7D0),
+              );
+              final balanceChip = _PayChip(
+                label: fullyPaid ? 'Fully Paid' : 'Balance',
+                value: fullyPaid
+                    ? '✓ Paid'
+                    : '₱${remaining.toStringAsFixed(2)}',
+                color: fullyPaid ? _G.accentEmerald : _G.amber,
+                bgColor: fullyPaid
+                    ? const Color(0xFFF0FDF4)
+                    : const Color(0xFFFFFBEB),
+                borderColor: fullyPaid
+                    ? const Color(0xFFBBF7D0)
+                    : const Color(0xFFFDE68A),
+                bold: true,
+              );
+
+              if (canFitThree) {
+                return Row(
+                  children: [
+                    Expanded(child: totalChip),
+                    const SizedBox(width: 6),
+                    Expanded(child: paidChip),
+                    const SizedBox(width: 6),
+                    Expanded(child: balanceChip),
+                  ],
+                );
+              }
+
+              // Narrow fallback: total + paid side by side, balance full-width
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: totalChip),
+                      const SizedBox(width: 6),
+                      Expanded(child: paidChip),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _HistoryChipWide(
-                    label: 'Paid',
-                    value: '₱${paid.toStringAsFixed(2)}',
-                    color: const Color(0xFF16A34A),
-                    bgColor: const Color(0xFFF0FDF4),
-                    borderColor: const Color(0xFFBBF7D0),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _HistoryChipWide(
-                    label: fullyPaid ? 'Fully Paid' : 'Balance',
-                    value: fullyPaid
-                        ? '✓ Paid'
-                        : '₱${remaining.toStringAsFixed(2)}',
-                    color: fullyPaid ? const Color(0xFF16A34A) : _amber,
-                    bgColor: fullyPaid
-                        ? const Color(0xFFF0FDF4)
-                        : const Color(0xFFFFFBEB),
-                    borderColor: fullyPaid
-                        ? const Color(0xFFBBF7D0)
-                        : const Color(0xFFFDE68A),
-                    bold: true,
-                  ),
-                ),
-              ],
-            ),
+                  const SizedBox(height: 6),
+                  balanceChip,
+                ],
+              );
+            },
           ),
 
           const SizedBox(height: 10),
 
-          // ── View Invoice button ────────────────────────────────────
+          // ── View Invoice button ───────────────────────────────────────────
           Builder(
-            builder: (ctx) => OutlinedButton.icon(
-              onPressed: () async {
+            builder: (ctx) => GestureDetector(
+              onTap: () async {
                 String? invId = invoiceId;
                 if (invId == null) {
                   final orderSnap = await FirebaseFirestore.instance
@@ -1539,29 +1570,37 @@ class _IOSOrderHistoryCard extends StatelessWidget {
                   );
                 }
               },
-              icon: const Icon(
-                Icons.receipt_long_rounded,
-                size: 15,
-                color: Color(0xFF6D28D9),
-              ),
-              label: const Text(
-                'View Invoice',
-                style: TextStyle(
-                  color: Color(0xFF6D28D9),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(
-                  color: const Color(0xFF6D28D9).withValues(alpha: 0.4),
-                ),
+              child: Container(
                 padding: const EdgeInsets.symmetric(
-                  vertical: 7,
-                  horizontal: 12,
+                  horizontal: 14,
+                  vertical: 8,
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9),
+                decoration: BoxDecoration(
+                  color: _G.accentViolet.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: _G.accentViolet.withValues(alpha: 0.35),
+                    width: 0.8,
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.receipt_long_rounded,
+                      size: 14,
+                      color: _G.accentViolet,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      'View Invoice',
+                      style: TextStyle(
+                        color: _G.accentViolet,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1572,8 +1611,9 @@ class _IOSOrderHistoryCard extends StatelessWidget {
   }
 }
 
-// ── Improved wide info chip for order history card ────────────────────────────
-class _HistoryChipWide extends StatelessWidget {
+// ── Payment chip ──────────────────────────────────────────────────────────────
+// Removed IntrinsicHeight wrapper — chip sizes itself from its own content.
+class _PayChip extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
@@ -1581,7 +1621,7 @@ class _HistoryChipWide extends StatelessWidget {
   final Color borderColor;
   final bool bold;
 
-  const _HistoryChipWide({
+  const _PayChip({
     required this.label,
     required this.value,
     required this.color,
@@ -1592,21 +1632,22 @@ class _HistoryChipWide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
     decoration: BoxDecoration(
       color: bgColor,
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: borderColor, width: 1),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: borderColor, width: 0.9),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min, // ← key: don't expand height
       children: [
         Text(
           label.toUpperCase(),
           style: TextStyle(
-            color: color.withValues(alpha: 0.6),
+            color: color.withValues(alpha: 0.55),
             fontSize: 9,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             letterSpacing: 0.5,
           ),
         ),
@@ -1619,48 +1660,10 @@ class _HistoryChipWide extends StatelessWidget {
             fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
           ),
           overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
       ],
     ),
-  );
-}
-
-// Keep the old _HistoryChip for backward compatibility if needed
-class _HistoryChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  final bool bold;
-
-  const _HistoryChip({
-    required this.label,
-    required this.value,
-    required this.color,
-    this.bold = false,
-  });
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        label,
-        style: TextStyle(
-          color: color.withValues(alpha: 0.6),
-          fontSize: 9,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      const SizedBox(height: 2),
-      Text(
-        value,
-        style: TextStyle(
-          color: color,
-          fontSize: bold ? 13 : 12,
-          fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-        ),
-      ),
-    ],
   );
 }
 
@@ -1689,21 +1692,21 @@ class _SalesRecordSubTabState extends State<_SalesRecordSubTab> {
           child: Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+              color: _G.surfaceThin,
+              borderRadius: BorderRadius.circular(99),
+              border: Border.all(color: _G.borderMid, width: 0.9),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _SalesInnerTab(
+                _SalesPillTab(
                   label: 'Sales Record',
                   icon: Icons.table_rows_outlined,
                   isActive: _sub == _SalesSubTab.record,
                   onTap: () => setState(() => _sub = _SalesSubTab.record),
                 ),
                 const SizedBox(width: 4),
-                _SalesInnerTab(
+                _SalesPillTab(
                   label: 'Sales Report',
                   icon: Icons.bar_chart_rounded,
                   isActive: _sub == _SalesSubTab.report,
@@ -1724,13 +1727,13 @@ class _SalesRecordSubTabState extends State<_SalesRecordSubTab> {
   }
 }
 
-class _SalesInnerTab extends StatelessWidget {
+class _SalesPillTab extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool isActive;
   final VoidCallback onTap;
 
-  const _SalesInnerTab({
+  const _SalesPillTab({
     required this.label,
     required this.icon,
     required this.isActive,
@@ -1744,31 +1747,28 @@ class _SalesInnerTab extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: isActive ? const Color(0xFF1A1A2E) : Colors.transparent,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(
-            color: isActive ? const Color(0x33FFFFFF) : Colors.transparent,
-            width: 0.8,
-          ),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: isActive
+            ? _G.solidPill(_G.navyBlue)
+            : const BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.all(Radius.circular(99)),
+              ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
               size: 13,
-              color: isActive ? Colors.white : _Glass.textSecondary,
+              color: isActive ? Colors.white : _G.textSecondary,
             ),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
-                color: isActive ? Colors.white : _Glass.textSecondary,
+                color: isActive ? Colors.white : _G.textSecondary,
                 fontSize: 12,
                 fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 0.1,
               ),
             ),
           ],
@@ -1806,50 +1806,125 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
   Future<void> _confirmClearAll(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.25),
-      builder: (_) => AlertDialog(
-        backgroundColor: Colors.white,
-        elevation: 24,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Color(0xFFE5E7EB)),
-        ),
-        title: const Text(
-          'Clear All Logs',
-          style: TextStyle(
-            color: _Glass.textPrimary,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        content: const Text(
-          'This will permanently delete all inventory log entries. This cannot be undone.',
-          style: TextStyle(color: _Glass.textSecondary, fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            style: TextButton.styleFrom(
-              foregroundColor: _Glass.textSecondary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+      barrierColor: Colors.black.withValues(alpha: 0.35),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        contentPadding: EdgeInsets.zero,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+        content: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              width: 360,
+              decoration: BoxDecoration(
+                color: _G.surface,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: _G.borderMid, width: 0.9),
+                boxShadow: const [_G.elevatedShadow],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: _G.accentRose.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(11),
+                            border: Border.all(
+                              color: _G.accentRose.withValues(alpha: 0.30),
+                              width: 0.9,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.warning_amber_rounded,
+                            color: _G.accentRose,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Clear All Logs',
+                          style: TextStyle(
+                            color: _G.textPrimary,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: _G.borderMid),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 16, 22, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'This will permanently delete all inventory log entries. This cannot be undone.',
+                          style: TextStyle(
+                            color: _G.textSecondary,
+                            fontSize: 13,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            GestureDetector(
+                              onTap: () => Navigator.pop(ctx, false),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 10,
+                                ),
+                                decoration: _G.glass(radius: 99),
+                                child: const Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    color: _G.textSecondary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () => Navigator.pop(ctx, true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 10,
+                                ),
+                                decoration: _G.solidPill(_G.accentRose),
+                                child: const Text(
+                                  'Clear All',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade600,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text('Clear All'),
-          ),
-        ],
+        ),
       ),
     );
 
@@ -1870,23 +1945,35 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
       }
       messenger.showSnackBar(
         SnackBar(
-          content: const Text('All logs cleared'),
-          backgroundColor: const Color(0xFF16A34A),
+          content: const Row(
+            children: [
+              Icon(
+                Icons.check_circle_outline_rounded,
+                color: Colors.white,
+                size: 15,
+              ),
+              SizedBox(width: 8),
+              Text('All logs cleared'),
+            ],
+          ),
+          backgroundColor: _G.accentEmerald,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
+          margin: const EdgeInsets.all(16),
         ),
       );
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: _G.accentRose,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
+          margin: const EdgeInsets.all(16),
         ),
       );
     }
@@ -1908,15 +1995,15 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                     Text(
                       'Employee Activity',
                       style: TextStyle(
-                        color: _Glass.textPrimary,
+                        color: _G.textPrimary,
                         fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     SizedBox(height: 2),
                     Text(
                       'Inventory updates by employees',
-                      style: TextStyle(color: _Glass.textMuted, fontSize: 12),
+                      style: TextStyle(color: _G.textMuted, fontSize: 12),
                     ),
                   ],
                 ),
@@ -1925,14 +2012,14 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                 onTap: () => _confirmClearAll(context),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
+                    horizontal: 14,
+                    vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.06),
+                    color: _G.accentRose.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(99),
                     border: Border.all(
-                      color: Colors.red.withValues(alpha: 0.3),
+                      color: _G.accentRose.withValues(alpha: 0.35),
                       width: 0.8,
                     ),
                   ),
@@ -1966,13 +2053,10 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
               Expanded(
                 child: TextFormField(
                   controller: _empCtrl,
-                  style: const TextStyle(
-                    color: _Glass.textPrimary,
-                    fontSize: 13,
-                  ),
+                  style: const TextStyle(color: _G.textPrimary, fontSize: 13),
                   onChanged: (v) =>
                       setState(() => _employeeFilter = v.toLowerCase()),
-                  decoration: _Glass.field(
+                  decoration: _G.field(
                     'Filter by employee',
                     icon: Icons.person_search_outlined,
                   ),
@@ -1982,13 +2066,10 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
               Expanded(
                 child: TextFormField(
                   controller: _matCtrl,
-                  style: const TextStyle(
-                    color: _Glass.textPrimary,
-                    fontSize: 13,
-                  ),
+                  style: const TextStyle(color: _G.textPrimary, fontSize: 13),
                   onChanged: (v) =>
                       setState(() => _materialFilter = v.toLowerCase()),
-                  decoration: _Glass.field(
+                  decoration: _G.field(
                     'Filter by material',
                     icon: Icons.inventory_2_outlined,
                   ),
@@ -2009,14 +2090,10 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                     child: Container(
                       width: 36,
                       height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3F4F6),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
+                      decoration: _G.glass(radius: 12),
                       child: const Icon(
                         Icons.clear,
-                        color: _Glass.textMuted,
+                        color: _G.textMuted,
                         size: 16,
                       ),
                     ),
@@ -2029,9 +2106,9 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+              color: _G.surfaceThin,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _G.borderMid, width: 0.9),
             ),
             child: const Row(
               children: [
@@ -2078,7 +2155,8 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(
                     child: CircularProgressIndicator(
-                      color: _Glass.textPrimary.withValues(alpha: 0.4),
+                      color: _G.navyBlue.withValues(alpha: 0.5),
+                      strokeWidth: 2,
                     ),
                   );
                 }
@@ -2092,22 +2170,18 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                         Container(
                           width: 72,
                           height: 72,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF3F4F6),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
-                          ),
+                          decoration: _G.glass(radius: 22),
                           child: const Icon(
                             Icons.history_toggle_off,
                             size: 32,
-                            color: _Glass.textMuted,
+                            color: _G.textMuted,
                           ),
                         ),
                         const SizedBox(height: 20),
                         const Text(
                           'No activity logs yet',
                           style: TextStyle(
-                            color: _Glass.textPrimary,
+                            color: _G.textPrimary,
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                           ),
@@ -2116,7 +2190,7 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                         const Text(
                           'Logs appear when employees replenish stock',
                           style: TextStyle(
-                            color: _Glass.textSecondary,
+                            color: _G.textSecondary,
                             fontSize: 13,
                           ),
                         ),
@@ -2141,7 +2215,7 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                   return const Center(
                     child: Text(
                       'No logs matching your filter',
-                      style: TextStyle(color: _Glass.textMuted, fontSize: 13),
+                      style: TextStyle(color: _G.textMuted, fontSize: 13),
                     ),
                   );
                 }
@@ -2162,7 +2236,7 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
   }
 
   static const _hStyle = TextStyle(
-    color: Color(0xFF374151),
+    color: _G.textSecondary,
     fontSize: 11,
     fontWeight: FontWeight.w700,
     letterSpacing: 0.3,
@@ -2175,13 +2249,15 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
 class _CustomerFeedbackTab extends StatelessWidget {
   const _CustomerFeedbackTab();
 
+  static const Color _feedbackAmber = Color(0xFFB45309);
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('OrderReviews') // ← was 'Feedback'
+            .collection('OrderReviews')
             .orderBy('created_at', descending: true)
             .limit(200)
             .snapshots(),
@@ -2189,7 +2265,8 @@ class _CustomerFeedbackTab extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(
               child: CircularProgressIndicator(
-                color: _Glass.textPrimary.withValues(alpha: 0.4),
+                color: _G.navyBlue.withValues(alpha: 0.5),
+                strokeWidth: 2,
               ),
             );
           }
@@ -2203,22 +2280,18 @@ class _CustomerFeedbackTab extends StatelessWidget {
                   Container(
                     width: 72,
                     height: 72,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF3F4F6),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
+                    decoration: _G.glass(radius: 22),
                     child: const Icon(
                       Icons.rate_review_outlined,
                       size: 32,
-                      color: _Glass.textMuted,
+                      color: _G.textMuted,
                     ),
                   ),
                   const SizedBox(height: 20),
                   const Text(
                     'No customer feedback yet',
                     style: TextStyle(
-                      color: _Glass.textPrimary,
+                      color: _G.textPrimary,
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
@@ -2226,7 +2299,7 @@ class _CustomerFeedbackTab extends StatelessWidget {
                   const SizedBox(height: 6),
                   const Text(
                     'Order reviews submitted by customers will appear here',
-                    style: TextStyle(color: _Glass.textSecondary, fontSize: 13),
+                    style: TextStyle(color: _G.textSecondary, fontSize: 13),
                   ),
                 ],
               ),
@@ -2243,26 +2316,22 @@ class _CustomerFeedbackTab extends StatelessWidget {
                     const Text(
                       'Customer Feedback',
                       style: TextStyle(
-                        color: _Glass.textPrimary,
+                        color: _G.textPrimary,
                         fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
+                        horizontal: 10,
                         vertical: 3,
                       ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3F4F6),
-                        borderRadius: BorderRadius.circular(99),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
+                      decoration: _G.pill(),
                       child: Text(
                         '${docs.length}',
                         style: const TextStyle(
-                          color: _Glass.textSecondary,
+                          color: _G.textSecondary,
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
@@ -2276,8 +2345,6 @@ class _CustomerFeedbackTab extends StatelessWidget {
                   itemCount: docs.length,
                   itemBuilder: (_, i) {
                     final data = docs[i].data() as Map<String, dynamic>;
-
-                    // OrderReviews fields
                     final customer = data['customer_name']?.toString() ?? '—';
                     final message = data['message']?.toString() ?? '';
                     final rating = (data['rating'] as num?)?.toInt();
@@ -2291,136 +2358,162 @@ class _CustomerFeedbackTab extends StatelessWidget {
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: isRead
-                            ? const Color(0xE0F7F7F7)
-                            : const Color(0xFFFFFBEB),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isRead
-                              ? const Color(0xFFE5E7EB)
-                              : const Color(0xFFFDE68A),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF3F4F6),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: const Color(0xFFE5E7EB),
+                      child: _BlurCard(
+                        radius: 14,
+                        padding: const EdgeInsets.all(14),
+                        tintBorder: isRead
+                            ? _G.borderMid
+                            : _G.accentAmber.withValues(alpha: 0.45),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: _G.navyBlue.withValues(alpha: 0.08),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: _G.navyBlue.withValues(
+                                        alpha: 0.18,
+                                      ),
+                                      width: 0.9,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.person_rounded,
+                                    color: _G.navyBlue,
+                                    size: 17,
                                   ),
                                 ),
-                                child: const Icon(
-                                  Icons.person_outline,
-                                  color: _Glass.textMuted,
-                                  size: 16,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              // Replace the Expanded Column inside the Row (after the avatar):
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      customer,
-                                      style: const TextStyle(
-                                        color: _Glass.textPrimary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    if (orderId.isNotEmpty ||
-                                        productName.isNotEmpty)
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
                                       Text(
-                                        [
-                                          if (orderId.isNotEmpty) orderId,
-                                          if (productName.isNotEmpty)
-                                            productName,
-                                        ].join(' · '),
-                                        style: TextStyle(
-                                          color: AppTheme.gold,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
+                                        customer,
+                                        style: const TextStyle(
+                                          color: _G.textPrimary,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
                                         ),
                                       ),
-                                    _CustomerIdText(data: data), // ← add this
-                                  ],
-                                ),
-                              ),
-                              if (rating != null) ...[
-                                Row(
-                                  children: List.generate(
-                                    5,
-                                    (s) => Icon(
-                                      s < rating
-                                          ? Icons.star_rounded
-                                          : Icons.star_outline_rounded,
-                                      color: AppTheme.gold,
-                                      size: 14,
-                                    ),
+                                      if (orderId.isNotEmpty ||
+                                          productName.isNotEmpty)
+                                        Text(
+                                          [
+                                            if (orderId.isNotEmpty) orderId,
+                                            if (productName.isNotEmpty)
+                                              productName,
+                                          ].join(' · '),
+                                          style: const TextStyle(
+                                            color: _feedbackAmber,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      _CustomerIdText(data: data),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                if (rating != null) ...[
+                                  Row(
+                                    children: List.generate(
+                                      5,
+                                      (s) => Icon(
+                                        s < rating
+                                            ? Icons.star_rounded
+                                            : Icons.star_outline_rounded,
+                                        color: _feedbackAmber,
+                                        size: 14,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                if (!isRead)
+                                  GestureDetector(
+                                    onTap: () => FirebaseFirestore.instance
+                                        .collection('OrderReviews')
+                                        .doc(docs[i].id)
+                                        .update({'read': true}),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _G.accentEmerald.withValues(
+                                          alpha: 0.10,
+                                        ),
+                                        borderRadius: BorderRadius.circular(99),
+                                        border: Border.all(
+                                          color: _G.accentEmerald.withValues(
+                                            alpha: 0.35,
+                                          ),
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.check_rounded,
+                                            color: _G.accentEmerald,
+                                            size: 12,
+                                          ),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Mark read',
+                                            style: TextStyle(
+                                              color: _G.accentEmerald,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                               ],
-                              // Mark as read button (mirrors admin dashboard)
-                              if (!isRead)
-                                GestureDetector(
-                                  onTap: () => FirebaseFirestore.instance
-                                      .collection('OrderReviews')
-                                      .doc(docs[i].id)
-                                      .update({'read': true}),
-                                  child: Tooltip(
-                                    message: 'Mark as read',
-                                    child: const Icon(
-                                      Icons.check_circle_outline,
-                                      color: _Glass.textMuted,
-                                      size: 17,
-                                    ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              timeStr,
+                              style: const TextStyle(
+                                color: _G.textMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                            if (message.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: _G.surfaceThin,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: _G.borderDim,
+                                    width: 0.8,
                                   ),
                                 ),
+                                child: Text(
+                                  message,
+                                  style: const TextStyle(
+                                    color: _G.textSecondary,
+                                    fontSize: 13,
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ),
                             ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            timeStr,
-                            style: const TextStyle(
-                              color: _Glass.textMuted,
-                              fontSize: 11,
-                            ),
-                          ),
-                          if (message.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: const Color(0xFFE5E7EB),
-                                ),
-                              ),
-                              child: Text(
-                                message,
-                                style: const TextStyle(
-                                  color: _Glass.textSecondary,
-                                  fontSize: 13,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ),
                           ],
-                        ],
+                        ),
                       ),
                     );
                   },
@@ -2463,7 +2556,7 @@ class _LogRow extends StatelessWidget {
       case 'admin_edit':
         return AppTheme.gold;
       case 'order_deduction':
-        return const Color(0xFF7C3AED);
+        return _G.accentViolet;
       default:
         return const Color(0xFF6B7280);
     }
@@ -2490,10 +2583,10 @@ class _LogRow extends StatelessWidget {
     final isNegative = qtyAdded < 0;
     final qtyDisplay = isPositive ? '+${fmt(qtyAdded)}' : fmt(qtyAdded);
     final qtyColor = isPositive
-        ? const Color(0xFF16A34A)
+        ? _G.accentEmerald
         : isNegative
-        ? const Color(0xFFDC2626)
-        : _Glass.textMuted;
+        ? _G.accentRose
+        : _G.textMuted;
     final methodColor = _methodColor(method);
 
     return Container(
@@ -2501,14 +2594,14 @@ class _LogRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: isOrderDeduction
-            ? const Color(0xE8F5F3FF)
-            : const Color(0xE0F7F7F7),
-        borderRadius: BorderRadius.circular(8),
+            ? _G.accentViolet.withValues(alpha: 0.05)
+            : _G.surfaceThin,
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isOrderDeduction
-              ? const Color(0xFFDDD6FE)
-              : const Color(0xFFE5E7EB),
-          width: 1,
+              ? _G.accentViolet.withValues(alpha: 0.20)
+              : _G.borderDim,
+          width: 0.9,
         ),
       ),
       child: Row(
@@ -2517,7 +2610,7 @@ class _LogRow extends StatelessWidget {
             flex: 2,
             child: Text(
               timeStr,
-              style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+              style: const TextStyle(color: _G.textMuted, fontSize: 11),
             ),
           ),
           Expanded(
@@ -2525,9 +2618,7 @@ class _LogRow extends StatelessWidget {
             child: Text(
               isOrderDeduction ? 'Auto (Order)' : employee,
               style: TextStyle(
-                color: isOrderDeduction
-                    ? const Color(0xFF7C3AED)
-                    : _Glass.textPrimary,
+                color: isOrderDeduction ? _G.accentViolet : _G.textPrimary,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -2543,7 +2634,7 @@ class _LogRow extends StatelessWidget {
                 Text(
                   materialName,
                   style: const TextStyle(
-                    color: _Glass.textPrimary,
+                    color: _G.textPrimary,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -2553,7 +2644,7 @@ class _LogRow extends StatelessWidget {
                 Text(
                   materialId,
                   style: const TextStyle(
-                    color: _Glass.textMuted,
+                    color: _G.textMuted,
                     fontSize: 10,
                     fontFamily: 'monospace',
                   ),
@@ -2562,7 +2653,7 @@ class _LogRow extends StatelessWidget {
                   Text(
                     'Product: $productName${orderId.isNotEmpty ? ' · #${orderId.substring(0, orderId.length.clamp(0, 6))}' : ''}',
                     style: const TextStyle(
-                      color: Color(0xFF7C3AED),
+                      color: _G.accentViolet,
                       fontSize: 10,
                     ),
                     maxLines: 1,
@@ -2588,7 +2679,7 @@ class _LogRow extends StatelessWidget {
             child: Text(
               fmt(newStock),
               style: const TextStyle(
-                color: _Glass.textPrimary,
+                color: _G.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -2599,12 +2690,12 @@ class _LogRow extends StatelessWidget {
             width: 64,
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: methodColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: methodColor.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(99),
                   border: Border.all(
-                    color: methodColor.withValues(alpha: 0.4),
+                    color: methodColor.withValues(alpha: 0.35),
                     width: 0.8,
                   ),
                 ),
@@ -2625,21 +2716,18 @@ class _LogRow extends StatelessWidget {
   }
 }
 
-/// Resolves a customer_uid to a CUS-XXX id via the User collection.
-/// Shows the stored customer_id field directly if already present on the doc.
+// =============================================================================
+// Customer ID resolver widget
+// =============================================================================
 class _CustomerIdText extends StatelessWidget {
   final Map<String, dynamic> data;
   const _CustomerIdText({required this.data});
 
   @override
   Widget build(BuildContext context) {
-    // If already stored on the review doc, use it directly
     final stored = data['customer_id']?.toString() ?? '';
-    if (stored.isNotEmpty) {
-      return _label(stored);
-    }
+    if (stored.isNotEmpty) return _label(stored);
 
-    // Otherwise look it up from the User collection
     final uid = data['customer_uid']?.toString() ?? '';
     if (uid.isEmpty) return const SizedBox.shrink();
 
@@ -2660,7 +2748,7 @@ class _CustomerIdText extends StatelessWidget {
   Widget _label(String id) => Text(
     'ID: $id',
     style: const TextStyle(
-      color: Color(0xFF9CA3AF), // matches _Glass.textMuted
+      color: _G.textMuted,
       fontSize: 11,
       fontFamily: 'monospace',
     ),
