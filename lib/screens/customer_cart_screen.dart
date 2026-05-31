@@ -225,12 +225,12 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                               clipBehavior: Clip.antiAlias,
                                               child: item.imageUrl.isNotEmpty
                                                   ? Image.network(item.imageUrl,
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder: (_, __, ___) =>
-                                                          const Icon(Icons.image_outlined,
-                                                              color: Colors.white24, size: 18))
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (_, __, ___) =>
+                                                  const Icon(Icons.image_outlined,
+                                                      color: Colors.white24, size: 18))
                                                   : const Icon(Icons.image_outlined,
-                                                      color: Colors.white24, size: 18),
+                                                  color: Colors.white24, size: 18),
                                             ),
                                             const SizedBox(width: 10),
                                             Expanded(
@@ -388,15 +388,15 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                   child: Text('₱',
                                       style: TextStyle(
                                           color:
-                                              Colors.white.withValues(alpha: 0.6),
+                                          Colors.white.withValues(alpha: 0.6),
                                           fontSize: 18)),
                                 ),
                                 Expanded(
                                   child: TextField(
                                     controller: amountCtrl,
                                     keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                            decimal: true),
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
                                     style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 18,
@@ -445,13 +445,13 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                 const Divider(color: Colors.white12, height: 14),
                                 remaining > 0.009
                                     ? _SummaryRow(
-                                        label: 'Remaining on Pickup',
-                                        value: remaining,
-                                        color: Colors.white54)
+                                    label: 'Remaining on Pickup',
+                                    value: remaining,
+                                    color: Colors.white54)
                                     : const _SummaryRow(
-                                        label: 'Remaining on Pickup',
-                                        value: 0,
-                                        color: Colors.green),
+                                    label: 'Remaining on Pickup',
+                                    value: 0,
+                                    color: Colors.green),
                               ],
                             ),
                           ),
@@ -476,10 +476,10 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                 Expanded(
                                   child: Text(
                                     'PayMongo opens a secure checkout with GCash, Maya, '
-                                    'and card options — including a scannable QR code.',
+                                        'and card options — including a scannable QR code.',
                                     style: TextStyle(
                                         color:
-                                            Colors.white.withValues(alpha: 0.65),
+                                        Colors.white.withValues(alpha: 0.65),
                                         fontSize: 11),
                                   ),
                                 ),
@@ -495,14 +495,14 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                               onPressed: payAmount < minPay - 0.009
                                   ? null
                                   : () {
-                                      final chosenAmt =
-                                          double.tryParse(amountCtrl.text) ??
-                                              minPay;
-                                      final finalAmt =
-                                          chosenAmt.clamp(minPay, total);
-                                      Navigator.pop(ctx);
-                                      _processCheckout(payAmount: finalAmt);
-                                    },
+                                final chosenAmt =
+                                    double.tryParse(amountCtrl.text) ??
+                                        minPay;
+                                final finalAmt =
+                                chosenAmt.clamp(minPay, total);
+                                Navigator.pop(ctx);
+                                _processCheckout(payAmount: finalAmt);
+                              },
                               icon: const Icon(Icons.payment_rounded),
                               label: Text(
                                 'Pay ₱${payAmount.toStringAsFixed(2)} via PayMongo',
@@ -542,6 +542,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
           .collection('User').doc(user.uid).get();
       final customerName  = userDoc.data()?['full_name']  ?? '';
       final customerEmail = userDoc.data()?['email']      ?? user.email ?? '';
+      final customerId    = userDoc.data()?['customer_id']?.toString() ?? '';
 
       // 2. Generate order ID and upload files
       final orderId      = await _nextOrderId();
@@ -601,6 +602,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       await FirebaseFirestore.instance.collection('Orders').doc(orderId).set({
         'order_id':               orderId,
         'customer_uid':           user.uid,
+        'customer_id':            customerId,
         'customer_name':          customerName,
         'customer_email':         customerEmail,
         'status':                 'awaiting_payment',
@@ -671,6 +673,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
           orderId:        orderId,
           customerName:   customerName,
           customerEmail:  customerEmail,
+          customerId:     customerId,
           products:       products,
           paidAmount:     payAmount,
           total:          _subtotal,
@@ -697,6 +700,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     required String orderId,
     required String customerName,
     required String customerEmail,
+    required String customerId,
     required List<Map<String, dynamic>> products,
     required double paidAmount,
     required double total,
@@ -756,6 +760,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     await FirebaseFirestore.instance.collection('Sales_Records').add({
       'order_id':            orderId,
       'customer_name':       customerName,
+      'customer_id':         customerId,
       'payment_type':        isFullyPaid ? 'full' : 'downpayment',
       'payment_method':      'online',
       'transaction_reference': linkId,
@@ -948,13 +953,13 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                         style: AppTheme.primaryButton(),
                         child: _checkingOut
                             ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.black))
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.black))
                             : const Text('Checkout',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 15)),
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 15)),
                       ),
                     ),
                   ],
@@ -1048,9 +1053,9 @@ class _CartItemTile extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: item.imageUrl.isNotEmpty
                 ? Image.network(item.imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        const Icon(Icons.image_outlined, color: Colors.white24, size: 22))
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                const Icon(Icons.image_outlined, color: Colors.white24, size: 22))
                 : const Icon(Icons.image_outlined, color: Colors.white24, size: 22),
           ),
           const SizedBox(width: 10),

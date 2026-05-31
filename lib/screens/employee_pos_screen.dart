@@ -230,6 +230,7 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
           final remaining = (total - newPaid).clamp(0.0, double.infinity);
           final cashPaid  = newPaid - prevPaid;
           final custName  = orderData['customer_name']?.toString() ?? '';
+          final custId    = orderData['customer_id']?.toString() ?? '';
 
           // ── 1. Update the Order document ──────────────────────────────
           await _db.collection('Orders').doc(orderId).update({
@@ -276,9 +277,14 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
           if (prevPaid == 0) {
             // ── Downpayment: create the single Sales_Record ───────────
             await _db.collection('Sales_Records').add({
-              'order_id':     salesOrderId,
-              'payment_type': 'downpayment',
-              'sale_date':    FieldValue.serverTimestamp(),
+              'order_id':      salesOrderId,
+              'customer_name': custName,
+              'customer_id':   custId,
+              'payment_type':  'downpayment',
+              'payment_method': 'cash',
+              'sale_amount':   cashPaid,
+              'order_total':   total,
+              'sale_date':     FieldValue.serverTimestamp(),
             });
           } else {
             // ── Balance: find the record by order_id and update it ────
@@ -293,8 +299,11 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
                   .collection('Sales_Records')
                   .doc(snap.docs.first.id)
                   .update({
-                'payment_type': 'balance',
-                'balance_date': FieldValue.serverTimestamp(),
+                'payment_type':  wasFullyPaid ? 'full' : 'balance',
+                'sale_amount':   newPaid,
+                'order_total':   total,
+                'balance_date':  FieldValue.serverTimestamp(),
+                'sale_date':     FieldValue.serverTimestamp(),
               });
             }
             // If somehow no record exists yet, do nothing —

@@ -1081,6 +1081,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
         await db.collection('Sales_Records').add({
           'order_id': orderId,
           'customer_name': customerName,
+          'customer_id': '',
           'payment_type': fullyPaid ? 'full' : 'downpayment',
           'payment_method': _paymentMethod,
           'sale_amount': paidAmount,
