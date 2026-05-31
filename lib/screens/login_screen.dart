@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../services/cart_manager.dart';
 import '../services/notification_service.dart';
-import 'platform_utils.dart';
 import 'app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -67,44 +66,36 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-  switch (result) {
-  case 'customer':
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid != null) {
-      await CartManager.loadForUser(uid);
-    }
-    await NotificationService.initialize();
-    if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/customer');
-    break;
+    switch (result) {
+      case 'customer':
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null) {
+          await CartManager.loadForUser(uid);
+        }
+        await NotificationService.initialize();
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/customer');
+        break;
 
-  case 'employee':
-    await NotificationService.initialize();
-    if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/employee');
-    break;
+      case 'employee':
+        await NotificationService.initialize();
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/employee');
+        break;
 
-  case 'admin':
-    if (!kIsWeb) {
-      _snack('Admin access is only available on the web.');
-      await _authService.signOut();
-      return;
-    }
-
-    final mobileBrowser = await PlatformUtils.isMobileBrowser();
-    if (!mounted) return;
-    if (mobileBrowser) {                        // Guard 2 (new)
-      _snack('Admin access is not available on mobile devices.', isError: true);
-      await _authService.signOut();
-      return;
-    }
-    await NotificationService.initialize();
-    if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/admin');
-    break;
+      case 'admin':
+        if (!kIsWeb) {
+          _snack('Admin access is only available on the web.');
+          await _authService.signOut();
+          return;
+        }
+        await NotificationService.initialize();
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/admin');
+        break;
 
       default:
-        // Any other string is an error message from AuthService
+      // Any other string is an error message from AuthService
         _snack(result, isError: true);
     }
   }
@@ -164,11 +155,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           'assets/images/imprentalogo.jpg',
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
-                              const Icon(
-                                Icons.local_print_shop,
-                                color: Colors.white,
-                                size: 18,
-                              ),
+                          const Icon(
+                            Icons.local_print_shop,
+                            color: Colors.white,
+                            size: 18,
+                          ),
                         ),
                       ),
                     ),
@@ -233,7 +224,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   size: 18,
                                 ),
                                 onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword,
+                                      () => _obscurePassword = !_obscurePassword,
                                 ),
                               ),
                             ),
@@ -273,13 +264,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             style: AppTheme.primaryButton(),
                             child: _isLoading
                                 ? const SizedBox(
-                                    height: 18,
-                                    width: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.black,
-                                    ),
-                                  )
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.black,
+                              ),
+                            )
                                 : const Text('Sign In'),
                           ),
 
