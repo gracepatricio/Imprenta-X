@@ -5,35 +5,54 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'app_theme.dart';
 
+const _cyan = Color(0xFF00B4D8);
+const _magenta = Color(0xFFFF006E);
+const _yellow = Color(0xFFFFDE89);
+const _green = Color(0xFF80B918);
+
 /// Optional screen shown after the forced password change.
 /// The user can skip and add their email later from their profile.
 class AddEmailScreen extends StatefulWidget {
   final String role;
-  /// The new password the employee just set — passed to addEmail so the
-  /// migrated Firebase Auth account uses the same password.
   final String newPassword;
 
-  const AddEmailScreen({super.key, required this.role, required this.newPassword});
+  const AddEmailScreen({
+    super.key,
+    required this.role,
+    required this.newPassword,
+  });
 
   @override
   State<AddEmailScreen> createState() => _AddEmailScreenState();
 }
 
-class _AddEmailScreenState extends State<AddEmailScreen> {
+class _AddEmailScreenState extends State<AddEmailScreen>
+    with SingleTickerProviderStateMixin {
   final _emailCtrl = TextEditingController();
   final AuthService _authService = AuthService();
 
   bool _isSending = false;
   bool _verificationSent = false;
-  bool _isPolling = false;
   bool _usedMigrationPath = false;
   String? _error;
   Timer? _pollTimer;
+
+  late AnimationController _dotCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _dotCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+  }
 
   @override
   void dispose() {
     _emailCtrl.dispose();
     _pollTimer?.cancel();
+    _dotCtrl.dispose();
     super.dispose();
   }
 
@@ -63,7 +82,7 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
 
     if (result == 'migration_sent' || result == 'verification_sent') {
       setState(() {
-        _verificationSent  = true;
+        _verificationSent = true;
         _usedMigrationPath = result == 'migration_sent';
       });
       _startPolling(email);
@@ -77,19 +96,21 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      if (!mounted) { _pollTimer?.cancel(); return; }
+      if (!mounted) {
+        _pollTimer?.cancel();
+        return;
+      }
       try {
         if (_usedMigrationPath) {
-          // Secondary-app migration path.
           final currentUid = FirebaseAuth.instance.currentUser?.uid ?? uid;
-          final migratedEmail =
-          await _authService.checkAndFinalizeMigration(currentUid);
+          final migratedEmail = await _authService.checkAndFinalizeMigration(
+            currentUid,
+          );
           if (migratedEmail != null) {
             _pollTimer?.cancel();
             if (mounted) _navigateHome();
           }
         } else {
-          // verifyBeforeUpdateEmail path — Firebase Auth updates user.email.
           await FirebaseAuth.instance.currentUser?.reload();
           final user = FirebaseAuth.instance.currentUser;
           if (user?.email == email) {
@@ -127,7 +148,7 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // prevent back navigation
+      canPop: false,
       child: Scaffold(
         body: Container(
           decoration: AppTheme.backgroundDecoration,
@@ -140,24 +161,25 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      // ── Brand icon ──────────────────────────────────────
                       Container(
                         width: 64,
                         height: 64,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: AppTheme.gold.withValues(alpha: 0.15),
+                          color: Colors.white.withValues(alpha: 0.07),
                           border: Border.all(
-                            color: AppTheme.gold.withValues(alpha: 0.4),
+                            color: Colors.white.withValues(alpha: 0.18),
                             width: 1.5,
                           ),
                         ),
                         child: const Icon(
                           Icons.email_outlined,
-                          color: AppTheme.gold,
-                          size: 30,
+                          color: _yellow,
+                          size: 28,
                         ),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 12),
 
                       const Text(
                         'Add Your Email',
@@ -167,39 +189,93 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      const Text(
+                      const SizedBox(height: 6),
+                      Text(
                         'Adding an email lets you log in with it\nin addition to your ID.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white54, fontSize: 13),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.35),
+                          fontSize: 12,
+                        ),
                       ),
 
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 24),
 
-                      Container(
-                        width: isWide ? 400 : double.infinity,
-                        padding: EdgeInsets.all(isWide ? 28 : 20),
-                        decoration: AppTheme.glassCard(opacity: 0.18),
-                        child: _verificationSent
-                            ? _buildWaiting()
-                            : _buildForm(),
+                      // ── Card ────────────────────────────────────────────
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: isWide ? 400 : double.infinity,
+                        ),
+                        child: Stack(
+                          clipBehavior: Clip.hardEdge,
+                          children: [
+                            Container(
+                              padding: EdgeInsets.fromLTRB(
+                                isWide ? 28 : 20,
+                                32,
+                                isWide ? 28 : 20,
+                                24,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.12),
+                                  width: 1,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.3),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: _verificationSent
+                                  ? _buildWaiting()
+                                  : _buildForm(),
+                            ),
+
+                            // CMYK accent bar
+                            Positioned(
+                              top: 0,
+                              left: 40,
+                              right: 40,
+                              child: Container(
+                                height: 2,
+                                decoration: BoxDecoration(
+                                  borderRadius: const BorderRadius.vertical(
+                                    bottom: Radius.circular(4),
+                                  ),
+                                  gradient: const LinearGradient(
+                                    colors: [_cyan, _magenta, _yellow, _green],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
 
-                      const SizedBox(height: 20),
-
-                      // Skip button
-                      if (!_verificationSent)
-                        TextButton(
-                          onPressed: _skip,
-                          child: const Text(
+                      // ── Skip link ───────────────────────────────────────
+                      if (!_verificationSent) ...[
+                        const SizedBox(height: 20),
+                        GestureDetector(
+                          onTap: _skip,
+                          child: Text(
                             'Skip for now — I\'ll add it in my profile settings',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.white38,
+                              color: Colors.white.withValues(alpha: 0.28),
                               fontSize: 12,
+                              decoration: TextDecoration.underline,
+                              decorationColor: Colors.white.withValues(
+                                alpha: 0.15,
+                              ),
                             ),
                           ),
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -215,16 +291,14 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
+        _AuthField(
+          label: 'Email Address',
           controller: _emailCtrl,
-          style: const TextStyle(color: Colors.white),
+          icon: Icons.email_outlined,
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.done,
+          hint: 'Enter your email address',
           onSubmitted: (_) => _sendVerification(),
-          decoration: AppTheme.inputDecoration(
-            'Your email address',
-            icon: Icons.email_outlined,
-          ),
         ),
 
         if (_error != null) ...[
@@ -240,18 +314,38 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
 
         ElevatedButton(
           onPressed: _isSending ? null : _sendVerification,
-          style: AppTheme.primaryButton(),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _yellow,
+            foregroundColor: Colors.black,
+            disabledBackgroundColor: _yellow.withValues(alpha: 0.5),
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
           child: _isSending
               ? const SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.black,
-            ),
-          )
-              : const Text('Send Verification Email'),
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.black,
+                  ),
+                )
+              : const Text(
+                  'Send Verification Email',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                  ),
+                ),
         ),
+
+        const SizedBox(height: 20),
+        _CmykDots(controller: _dotCtrl),
       ],
     );
   }
@@ -259,12 +353,24 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
   Widget _buildWaiting() {
     return Column(
       children: [
-        const Icon(
-          Icons.mark_email_read_outlined,
-          color: AppTheme.gold,
-          size: 48,
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _yellow.withValues(alpha: 0.1),
+            border: Border.all(
+              color: _yellow.withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+          ),
+          child: const Icon(
+            Icons.mark_email_read_outlined,
+            color: _yellow,
+            size: 26,
+          ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         const Text(
           'Verification email sent!',
           style: TextStyle(
@@ -276,29 +382,220 @@ class _AddEmailScreenState extends State<AddEmailScreen> {
         const SizedBox(height: 8),
         Text(
           'We sent a link to ${_emailCtrl.text.trim()}.\n'
-              'Click the link to confirm your email.\n\n'
-              'This screen will advance automatically.',
+          'Click the link to confirm your email.\n\n'
+          'This screen will advance automatically.',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white54, fontSize: 12),
-        ),
-        const SizedBox(height: 20),
-        const SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: AppTheme.gold,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.45),
+            fontSize: 12,
           ),
         ),
-        const SizedBox(height: 20),
-        TextButton(
-          onPressed: _skip,
-          child: const Text(
+        const SizedBox(height: 24),
+
+        // Animated waiting indicator
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: _yellow,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Waiting for verification…',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.35),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 24),
+
+        // Divider
+        Divider(color: Colors.white.withValues(alpha: 0.08), thickness: 1),
+        const SizedBox(height: 16),
+
+        GestureDetector(
+          onTap: _skip,
+          child: Text(
             'Skip — I\'ll verify later in my profile',
-            style: TextStyle(color: Colors.white38, fontSize: 12),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.28),
+              fontSize: 12,
+              decoration: TextDecoration.underline,
+              decorationColor: Colors.white.withValues(alpha: 0.15),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        _CmykDots(controller: _dotCtrl),
+      ],
+    );
+  }
+}
+
+// ── Shared field widget ────────────────────────────────────────────────────────
+
+class _AuthField extends StatefulWidget {
+  const _AuthField({
+    required this.label,
+    required this.controller,
+    required this.icon,
+    this.obscureText = false,
+    this.keyboardType,
+    this.textInputAction,
+    this.onSubmitted,
+    this.suffix,
+    this.hint,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final IconData icon;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onSubmitted;
+  final Widget? suffix;
+  final String? hint;
+
+  @override
+  State<_AuthField> createState() => _AuthFieldState();
+}
+
+class _AuthFieldState extends State<_AuthField> {
+  final _focus = FocusNode();
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() => setState(() => _focused = _focus.hasFocus));
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 200),
+          style: TextStyle(
+            color: _focused
+                ? _yellow.withValues(alpha: 0.9)
+                : Colors.white.withValues(alpha: 0.38),
+            fontSize: 10,
+            letterSpacing: 1.5,
+            fontWeight: FontWeight.w500,
+          ),
+          child: Text(widget.label.toUpperCase()),
+        ),
+        const SizedBox(height: 6),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            color: Colors.white.withValues(alpha: 0.05),
+            border: Border.all(
+              color: _focused
+                  ? _yellow.withValues(alpha: 0.45)
+                  : Colors.white.withValues(alpha: 0.10),
+              width: 1,
+            ),
+            boxShadow: _focused
+                ? [
+                    BoxShadow(
+                      color: _yellow.withValues(alpha: 0.08),
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : [],
+          ),
+          child: TextField(
+            controller: widget.controller,
+            focusNode: _focus,
+            obscureText: widget.obscureText,
+            keyboardType: widget.keyboardType,
+            textInputAction: widget.textInputAction,
+            onSubmitted: widget.onSubmitted,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: widget.hint,
+              hintStyle: TextStyle(
+                color: Colors.white.withValues(alpha: 0.2),
+                fontSize: 13,
+              ),
+              prefixIcon: Icon(
+                widget.icon,
+                color: _focused
+                    ? _yellow.withValues(alpha: 0.8)
+                    : Colors.white.withValues(alpha: 0.28),
+                size: 18,
+              ),
+              suffixIcon: widget.suffix,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 13,
+              ),
+            ),
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── CMYK dots ─────────────────────────────────────────────────────────────────
+
+class _CmykDots extends StatelessWidget {
+  const _CmykDots({required this.controller});
+  final AnimationController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = [_cyan, _magenta, _yellow, _green];
+    final delays = [0.0, 0.2, 0.4, 0.6];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(4, (i) {
+        final anim = Tween<double>(begin: 0.25, end: 0.9).animate(
+          CurvedAnimation(
+            parent: controller,
+            curve: Interval(
+              delays[i],
+              (delays[i] + 0.4).clamp(0, 1),
+              curve: Curves.easeInOut,
+            ),
+          ),
+        );
+        return AnimatedBuilder(
+          animation: anim,
+          builder: (_, __) => Container(
+            width: 5,
+            height: 5,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: colors[i].withValues(alpha: anim.value),
+            ),
+          ),
+        );
+      }),
     );
   }
 }
