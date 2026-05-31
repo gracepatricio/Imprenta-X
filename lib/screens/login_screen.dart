@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../services/cart_manager.dart';
 import '../services/notification_service.dart';
+import 'platform_utils.dart';
 import 'app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -86,6 +87,14 @@ class _LoginScreenState extends State<LoginScreen> {
   case 'admin':
     if (!kIsWeb) {
       _snack('Admin access is only available on the web.');
+      await _authService.signOut();
+      return;
+    }
+
+    final mobileBrowser = await PlatformUtils.isMobileBrowser();
+    if (!mounted) return;
+    if (mobileBrowser) {                        // Guard 2 (new)
+      _snack('Admin access is not available on mobile devices.', isError: true);
       await _authService.signOut();
       return;
     }
