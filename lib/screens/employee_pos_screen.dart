@@ -299,11 +299,10 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
                   .collection('Sales_Records')
                   .doc(snap.docs.first.id)
                   .update({
-                'payment_type':  wasFullyPaid ? 'full' : 'balance',
-                'sale_amount':   newPaid,
-                'order_total':   total,
-                'balance_date':  FieldValue.serverTimestamp(),
-                'sale_date':     FieldValue.serverTimestamp(),
+                'payment_type': 'balance',
+                'sale_amount':  newPaid,
+                'order_total':  total,
+                'balance_date': FieldValue.serverTimestamp(),
               });
             }
             // If somehow no record exists yet, do nothing —
