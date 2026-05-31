@@ -299,6 +299,10 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
   String _search = '';
   final _searchCtrl = TextEditingController();
 
+  // Customer ID resolution
+  String? _resolvedCustomerName; // non-null when search matched a customer_id
+  bool _isResolvingId = false;
+
   static const _statusOpts = [
     ('all', 'All'),
     ('pending', 'Pending'),
@@ -312,6 +316,91 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  // ── Customer ID resolution ─────────────────────────────────────────────────
+  // If the search term matches a customer_id in the Users collection, resolve
+  // it to the associated full_name so we can filter Orders by customer_name.
+  Future<void> _resolveCustomerId(String term) async {
+    if (!mounted) return;
+    setState(() {
+      _isResolvingId = true;
+      _resolvedCustomerName = null;
+    });
+
+    try {
+      final db = FirebaseFirestore.instance;
+
+      // 1. Exact match on customer_id field
+      QuerySnapshot<Map<String, dynamic>>? snap = await db
+          .collection('User')
+          .where('customer_id', isEqualTo: term)
+          .limit(1)
+          .get()
+          .catchError((_) => null);
+
+      // 2. Fallback: case-insensitive partial scan (mirrors POS screen logic)
+      if (snap == null || snap.docs.isEmpty) {
+        final all = await db
+            .collection('User')
+            .limit(300)
+            .get()
+            .catchError((_) => null);
+        if (all != null) {
+          final lower = term.toLowerCase();
+          for (final doc in all.docs) {
+            final cid =
+            (doc.data()['customer_id'] as String? ?? '').toLowerCase();
+            if (cid == lower) {
+              // treat as single-doc result
+              snap = null; // clear so we fall into the name-extraction below
+              final name = doc.data()['full_name'] as String?;
+              if (name != null && name.isNotEmpty && mounted) {
+                setState(() {
+                  _resolvedCustomerName = name.toLowerCase();
+                  _isResolvingId = false;
+                });
+              } else if (mounted) {
+                setState(() => _isResolvingId = false);
+              }
+              return;
+            }
+          }
+        }
+      }
+
+      final name = snap?.docs.isNotEmpty == true
+          ? snap!.docs.first.data()['full_name'] as String?
+          : null;
+
+      if (mounted) {
+        setState(() {
+          _resolvedCustomerName =
+          (name != null && name.isNotEmpty) ? name.toLowerCase() : null;
+          _isResolvingId = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isResolvingId = false);
+    }
+  }
+
+  // ── Called whenever the search field changes ───────────────────────────────
+  void _onSearchChanged(String raw) {
+    final term = raw.trim().toLowerCase();
+    setState(() {
+      _search = term;
+      _resolvedCustomerName = null; // reset on every keystroke
+    });
+
+    if (term.isEmpty) return;
+
+    // Heuristic: if it looks like a Customer ID (e.g. starts with a letter
+    // followed by digits, or is purely numeric, or matches "CUST-…" patterns)
+    // attempt a Users lookup. We do this for every non-empty query so that
+    // partial customer IDs still trigger a lookup attempt; the resolver only
+    // sets _resolvedCustomerName on an actual match.
+    _resolveCustomerId(term);
   }
 
   Stream<List<QueryDocumentSnapshot>> _stream() {
@@ -449,10 +538,10 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
         // Search field
         TextField(
           controller: _searchCtrl,
-          onChanged: (v) => setState(() => _search = v.trim().toLowerCase()),
+          onChanged: _onSearchChanged,
           style: const TextStyle(color: Colors.white, fontSize: 13),
           decoration: InputDecoration(
-            hintText: 'Search by order ID or customer…',
+            hintText: 'Search by order ID, customer name, or customer ID…',
             hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
             prefixIcon: const Icon(
               Icons.search,
@@ -463,9 +552,25 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                 ? GestureDetector(
               onTap: () {
                 _searchCtrl.clear();
-                setState(() => _search = '');
+                setState(() {
+                  _search = '';
+                  _resolvedCustomerName = null;
+                  _isResolvingId = false;
+                });
               },
-              child: const Icon(
+              child: _isResolvingId
+                  ? const Padding(
+                padding: EdgeInsets.all(10),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppTheme.gold,
+                  ),
+                ),
+              )
+                  : const Icon(
                 Icons.clear,
                 color: Colors.white38,
                 size: 18,
@@ -528,7 +633,20 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                       .toLowerCase();
                   final name = (data['customer_name']?.toString() ?? '')
                       .toLowerCase();
-                  return id.contains(_search) || name.contains(_search);
+
+                  // 1. Always match by Order ID or Customer Name (unchanged)
+                  if (id.contains(_search) || name.contains(_search)) {
+                    return true;
+                  }
+
+                  // 2. If the search term resolved to a customer name via
+                  //    a Customer ID lookup, also match on that resolved name.
+                  if (_resolvedCustomerName != null &&
+                      name.contains(_resolvedCustomerName!)) {
+                    return true;
+                  }
+
+                  return false;
                 }).toList();
               }
 
