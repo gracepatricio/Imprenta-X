@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
@@ -12,15 +13,24 @@ class CustomerHomeScreen extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 700;
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Hero(isWide: isWide, onViewProducts: onViewProducts),
-              _FeaturedSection(isWide: isWide),
-              _ServicesSection(isWide: isWide),
-              const SizedBox(height: 32),
-            ],
+        final scrollCtrl = ScrollController();
+        return Scrollbar(
+          controller: scrollCtrl,
+          thumbVisibility: true,
+          trackVisibility: true,
+          thickness: 6,
+          radius: const Radius.circular(3),
+          child: SingleChildScrollView(
+            controller: scrollCtrl,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Hero(isWide: isWide, onViewProducts: onViewProducts),
+                _FeaturedSection(isWide: isWide),
+                _ServicesSection(isWide: isWide),
+                const SizedBox(height: 32),
+              ],
+            ),
           ),
         );
       },
@@ -28,34 +38,47 @@ class CustomerHomeScreen extends StatelessWidget {
   }
 }
 
-// ── Section container — dark but elevated ─────────────────────────────────────
+// ── Frosted Glass Section Container ──────────────────────────────────────────
 
-class _SectionContainer extends StatelessWidget {
+class _FrostedSectionContainer extends StatelessWidget {
   final Widget child;
   final EdgeInsets? margin;
 
-  const _SectionContainer({required this.child, this.margin});
+  const _FrostedSectionContainer({required this.child, this.margin});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: margin,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1A2E),
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.10),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 24,
-            offset: const Offset(0, 6),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color.fromARGB(
+                255,
+                12,
+                9,
+                31,
+              ).withValues(alpha: 0.40),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.30),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 32,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: child,
           ),
-        ],
+        ),
       ),
-      child: child,
     );
   }
 }
@@ -75,16 +98,22 @@ class _Hero extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         gradient: const LinearGradient(
-          colors: [Color(0xFF13101E), Color(0xFF1A1040)],
+          colors: [Color(0xFF0F0B1C), Color(0xFF1C0F4A), Color(0xFF0D1E52)],
+          stops: [0.0, 0.55, 1.0],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 32,
-            offset: const Offset(0, 8),
+            color: Colors.black.withValues(alpha: 0.55),
+            blurRadius: 40,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: const Color(0xFF5931C8).withValues(alpha: 0.25),
+            blurRadius: 60,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -93,16 +122,16 @@ class _Hero extends StatelessWidget {
         children: [
           Positioned.fill(child: CustomPaint(painter: _DiagonalLinePainter())),
           Positioned(
-            right: -40,
-            top: -40,
+            right: -30,
+            top: -30,
             child: Container(
-              width: 260,
-              height: 260,
+              width: 300,
+              height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFF4F23B4).withValues(alpha: 0.45),
+                    const Color(0xFF6C3FD4).withValues(alpha: 0.55),
                     Colors.transparent,
                   ],
                 ),
@@ -110,16 +139,33 @@ class _Hero extends StatelessWidget {
             ),
           ),
           Positioned(
-            right: 80,
-            bottom: -60,
+            right: 60,
+            bottom: -50,
             child: Container(
-              width: 200,
-              height: 200,
+              width: 240,
+              height: 240,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFF1E50C8).withValues(alpha: 0.3),
+                    const Color(0xFF1E6AE8).withValues(alpha: 0.40),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: -20,
+            bottom: -40,
+            child: Container(
+              width: 180,
+              height: 180,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppTheme.gold.withValues(alpha: 0.12),
                     Colors.transparent,
                   ],
                 ),
@@ -157,7 +203,7 @@ class _DiagonalLinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppTheme.gold.withValues(alpha: 0.04)
+      ..color = AppTheme.gold.withValues(alpha: 0.055)
       ..strokeWidth = 1;
     const spacing = 22.0;
     for (double x = -size.height; x < size.width + size.height; x += spacing) {
@@ -184,11 +230,18 @@ class _HeroText extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
           decoration: BoxDecoration(
-            color: AppTheme.gold.withValues(alpha: 0.15),
+            color: AppTheme.gold.withValues(alpha: 0.20),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppTheme.gold.withValues(alpha: 0.4)),
+            border: Border.all(color: AppTheme.gold.withValues(alpha: 0.55)),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.gold.withValues(alpha: 0.15),
+                blurRadius: 12,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -201,7 +254,7 @@ class _HeroText extends StatelessWidget {
                   color: AppTheme.gold,
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
+                  letterSpacing: 1.4,
                 ),
               ),
             ],
@@ -234,7 +287,7 @@ class _HeroText extends StatelessWidget {
         const SizedBox(height: 12),
         const Text(
           'From large-format banners to custom stationery — we bring your ideas to life with precision and quality.',
-          style: TextStyle(color: Colors.white60, fontSize: 13, height: 1.6),
+          style: TextStyle(color: Color(0xFFBBB8CC), fontSize: 13, height: 1.6),
         ),
         const SizedBox(height: 22),
         ElevatedButton(
@@ -242,8 +295,9 @@ class _HeroText extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.gold,
             foregroundColor: const Color(0xFF1A0A00),
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+            elevation: 4,
+            shadowColor: AppTheme.gold.withValues(alpha: 0.45),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(30),
             ),
@@ -253,7 +307,7 @@ class _HeroText extends StatelessWidget {
             children: [
               Text(
                 'Browse Products',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
               ),
               SizedBox(width: 6),
               Icon(Icons.arrow_forward_rounded, size: 16),
@@ -299,11 +353,17 @@ class _PulsingDotState extends State<_PulsingDot>
     return FadeTransition(
       opacity: _anim,
       child: Container(
-        width: 6,
-        height: 6,
-        decoration: const BoxDecoration(
+        width: 7,
+        height: 7,
+        decoration: BoxDecoration(
           color: AppTheme.gold,
           shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.gold.withValues(alpha: 0.6),
+              blurRadius: 6,
+            ),
+          ],
         ),
       ),
     );
@@ -316,16 +376,23 @@ class _HeroLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 100,
-      height: 100,
+      width: 108,
+      height: 108,
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white.withValues(alpha: 0.05),
+        color: Colors.white.withValues(alpha: 0.07),
         border: Border.all(
-          color: AppTheme.gold.withValues(alpha: 0.35),
-          width: 2,
+          color: AppTheme.gold.withValues(alpha: 0.55),
+          width: 2.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.gold.withValues(alpha: 0.25),
+            blurRadius: 24,
+            spreadRadius: 2,
+          ),
+        ],
       ),
       child: ClipOval(
         child: Image.asset(
@@ -335,7 +402,7 @@ class _HeroLogo extends StatelessWidget {
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
-                colors: [Color(0xFF3a0060), Color(0xFF004fa3)],
+                colors: [Color(0xFF4A0090), Color(0xFF0060C8)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -346,7 +413,7 @@ class _HeroLogo extends StatelessWidget {
                 style: TextStyle(
                   color: AppTheme.gold,
                   fontWeight: FontWeight.w800,
-                  fontSize: 22,
+                  fontSize: 24,
                   letterSpacing: 1,
                 ),
               ),
@@ -367,7 +434,7 @@ class _FeaturedSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final h = isWide ? 24.0 : 16.0;
-    return _SectionContainer(
+    return _FrostedSectionContainer(
       margin: EdgeInsets.fromLTRB(h, 20, h, 0),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 18, 0, 18),
@@ -467,28 +534,33 @@ class _FeaturedCardState extends State<_FeaturedCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           width: 162,
-          transform: Matrix4.translationValues(0, _hovered ? -4 : 0, 0),
+          transform: Matrix4.translationValues(0, _hovered ? -5 : 0, 0),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            color: const Color(0xFF252038),
+            color: const Color(0xFF2A2245),
             border: Border.all(
               color: _hovered
-                  ? AppTheme.gold.withValues(alpha: 0.6)
-                  : Colors.white.withValues(alpha: 0.10),
+                  ? AppTheme.gold.withValues(alpha: 0.75)
+                  : Colors.white.withValues(alpha: 0.14),
               width: _hovered ? 1.5 : 1,
             ),
             boxShadow: _hovered
                 ? [
                     BoxShadow(
-                      color: AppTheme.gold.withValues(alpha: 0.18),
-                      blurRadius: 20,
-                      offset: const Offset(0, 6),
+                      color: AppTheme.gold.withValues(alpha: 0.28),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFF6C3FD4).withValues(alpha: 0.15),
+                      blurRadius: 30,
+                      offset: const Offset(0, 4),
                     ),
                   ]
                 : [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 8,
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
                   ],
@@ -515,14 +587,14 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                     left: 0,
                     right: 0,
                     child: Container(
-                      height: 36,
+                      height: 42,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
                             Colors.transparent,
-                            const Color(0xFF252038).withValues(alpha: 0.9),
+                            const Color(0xFF2A2245).withValues(alpha: 0.95),
                           ],
                         ),
                       ),
@@ -549,10 +621,16 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                     const SizedBox(height: 3),
                     Text(
                       price != null ? '₱$price' : 'See pricing',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.gold,
-                        fontSize: 13,
+                        fontSize: 14,
                         fontWeight: FontWeight.w800,
+                        shadows: [
+                          Shadow(
+                            color: AppTheme.gold.withValues(alpha: 0.4),
+                            blurRadius: 6,
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -566,11 +644,22 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                           decoration: BoxDecoration(
                             color: _hovered
                                 ? AppTheme.gold
-                                : AppTheme.gold.withValues(alpha: 0.15),
+                                : AppTheme.gold.withValues(alpha: 0.18),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: AppTheme.gold.withValues(alpha: 0.5),
+                              color: AppTheme.gold.withValues(alpha: 0.65),
                             ),
+                            boxShadow: _hovered
+                                ? [
+                                    BoxShadow(
+                                      color: AppTheme.gold.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ]
+                                : [],
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -609,9 +698,18 @@ class _FeaturedCardState extends State<_FeaturedCard> {
   }
 
   Widget _imgPlaceholder() => Container(
-    color: Colors.white.withValues(alpha: 0.06),
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [
+          Colors.white.withValues(alpha: 0.08),
+          Colors.white.withValues(alpha: 0.04),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+    ),
     child: const Center(
-      child: Icon(Icons.image_outlined, color: Colors.white24, size: 28),
+      child: Icon(Icons.image_outlined, color: Colors.white38, size: 30),
     ),
   );
 }
@@ -627,11 +725,21 @@ class _SectionHeader extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 3,
-          height: 18,
+          width: 4,
+          height: 20,
           decoration: BoxDecoration(
-            color: AppTheme.gold,
+            gradient: LinearGradient(
+              colors: [AppTheme.gold, AppTheme.gold.withValues(alpha: 0.5)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
             borderRadius: BorderRadius.circular(2),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.gold.withValues(alpha: 0.5),
+                blurRadius: 8,
+              ),
+            ],
           ),
         ),
         const SizedBox(width: 10),
@@ -659,18 +767,18 @@ class _ServicesSection extends StatelessWidget {
       title: 'Large Format Printing',
       subtitle: 'Tarpaulins, banners & sintra boards',
       icon: Icons.photo_size_select_actual_outlined,
-      accentColor: Color(0xFF3B5BDB),
-      iconColor: Color(0xFF91A7FF),
-      bgColor: Color(0xFF1B2A5E),
+      accentColor: Color(0xFF4C6EF5),
+      iconColor: Color(0xFFAABEFF),
+      bgColor: Color(0xFF1A2760),
       tag: 'Popular',
     ),
     _ServiceItem(
       title: 'Menu Boards',
       subtitle: 'Backlit & printed menus for cafes',
       icon: Icons.menu_book_outlined,
-      accentColor: Color(0xFF7C3AED),
-      iconColor: Color(0xFFD0AEFF),
-      bgColor: Color(0xFF2A1A52),
+      accentColor: Color(0xFF9B51E0),
+      iconColor: Color(0xFFDDB8FF),
+      bgColor: Color(0xFF2B1A58),
       tag: null,
     ),
     _ServiceItem(
@@ -679,15 +787,15 @@ class _ServicesSection extends StatelessWidget {
       icon: Icons.credit_card_outlined,
       accentColor: Color(0xFF059669),
       iconColor: Color(0xFF6EE7B7),
-      bgColor: Color(0xFF0D3528),
+      bgColor: Color(0xFF0A3326),
       tag: null,
     ),
     _ServiceItem(
       title: 'Sticker Printing',
       subtitle: 'Custom stickers, labels & decals',
       icon: Icons.local_offer_outlined,
-      accentColor: Color(0xFFD97706),
-      iconColor: Color(0xFFFCD34D),
+      accentColor: Color(0xFFE08C00),
+      iconColor: Color(0xFFFFD166),
       bgColor: Color(0xFF3D2200),
       tag: null,
     ),
@@ -696,7 +804,7 @@ class _ServicesSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final h = isWide ? 24.0 : 16.0;
-    return _SectionContainer(
+    return _FrostedSectionContainer(
       margin: EdgeInsets.fromLTRB(h, 20, h, 0),
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -708,7 +816,7 @@ class _ServicesSection extends StatelessWidget {
             Text(
               'Everything you need, printed with precision.',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.38),
+                color: Colors.white.withValues(alpha: 0.45),
                 fontSize: 12,
               ),
             ),
@@ -815,26 +923,38 @@ class _ServiceCardState extends State<_ServiceCard> {
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        transform: Matrix4.translationValues(0, _hovered ? -3 : 0, 0),
+        transform: Matrix4.translationValues(0, _hovered ? -4 : 0, 0),
         padding: EdgeInsets.all(widget.compact ? 14 : 16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          color: _hovered ? s.bgColor : s.bgColor.withValues(alpha: 0.85),
+          color: _hovered
+              ? Color.lerp(
+                  s.bgColor,
+                  s.accentColor.withValues(alpha: 0.3),
+                  0.18,
+                )
+              : s.bgColor,
           border: Border.all(
             color: _hovered
-                ? s.iconColor.withValues(alpha: 0.5)
-                : s.accentColor.withValues(alpha: 0.3),
-            width: _hovered ? 1.2 : 0.8,
+                ? s.iconColor.withValues(alpha: 0.65)
+                : s.accentColor.withValues(alpha: 0.45),
+            width: _hovered ? 1.5 : 1,
           ),
           boxShadow: _hovered
               ? [
                   BoxShadow(
-                    color: s.accentColor.withValues(alpha: 0.35),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
+                    color: s.accentColor.withValues(alpha: 0.45),
+                    blurRadius: 20,
+                    offset: const Offset(0, 6),
                   ),
                 ]
-              : [],
+              : [
+                  BoxShadow(
+                    color: s.accentColor.withValues(alpha: 0.10),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -842,27 +962,37 @@ class _ServiceCardState extends State<_ServiceCard> {
             Row(
               children: [
                 Container(
-                  width: 38,
-                  height: 38,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    color: s.accentColor.withValues(alpha: 0.28),
+                    borderRadius: BorderRadius.circular(11),
+                    color: s.accentColor.withValues(alpha: 0.32),
+                    border: Border.all(
+                      color: s.iconColor.withValues(alpha: 0.35),
+                      width: 1,
+                    ),
                   ),
-                  child: Icon(s.icon, color: s.iconColor, size: 19),
+                  child: Icon(s.icon, color: s.iconColor, size: 20),
                 ),
                 if (s.tag != null) ...[
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 3,
+                      horizontal: 8,
+                      vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: AppTheme.gold.withValues(alpha: 0.15),
+                      color: AppTheme.gold.withValues(alpha: 0.20),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: AppTheme.gold.withValues(alpha: 0.4),
+                        color: AppTheme.gold.withValues(alpha: 0.55),
                       ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.gold.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                        ),
+                      ],
                     ),
                     child: const Text(
                       'Popular',
@@ -891,7 +1021,7 @@ class _ServiceCardState extends State<_ServiceCard> {
             Text(
               s.subtitle,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.55),
+                color: s.iconColor.withValues(alpha: 0.65),
                 fontSize: widget.compact ? 10 : 11,
                 height: 1.45,
               ),
