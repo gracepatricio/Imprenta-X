@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'sales_widgets.dart';
 import 'employee_pos_screen.dart';
@@ -765,6 +766,7 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            _DesignFilesSection(products: products),
                           ],
 
                           const SizedBox(height: 10),
@@ -2592,6 +2594,7 @@ class _ReadyOrderCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+            _DesignFilesSection(products: products),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -3153,6 +3156,7 @@ class _QueueCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+              _DesignFilesSection(products: products),
               const SizedBox(height: 6),
             ],
 
@@ -3312,6 +3316,103 @@ class _QueueCard extends StatelessWidget {
                   ),
                 ],
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Design file attachments ───────────────────────────────────────────────────
+
+class _DesignFilesSection extends StatelessWidget {
+  final List products;
+  const _DesignFilesSection({required this.products});
+
+  @override
+  Widget build(BuildContext context) {
+    final files = <({String name, String url})>[];
+    for (final p in products) {
+      final urls  = List<String>.from(p['file_urls']  as List? ?? []);
+      final names = List<String>.from(p['file_names'] as List? ?? []);
+      for (int i = 0; i < urls.length; i++) {
+        if (urls[i].isEmpty) continue;
+        files.add((
+          name: i < names.length && names[i].isNotEmpty
+              ? names[i]
+              : 'File ${i + 1}',
+          url: urls[i],
+        ));
+      }
+    }
+    if (files.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Design Files',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: files.map((f) => _FileChip(name: f.name, url: f.url)).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FileChip extends StatelessWidget {
+  final String name;
+  final String url;
+  const _FileChip({required this.name, required this.url});
+
+  IconData get _icon {
+    final ext = name.split('.').last.toLowerCase();
+    if ({'jpg', 'jpeg', 'png'}.contains(ext)) return Icons.image_outlined;
+    if (ext == 'pdf') return Icons.picture_as_pdf_outlined;
+    return Icons.insert_drive_file_outlined;
+  }
+
+  Future<void> _open() async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: _open,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.blue.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(_icon, size: 12, color: Colors.blue.shade300),
+            const SizedBox(width: 4),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 140),
+              child: Text(
+                name,
+                style: TextStyle(color: Colors.blue.shade300, fontSize: 11),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.download_rounded, size: 11, color: Colors.blue.shade300),
           ],
         ),
       ),

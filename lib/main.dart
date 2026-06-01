@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'services/cart_manager.dart';
@@ -10,12 +11,18 @@ import 'screens/reset_password_screen.dart';
 import 'screens/customer_homepage.dart';
 import 'screens/employee_homepage.dart';
 import 'screens/admin_homepage.dart';
+import 'screens/role_guard.dart';
 import 'screens/change_password_screen.dart';
 import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // On web: clear the session when the browser tab/window is closed.
+  // Users must log in fresh each time they open the app.
+  if (kIsWeb) {
+    await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
+  }
   await NotificationService.initialize();
   // Initialize SharedPreferences cache only — do NOT load any cart yet.
   // The cart is loaded per-user inside AuthService.login() after the user
@@ -91,9 +98,9 @@ class MyApp extends StatelessWidget {
         '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/reset-password': (context) =>
             ResetPasswordScreen(oobCode: resetOobCode ?? ''),
-        '/customer': (context) => const CustomerHomepage(),
-        '/employee': (context) => EmployeeHomepage(),
-        '/admin': (context) => AdminHomepage(),
+        '/customer': (context) => const RoleGuard(requiredRole: 'customer', child: CustomerHomepage()),
+        '/employee': (context) => const RoleGuard(requiredRole: 'employee', child: EmployeeHomepage()),
+        '/admin':    (context) => const RoleGuard(requiredRole: 'admin',    child: AdminHomepage()),
         '/change-password': (context) {
           final args =
           ModalRoute.of(context)!.settings.arguments

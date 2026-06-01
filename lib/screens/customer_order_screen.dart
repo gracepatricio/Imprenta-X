@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import '../services/design_file_picker.dart';
 import '../services/cart_manager.dart';
 import 'app_theme.dart';
 
@@ -33,6 +35,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
 
   // Files
   final List<CartFile> _files = [];
+  bool _addingToCart = false;
 
   // Notes
   final _notesCtrl = TextEditingController();
@@ -176,33 +179,33 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
 
   Future<void> _pickFiles() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        allowMultiple: true,
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'psd', 'ai'],
-        withData: true,
-      );
-      if (result == null || !mounted) return;
+      final picked = await pickDesignFiles(multiple: true);
+      if (picked == null || !mounted) return;
       final rejected = <String>[];
       setState(() {
-        for (final f in result.files) {
-          if (f.bytes == null) continue;
-          final mb = f.bytes!.lengthInBytes / (1024 * 1024);
+        for (final (name, bytes) in picked) {
+          final mb = bytes.lengthInBytes / (1024 * 1024);
           if (mb > _maxFileMB) {
-            rejected.add('${f.name} (${mb.toStringAsFixed(1)} MB)');
+            rejected.add('$name (${mb.toStringAsFixed(1)} MB)');
           } else {
-            _files.add(CartFile(name: f.name, bytes: f.bytes!));
+            _files.add(CartFile(name: name, bytes: bytes));
           }
         }
       });
       if (rejected.isNotEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              'Skipped (>${_maxFileMB}MB): ${rejected.join(', ')}'),
+          content: Text('Skipped (>${_maxFileMB}MB): ${rejected.join(', ')}'),
           backgroundColor: Colors.orange.shade700,
         ));
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('File picker error: $e'),
+          backgroundColor: Colors.red.shade700,
+        ));
+      }
+    }
   }
 
   // ── Add / Update cart ────────────────────────────────────────────────────────
@@ -216,7 +219,8 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
             (_widthFt >= 2 && _heightFt >= 3));
   }
 
-  void _addToCart() {
+  Future<void> _addToCart() async {
+    if (_addingToCart) return;
     if (_needsSizeInput && !_sizeIsValid) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Minimum tarpaulin size is 2×3 ft (or 3×2 ft).'),
@@ -238,6 +242,36 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
       ));
       return;
     }
+
+    setState(() => _addingToCart = true);
+
+    // Upload files to Firebase Storage so they survive logout/refresh.
+    final cartFiles = <CartFile>[];
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anon';
+    for (final f in _files) {
+      if (f.url != null) {
+        cartFiles.add(f); // already uploaded (edit mode)
+        continue;
+      }
+      try {
+        final ext  = f.name.split('.').last.toLowerCase();
+        final ts   = DateTime.now().millisecondsSinceEpoch;
+        final path = 'cart_files/$uid/${ts}_${f.name}';
+        final ref  = FirebaseStorage.instance.ref(path);
+        final task = await ref.putData(
+          f.bytes!,
+          SettableMetadata(contentType: _mimeType(ext)),
+        );
+        final url = await task.ref.getDownloadURL();
+        cartFiles.add(CartFile(name: f.name, bytes: f.bytes, url: url, path: path));
+      } catch (_) {
+        cartFiles.add(f); // keep bytes-only if upload fails
+      }
+    }
+
+    if (!mounted) return;
+    setState(() => _addingToCart = false);
+
     final item = CartItem(
       productId:   widget.product['product_id']?.toString() ?? '',
       productName: _productName,
@@ -249,7 +283,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
       widthFt:     _needsSizeInput ? _widthFt  : null,
       heightFt:    _needsSizeInput ? _heightFt : null,
       material:    _material,
-      files:       List.from(_files),
+      files:       cartFiles,
       notes:       _notesCtrl.text.trim(),
     );
 
@@ -268,6 +302,15 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
       duration: const Duration(seconds: 2),
     ));
   }
+
+  String _mimeType(String ext) => switch (ext) {
+    'pdf'           => 'application/pdf',
+    'jpg' || 'jpeg' => 'image/jpeg',
+    'png'           => 'image/png',
+    'psd'           => 'image/vnd.adobe.photoshop',
+    'ai'            => 'application/postscript',
+    _               => 'application/octet-stream',
+  };
 
   // ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -691,13 +734,20 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   Widget _addToCartBtn() => SizedBox(
     width: double.infinity,
     child: ElevatedButton.icon(
-      onPressed: _addToCart,
-      icon: Icon(
-        widget.editIndex != null ? Icons.check_rounded : Icons.shopping_cart_outlined,
-        size: 18,
-      ),
+      onPressed: _addingToCart ? null : _addToCart,
+      icon: _addingToCart
+          ? const SizedBox(
+              width: 18, height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            )
+          : Icon(
+              widget.editIndex != null ? Icons.check_rounded : Icons.shopping_cart_outlined,
+              size: 18,
+            ),
       label: Text(
-        widget.editIndex != null ? 'Update Cart Item' : 'Add to Cart',
+        _addingToCart
+            ? 'Uploading files…'
+            : (widget.editIndex != null ? 'Update Cart Item' : 'Add to Cart'),
         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
       ),
       style: AppTheme.primaryButton(),

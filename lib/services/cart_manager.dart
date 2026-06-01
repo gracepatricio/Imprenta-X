@@ -4,8 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CartFile {
   final String name;
-  final Uint8List bytes;
-  const CartFile({required this.name, required this.bytes});
+  final Uint8List? bytes; // null when loaded from Firestore (only url/path available)
+  final String? url;
+  final String? path;
+  const CartFile({required this.name, this.bytes, this.url, this.path});
 }
 
 class CartItem {
@@ -99,6 +101,11 @@ class CartItem {
     if (heightFt != null) 'heightFt': heightFt,
     if (material != null) 'material': material,
     'notes': notes,
+    'fileData': files.map((f) => {
+      'name': f.name,
+      if (f.url  != null) 'url':  f.url,
+      if (f.path != null) 'path': f.path,
+    }).toList(),
   };
 
   factory CartItem.fromJson(Map<String, dynamic> j) => CartItem(
@@ -112,7 +119,15 @@ class CartItem {
     widthFt:     j['widthFt']  != null ? (j['widthFt']  as num).toDouble() : null,
     heightFt:    j['heightFt'] != null ? (j['heightFt'] as num).toDouble() : null,
     material:    j['material'] as String?,
-    files:       [],
+    files: (() {
+      final raw = j['fileData'] as List?;
+      if (raw == null) return <CartFile>[];
+      return raw.whereType<Map>().map((fd) => CartFile(
+        name: fd['name'] as String? ?? '',
+        url:  fd['url']  as String?,
+        path: fd['path'] as String?,
+      )).toList();
+    })(),
     notes:       j['notes'] as String,
   );
 }

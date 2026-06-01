@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -43,6 +44,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
   // ── Image compression ────────────────────────────────────────────────────
 
   Uint8List _compress(Uint8List bytes, String ext) {
+    if (kIsWeb) return bytes; // package:image uses dart:io on some paths
     if (!{'jpg', 'jpeg', 'png'}.contains(ext)) return bytes;
     try {
       final decoded = img.decodeImage(bytes);
@@ -99,14 +101,20 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     final urls  = <String>[];
     final paths = <String>[];
     for (final file in item.files) {
-      final ext   = file.name.split('.').last.toLowerCase();
-      final bytes = _compress(file.bytes, ext);
-      final ts    = DateTime.now().millisecondsSinceEpoch;
-      final path  = 'order_files/$orderId/${itemIndex}_${ts}_${file.name}';
-      final ref   = FirebaseStorage.instance.ref(path);
-      final task  = await ref.putData(bytes, SettableMetadata(contentType: _mime(ext)));
-      urls.add(await task.ref.getDownloadURL());
-      paths.add(path);
+      if (file.url != null && file.url!.isNotEmpty) {
+        // Already uploaded when added to cart — reuse the existing file.
+        urls.add(file.url!);
+        paths.add(file.path ?? '');
+      } else if (file.bytes != null) {
+        final ext   = file.name.split('.').last.toLowerCase();
+        final bytes = _compress(file.bytes!, ext);
+        final ts    = DateTime.now().millisecondsSinceEpoch;
+        final path  = 'order_files/$orderId/${itemIndex}_${ts}_${file.name}';
+        final ref   = FirebaseStorage.instance.ref(path);
+        final task  = await ref.putData(bytes, SettableMetadata(contentType: _mime(ext)));
+        urls.add(await task.ref.getDownloadURL());
+        paths.add(path);
+      }
     }
     return (urls: urls, paths: paths);
   }

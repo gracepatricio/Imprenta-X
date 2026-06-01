@@ -15,7 +15,15 @@
       "Bash(xargs grep -l \"^class.*{$\")",
       "Bash(dart analyze *)",
       "Bash(firebase functions:delete deleteAuthUser --project imprenta-x-system --force)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(firebase --version)",
+      "Bash(flutter --version)",
+      "Bash(xargs grep -l \"enum Persistence\")",
+      "Bash(dart pub *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(p['name'],p.get\\('version',''\\)\\) for p in d.get\\('packages',[]\\) if 'firebase_auth' in p['name'].lower\\(\\)]\")",
+      "Bash(python *)",
+      "Bash(dir /s /b \"%LOCALAPPDATA%\\\\Pub\\\\Cache\\\\hosted\\\\pub.dev\\\\firebase_auth*\")",
+      "Bash(dir android\\\\app\\\\src\\\\main\\\\res\\\\mipmap-hdpi /b)"
     ]
   }
 }
