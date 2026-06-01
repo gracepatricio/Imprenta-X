@@ -47,6 +47,8 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
   ];
 
   static const _mobileItems = [
+    'Home',
+    'Inventory',
     'Job Queue',
     'Account',
   ];
@@ -105,6 +107,8 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
     // Mobile employees only reach Job Queue and Account.
     if (PlatformUtils.isMobileDevice) {
       switch (_active) {
+        case 'Inventory':
+          return const _InventoryTabContainer();
         case 'Account':
           return EmployeeAccountScreen(
             // Mobile: "view logs" shortcut still goes to Job Queue tab.
@@ -112,8 +116,9 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
                 setState(() => _active = 'Job Queue'),
           );
         case 'Job Queue':
-        default:
           return const EmployeeMobileJobQueueScreen();
+        default:
+          return const EmployeeHomeScreen();
       }
     }
 
