@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:file_picker/file_picker.dart';
+import '../services/design_file_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
@@ -141,21 +142,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        allowMultiple: false,
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'psd', 'ai'],
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return;
-      final f = result.files.first;
-      if (f.bytes == null) return;
+      final picked = await pickDesignFiles(multiple: false);
+      if (picked == null || picked.isEmpty) return;
+      final (fileName, fileBytes) = picked.first;
 
       setState(() => _sending = true);
-      final ext      = f.name.split('.').last.toLowerCase();
-      final bytes    = _compressIfImage(f.bytes!, ext);
+      final ext      = fileName.split('.').last.toLowerCase();
+      final bytes    = _compressIfImage(fileBytes, ext);
       final ts       = DateTime.now().millisecondsSinceEpoch;
-      final path     = 'chat_files/${widget.customerUid}/${ts}_${f.name}';
+      final path     = 'chat_files/${widget.customerUid}/${ts}_$fileName';
       final ref      = FirebaseStorage.instance.ref(path);
       final task     = await ref.putData(
           bytes, SettableMetadata(contentType: _mime(ext)));
@@ -165,7 +160,7 @@ class _ChatScreenState extends State<ChatScreen> {
       await _addMessage({
         'text':      '',
         'file_url':  url,
-        'file_name': f.name,
+        'file_name': fileName,
         'file_type': fileType,
       });
       if (mounted) setState(() => _sending = false);
@@ -281,6 +276,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Uint8List _compressIfImage(Uint8List bytes, String ext) {
+    if (kIsWeb) return bytes; // package:image uses dart:io on some paths
     if (!{'jpg', 'jpeg', 'png'}.contains(ext)) return bytes;
     try {
       final decoded = img.decodeImage(bytes);

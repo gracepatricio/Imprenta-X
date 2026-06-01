@@ -3,19 +3,23 @@ import '../services/auth_service.dart';
 import 'add_email_screen.dart';
 import 'app_theme.dart';
 
+const _cyan = Color(0xFF00B4D8);
+const _magenta = Color(0xFFFF006E);
+const _yellow = Color(0xFFFFDE89);
+const _green = Color(0xFF80B918);
+
 /// Shown when `must_change_password == true` after login.
 /// The user CANNOT skip this screen — no back button.
 class ChangePasswordScreen extends StatefulWidget {
-  /// The role ('admin' or 'employee') passed from the login flow.
   final String role;
-
   const ChangePasswordScreen({super.key, required this.role});
 
   @override
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
 }
 
-class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
+class _ChangePasswordScreenState extends State<ChangePasswordScreen>
+    with SingleTickerProviderStateMixin {
   final _newPwCtrl = TextEditingController();
   final _confPwCtrl = TextEditingController();
 
@@ -24,35 +28,39 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   bool _isSaving = false;
   String? _error;
 
+  late AnimationController _dotCtrl;
   final AuthService _authService = AuthService();
+
+  @override
+  void initState() {
+    super.initState();
+    _dotCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+  }
 
   @override
   void dispose() {
     _newPwCtrl.dispose();
     _confPwCtrl.dispose();
+    _dotCtrl.dispose();
     super.dispose();
   }
 
-  /// Returns null if valid, or an error message string if invalid.
   String? _validatePassword(String password) {
-    if (password.length < 8) {
-      return 'Password must be at least 8 characters.';
-    }
-    if (!RegExp(r'[A-Z]').hasMatch(password)) {
+    if (password.length < 8) return 'Password must be at least 8 characters.';
+    if (!RegExp(r'[A-Z]').hasMatch(password))
       return 'Password must contain at least one uppercase letter.';
-    }
-    if (!RegExp(r'[a-z]').hasMatch(password)) {
+    if (!RegExp(r'[a-z]').hasMatch(password))
       return 'Password must contain at least one lowercase letter.';
-    }
-    if (!RegExp(r'[0-9]').hasMatch(password)) {
+    if (!RegExp(r'[0-9]').hasMatch(password))
       return 'Password must contain at least one number.';
-    }
     if (!RegExp(
       r'[!@#$%^&*()\-_=+\[\]{};:,.<>?/\\|`~'
       "'\"]",
-    ).hasMatch(password)) {
+    ).hasMatch(password))
       return 'Password must contain at least one special character.';
-    }
     return null;
   }
 
@@ -64,13 +72,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       setState(() => _error = 'Please fill in all fields.');
       return;
     }
-
     final pwError = _validatePassword(newPw);
     if (pwError != null) {
       setState(() => _error = pwError);
       return;
     }
-
     if (newPw != conf) {
       setState(() => _error = 'Passwords do not match.');
       return;
@@ -80,19 +86,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       _isSaving = true;
       _error = null;
     });
-
-    // Pass an empty string as currentPassword — AuthService.changePassword
-    // should handle the case where a temp password is no longer required,
-    // or you may update AuthService to accept only the new password.
     final result = await _authService.changePassword('', newPw);
-
     if (!mounted) return;
     setState(() => _isSaving = false);
 
     if (result == 'success') {
-      // Navigate to the optional Add Email screen, passing the new password
-      // so addEmail() can create the migrated Firebase Auth account with the
-      // same password the user just set.
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -106,7 +104,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // PopScope prevents the back button from dismissing this screen
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -121,24 +118,25 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      // ── Brand icon ──────────────────────────────────────
                       Container(
                         width: 64,
                         height: 64,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: AppTheme.gold.withValues(alpha: 0.15),
+                          color: Colors.white.withValues(alpha: 0.07),
                           border: Border.all(
-                            color: AppTheme.gold.withValues(alpha: 0.4),
+                            color: Colors.white.withValues(alpha: 0.18),
                             width: 1.5,
                           ),
                         ),
                         child: const Icon(
                           Icons.lock_reset,
-                          color: AppTheme.gold,
-                          size: 30,
+                          color: _yellow,
+                          size: 28,
                         ),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 12),
 
                       const Text(
                         'Change Your Password',
@@ -148,105 +146,184 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      const Text(
+                      const SizedBox(height: 6),
+                      Text(
                         'You must set a new password before\nyou can access your account.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white54, fontSize: 13),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.35),
+                          fontSize: 12,
+                        ),
                       ),
 
                       const SizedBox(height: 24),
 
-                      Container(
-                        width: isWide ? 400 : double.infinity,
-                        padding: EdgeInsets.all(isWide ? 28 : 20),
-                        decoration: AppTheme.glassCard(opacity: 0.18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                      // ── Card ────────────────────────────────────────────
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: isWide ? 400 : double.infinity,
+                        ),
+                        child: Stack(
+                          clipBehavior: Clip.hardEdge,
                           children: [
-                            // New password
-                            TextField(
-                              controller: _newPwCtrl,
-                              obscureText: !_showNew,
-                              style: const TextStyle(color: Colors.white),
-                              textInputAction: TextInputAction.next,
-                              decoration: AppTheme.inputDecoration(
-                                'New password',
-                                icon: Icons.lock_reset,
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _showNew
-                                        ? Icons.visibility
-                                        : Icons.visibility_off,
-                                    color: Colors.white54,
-                                    size: 18,
+                            Container(
+                              padding: EdgeInsets.fromLTRB(
+                                isWide ? 28 : 20,
+                                32,
+                                isWide ? 28 : 20,
+                                24,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.12),
+                                  width: 1,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.3),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 6),
                                   ),
-                                  onPressed: () =>
-                                      setState(() => _showNew = !_showNew),
-                                ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Min. 8 chars with uppercase, lowercase, number & special character',
-                              style: TextStyle(
-                                color: Colors.white38,
-                                fontSize: 11,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-
-                            // Confirm new password
-                            TextField(
-                              controller: _confPwCtrl,
-                              obscureText: !_showConf,
-                              style: const TextStyle(color: Colors.white),
-                              textInputAction: TextInputAction.done,
-                              onSubmitted: (_) => _save(),
-                              decoration: AppTheme.inputDecoration(
-                                'Confirm new password',
-                                icon: Icons.lock_outline,
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _showConf
-                                        ? Icons.visibility
-                                        : Icons.visibility_off,
-                                    color: Colors.white54,
-                                    size: 18,
-                                  ),
-                                  onPressed: () =>
-                                      setState(() => _showConf = !_showConf),
-                                ),
-                              ),
-                            ),
-
-                            if (_error != null) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                _error!,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.redAccent,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-
-                            const SizedBox(height: 24),
-
-                            ElevatedButton(
-                              onPressed: _isSaving ? null : _save,
-                              style: AppTheme.primaryButton(),
-                              child: _isSaving
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.black,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  // New password
+                                  _AuthField(
+                                    label: 'New Password',
+                                    controller: _newPwCtrl,
+                                    icon: Icons.lock_reset,
+                                    obscureText: !_showNew,
+                                    textInputAction: TextInputAction.next,
+                                    hint: 'Enter new password',
+                                    suffix: IconButton(
+                                      icon: Icon(
+                                        _showNew
+                                            ? Icons.visibility_outlined
+                                            : Icons.visibility_off_outlined,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                        size: 18,
                                       ),
-                                    )
-                                  : const Text('Set New Password'),
+                                      onPressed: () =>
+                                          setState(() => _showNew = !_showNew),
+                                      splashRadius: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Min. 8 chars · uppercase · lowercase · number · special character',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.25,
+                                      ),
+                                      fontSize: 10,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+
+                                  // Confirm password
+                                  _AuthField(
+                                    label: 'Confirm Password',
+                                    controller: _confPwCtrl,
+                                    icon: Icons.lock_outline_rounded,
+                                    obscureText: !_showConf,
+                                    textInputAction: TextInputAction.done,
+                                    hint: 'Re-enter new password',
+                                    onSubmitted: (_) => _save(),
+                                    suffix: IconButton(
+                                      icon: Icon(
+                                        _showConf
+                                            ? Icons.visibility_outlined
+                                            : Icons.visibility_off_outlined,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                        size: 18,
+                                      ),
+                                      onPressed: () => setState(
+                                        () => _showConf = !_showConf,
+                                      ),
+                                      splashRadius: 16,
+                                    ),
+                                  ),
+
+                                  if (_error != null) ...[
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      _error!,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.redAccent,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+
+                                  const SizedBox(height: 24),
+
+                                  ElevatedButton(
+                                    onPressed: _isSaving ? null : _save,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: _yellow,
+                                      foregroundColor: Colors.black,
+                                      disabledBackgroundColor: _yellow
+                                          .withValues(alpha: 0.5),
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    child: _isSaving
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.black,
+                                            ),
+                                          )
+                                        : const Text(
+                                            'Set New Password',
+                                            style: TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 1.2,
+                                            ),
+                                          ),
+                                  ),
+
+                                  const SizedBox(height: 20),
+                                  _CmykDots(controller: _dotCtrl),
+                                ],
+                              ),
+                            ),
+
+                            // CMYK accent bar
+                            Positioned(
+                              top: 0,
+                              left: 40,
+                              right: 40,
+                              child: Container(
+                                height: 2,
+                                decoration: BoxDecoration(
+                                  borderRadius: const BorderRadius.vertical(
+                                    bottom: Radius.circular(4),
+                                  ),
+                                  gradient: const LinearGradient(
+                                    colors: [_cyan, _magenta, _yellow, _green],
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -259,6 +336,166 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Shared field widget ────────────────────────────────────────────────────────
+
+class _AuthField extends StatefulWidget {
+  const _AuthField({
+    required this.label,
+    required this.controller,
+    required this.icon,
+    this.obscureText = false,
+    this.keyboardType,
+    this.textInputAction,
+    this.onSubmitted,
+    this.suffix,
+    this.hint,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final IconData icon;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onSubmitted;
+  final Widget? suffix;
+  final String? hint;
+
+  @override
+  State<_AuthField> createState() => _AuthFieldState();
+}
+
+class _AuthFieldState extends State<_AuthField> {
+  final _focus = FocusNode();
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() => setState(() => _focused = _focus.hasFocus));
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 200),
+          style: TextStyle(
+            color: _focused
+                ? _yellow.withValues(alpha: 0.9)
+                : Colors.white.withValues(alpha: 0.38),
+            fontSize: 10,
+            letterSpacing: 1.5,
+            fontWeight: FontWeight.w500,
+          ),
+          child: Text(widget.label.toUpperCase()),
+        ),
+        const SizedBox(height: 6),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            color: Colors.white.withValues(alpha: 0.05),
+            border: Border.all(
+              color: _focused
+                  ? _yellow.withValues(alpha: 0.45)
+                  : Colors.white.withValues(alpha: 0.10),
+              width: 1,
+            ),
+            boxShadow: _focused
+                ? [
+                    BoxShadow(
+                      color: _yellow.withValues(alpha: 0.08),
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : [],
+          ),
+          child: TextField(
+            controller: widget.controller,
+            focusNode: _focus,
+            obscureText: widget.obscureText,
+            keyboardType: widget.keyboardType,
+            textInputAction: widget.textInputAction,
+            onSubmitted: widget.onSubmitted,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: widget.hint,
+              hintStyle: TextStyle(
+                color: Colors.white.withValues(alpha: 0.2),
+                fontSize: 13,
+              ),
+              prefixIcon: Icon(
+                widget.icon,
+                color: _focused
+                    ? _yellow.withValues(alpha: 0.8)
+                    : Colors.white.withValues(alpha: 0.28),
+                size: 18,
+              ),
+              suffixIcon: widget.suffix,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 13,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── CMYK dots ─────────────────────────────────────────────────────────────────
+
+class _CmykDots extends StatelessWidget {
+  const _CmykDots({required this.controller});
+  final AnimationController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = [_cyan, _magenta, _yellow, _green];
+    final delays = [0.0, 0.2, 0.4, 0.6];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(4, (i) {
+        final anim = Tween<double>(begin: 0.25, end: 0.9).animate(
+          CurvedAnimation(
+            parent: controller,
+            curve: Interval(
+              delays[i],
+              (delays[i] + 0.4).clamp(0, 1),
+              curve: Curves.easeInOut,
+            ),
+          ),
+        );
+        return AnimatedBuilder(
+          animation: anim,
+          builder: (_, __) => Container(
+            width: 5,
+            height: 5,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: colors[i].withValues(alpha: anim.value),
+            ),
+          ),
+        );
+      }),
     );
   }
 }

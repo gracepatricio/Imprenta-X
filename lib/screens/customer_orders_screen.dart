@@ -95,7 +95,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen>
             labelStyle: const TextStyle(
                 fontFamily: 'Spartan', fontWeight: FontWeight.bold, fontSize: 13),
             unselectedLabelStyle:
-                const TextStyle(fontFamily: 'Spartan', fontSize: 13),
+            const TextStyle(fontFamily: 'Spartan', fontSize: 13),
             tabs: _tabLabels.map((l) => Tab(text: l)).toList(),
           ),
           Expanded(
@@ -471,7 +471,7 @@ class _OrderCardState extends State<_OrderCard> {
                               hintText: '0.00',
                               hintStyle: TextStyle(color: Colors.white24, fontSize: 20),
                               contentPadding:
-                                  EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                              EdgeInsets.symmetric(horizontal: 10, vertical: 14),
                             ),
                             onChanged: (_) => setSheet(() {}),
                           ),
@@ -539,6 +539,7 @@ class _OrderCardState extends State<_OrderCard> {
     final isFullyPaid   = remaining < 0.01;
     final customerName  = widget.order['customer_name']?.toString() ?? '';
     final customerEmail = widget.order['customer_email']?.toString() ?? '';
+    final customerId    = widget.order['customer_id']?.toString() ?? '';
     final products      = (widget.order['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final turnaroundDays = (widget.order['turnaround_days'] as int?) ?? 3;
 
@@ -594,6 +595,7 @@ class _OrderCardState extends State<_OrderCard> {
     await FirebaseFirestore.instance.collection('Sales_Records').add({
       'order_id':             orderId,
       'customer_name':        customerName,
+      'customer_id':          customerId,
       'payment_type':         isFullyPaid ? 'full' : 'downpayment',
       'payment_method':       'online',
       'transaction_reference': linkId,
@@ -665,6 +667,7 @@ class _OrderCardState extends State<_OrderCard> {
     await FirebaseFirestore.instance.collection('Sales_Records').add({
       'order_id':             orderId,
       'customer_name':        widget.order['customer_name']?.toString() ?? '',
+      'customer_id':          widget.order['customer_id']?.toString() ?? '',
       'payment_type':         'balance',
       'payment_method':       'online',
       'transaction_reference': linkId,
@@ -812,15 +815,15 @@ class _OrderCardState extends State<_OrderCard> {
                       : () => _payNow(isInitial: _status == 'awaiting_payment'),
                   icon: _payingNow
                       ? const SizedBox(
-                          width: 14, height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                       : const Icon(Icons.payment_rounded, size: 16),
                   label: Text(
                     _payingNow
                         ? 'Loading…'
                         : _status == 'awaiting_payment'
-                            ? 'Pay via PayMongo (min 50%)'
-                            : 'Pay Remaining ₱${_remaining.toStringAsFixed(2)}',
+                        ? 'Pay via PayMongo (min 50%)'
+                        : 'Pay Remaining ₱${_remaining.toStringAsFixed(2)}',
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1160,8 +1163,8 @@ class _PaymentQrSectionState extends State<_PaymentQrSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('QR generation failed: $e'),
-              backgroundColor: Colors.red.shade700));
+            SnackBar(content: Text('QR generation failed: $e'),
+                backgroundColor: Colors.red.shade700));
       }
     } finally {
       if (mounted) setState(() => _generating = false);
@@ -1191,7 +1194,7 @@ class _PaymentQrSectionState extends State<_PaymentQrSection> {
                 const Expanded(
                   child: Text(
                     'Generate a payment QR so you or someone else can scan '
-                    'and pay the remaining balance anytime.',
+                        'and pay the remaining balance anytime.',
                     style: TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                 ),
@@ -1204,7 +1207,7 @@ class _PaymentQrSectionState extends State<_PaymentQrSection> {
                 onPressed: _generating ? null : _generate,
                 icon: _generating
                     ? const SizedBox(width: 14, height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.gold))
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.gold))
                     : const Icon(Icons.qr_code_2_rounded, color: AppTheme.gold, size: 16),
                 label: Text(
                   _generating ? 'Generating…' : 'Generate Payment QR Code',

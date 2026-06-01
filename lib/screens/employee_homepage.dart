@@ -63,7 +63,6 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
   @override
   void initState() {
     super.initState();
-    // Start on the first available tab for this platform.
     _active = _navItems.first;
     _listenForDeletion();
   }

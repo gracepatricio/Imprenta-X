@@ -139,7 +139,10 @@ class _GroupedRecord {
 }
 
 // Groups all raw Sales_Records docs by order_id and derives the combined state.
-List<_GroupedRecord> _groupRecords(List<QueryDocumentSnapshot> docs) {
+// If a record is missing customer_id (older records), it is resolved from the
+// Orders collection so that searching by CUS-XXX works on historical data too.
+Future<List<_GroupedRecord>> _groupRecordsAsync(
+    List<QueryDocumentSnapshot> docs) async {
   // Accumulate per order_id
   final Map<String, List<Map<String, dynamic>>> byOrder = {};
   final Map<String, List<DocumentReference>>    refsByOrder = {};
@@ -151,13 +154,74 @@ List<_GroupedRecord> _groupRecords(List<QueryDocumentSnapshot> docs) {
     refsByOrder.putIfAbsent(orderId, () => []).add(doc.reference);
   }
 
+  // Collect order IDs that are missing customer_id so we can batch-resolve them
+  final missingCustIdOrders = <String>{};
+  for (final orderId in byOrder.keys) {
+    final records = byOrder[orderId]!;
+    final hasCustId = records.any(
+            (r) => (r['customer_id']?.toString() ?? '').isNotEmpty);
+    if (!hasCustId) missingCustIdOrders.add(orderId);
+  }
+
+  // Resolve missing customer_ids:
+  // Orders store customer_uid (not customer_id), so we:
+  //   1. Fetch Orders by order_id to get customer_uid
+  //   2. Fetch User docs by uid to get customer_id
+  final resolvedCustId = <String, String>{};
+  if (missingCustIdOrders.isNotEmpty) {
+    final ids = missingCustIdOrders.toList();
+    // Map orderId → customer_uid
+    final orderIdToUid = <String, String>{};
+    for (int i = 0; i < ids.length; i += 30) {
+      final chunk = ids.sublist(i, (i + 30).clamp(0, ids.length));
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('Orders')
+            .where('order_id', whereIn: chunk)
+            .get();
+        for (final doc in snap.docs) {
+          final d    = doc.data();
+          final ordId = d['order_id']?.toString() ?? '';
+          final uid   = d['customer_uid']?.toString() ?? '';
+          if (ordId.isNotEmpty && uid.isNotEmpty) {
+            orderIdToUid[ordId] = uid;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Fetch User docs to get customer_id
+    final uids = orderIdToUid.values.toSet().toList();
+    final uidToCustId = <String, String>{};
+    for (int i = 0; i < uids.length; i += 30) {
+      final chunk = uids.sublist(i, (i + 30).clamp(0, uids.length));
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('User')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+        for (final doc in snap.docs) {
+          final custId = doc.data()['customer_id']?.toString() ?? '';
+          if (custId.isNotEmpty) uidToCustId[doc.id] = custId;
+        }
+      } catch (_) {}
+    }
+
+    // Map orderId → customer_id
+    for (final entry in orderIdToUid.entries) {
+      final custId = uidToCustId[entry.value];
+      if (custId != null && custId.isNotEmpty) {
+        resolvedCustId[entry.key] = custId;
+      }
+    }
+  }
+
   final groups = <_GroupedRecord>[];
 
   for (final orderId in byOrder.keys) {
     final records = byOrder[orderId]!;
     final refs    = refsByOrder[orderId]!;
 
-    // Sum all payments for this order; use the latest record's payment_type as-is
     double totalPaid   = 0;
     double orderTotal  = 0;
     String custName    = '—';
@@ -177,19 +241,18 @@ List<_GroupedRecord> _groupRecords(List<QueryDocumentSnapshot> docs) {
       final ts = r['sale_date'] as Timestamp?;
       if (ts != null && (latestTs == null || ts.compareTo(latestTs) > 0)) {
         latestTs = ts;
-        // Use the payment_type of the latest record directly —
-        // each payment is written with the correct type already:
-        // 'downpayment' → first partial payment
-        // 'balance'     → customer paid the remaining balance
-        // 'full'        → entire order paid in a single payment
         final t = r['payment_type']?.toString() ?? '';
-        // Remap legacy 'cash' records (stored before type cleanup) to 'full'
         if (t == 'cash') {
           derivedType = 'full';
         } else if (t.isNotEmpty) {
           derivedType = t;
         }
       }
+    }
+
+    // Fall back to resolved customer_id from Orders if still empty
+    if (custId.isEmpty && resolvedCustId.containsKey(orderId)) {
+      custId = resolvedCustId[orderId]!;
     }
 
     groups.add(_GroupedRecord(
@@ -232,6 +295,8 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
   String _search     = '';
 
   QuerySnapshot? _snapshot;
+  List<_GroupedRecord> _allGroups = [];
+  bool _groupsLoading = false;
   StreamSubscription<QuerySnapshot>? _sub;
   final _searchCtrl = TextEditingController();
 
@@ -242,10 +307,12 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
         .collection('Sales_Records')
         .orderBy('sale_date', descending: true)
         .snapshots()
-        .listen((snap) {
-      if (mounted) setState(() => _snapshot = snap);
+        .listen((snap) async {
+      if (!mounted) return;
+      setState(() { _snapshot = snap; _groupsLoading = true; });
+      final groups = await _groupRecordsAsync(snap.docs);
+      if (mounted) setState(() { _allGroups = groups; _groupsLoading = false; });
     });
-
   }
 
   @override
@@ -311,14 +378,12 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
 
   @override
   Widget build(BuildContext context) {
-    if (_snapshot == null) {
+    if (_snapshot == null || _groupsLoading) {
       return Center(child: CircularProgressIndicator(color: _T.textPrimary.withValues(alpha: 0.4)));
     }
 
-    final allDocs = _snapshot!.docs;
-
     // Group all raw docs by order_id first
-    final allGroups = _groupRecords(allDocs);
+    final allGroups = _allGroups;
 
     // Period filter — use the group's latest payment date
     var filtered = allGroups.where((g) {
@@ -334,12 +399,19 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
           .toList();
     }
 
-    // Search
+    // Search — supports full customer ID (e.g. CUS-123), name, order ID,
+    // or just the numeric/suffix part of the customer ID (e.g. "123").
     if (_search.isNotEmpty) {
       filtered = filtered.where((g) {
+        final custIdLower = g.custId.toLowerCase();
+        // Also match the part after the last '-' so typing "123" finds "CUS-123"
+        final custIdSuffix = custIdLower.contains('-')
+            ? custIdLower.split('-').last
+            : custIdLower;
         return g.orderId.toLowerCase().contains(_search) ||
             g.custName.toLowerCase().contains(_search) ||
-            g.custId.toLowerCase().contains(_search);
+            custIdLower.contains(_search) ||
+            custIdSuffix.contains(_search);
       }).toList();
     }
 

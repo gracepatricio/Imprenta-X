@@ -19,7 +19,7 @@ dependencies:
   mobile_scanner: ^6.0.0 # Added Dependency
   qr_flutter: ^4.1.0 # Added Dependency
   image_picker: ^1.1.2 # Added Dependency
-  file_picker: ^8.0.0 #Added Dependency
+  file_picker: ^8.1.0 #Added Dependency
   image: ^4.2.0 # Added Dependency
   url_launcher: ^6.3.0 #Added Dependency
   intl: ^0.20.1 # Added Dependency
@@ -35,6 +35,18 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.0
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/imprentalogo.jpg"
+  web:
+    generate: true
+    image_path: "assets/images/imprentalogo.jpg"
+  windows:
+    generate: true
+    image_path: "assets/images/imprentalogo.jpg"
 
 flutter:
   uses-material-design: true
