@@ -23,6 +23,13 @@ void main() async {
   if (kIsWeb) {
     await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
   }
+  // Pre-resolve auth state BEFORE running the app.
+  // On web page refresh, Firebase reads sessionStorage asynchronously — without
+  // this await the very first authStateChanges emission is null, which causes
+  // RoleGuard to redirect to login even for a logged-in user.
+  await FirebaseAuth.instance.authStateChanges()
+      .first
+      .timeout(const Duration(seconds: 5), onTimeout: () => null);
   await NotificationService.initialize();
   // Initialize SharedPreferences cache only — do NOT load any cart yet.
   // The cart is loaded per-user inside AuthService.login() after the user

@@ -1,14 +1,23 @@
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../services/file_utils.dart' as file_utils;
 import 'app_theme.dart';
 
 class InvoiceScreen extends StatefulWidget {
   final String invoiceId;
-  const InvoiceScreen({super.key, required this.invoiceId});
+  /// When true (opened right after payment), the close button navigates back
+  /// to the customer homepage Account tab so the user sees their pending order.
+  final bool fromPayment;
+  const InvoiceScreen({
+    super.key,
+    required this.invoiceId,
+    this.fromPayment = false,
+  });
 
   @override
   State<InvoiceScreen> createState() => _InvoiceScreenState();
@@ -41,7 +50,14 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   Future<void> _downloadPdf() async {
     if (_inv == null) return;
     final bytes = await _buildPdf(_inv!);
-    await Printing.sharePdf(bytes: bytes, filename: '${widget.invoiceId}.pdf');
+    if (kIsWeb) {
+      // Web: create a blob URL and trigger browser download directly.
+      // Printing.sharePdf on web only opens a print dialog, not a download.
+      await file_utils.downloadBytes(bytes, 'application/pdf', '${widget.invoiceId}.pdf');
+    } else {
+      // Mobile: open share/print sheet so user can save or share the PDF.
+      await Printing.sharePdf(bytes: bytes, filename: '${widget.invoiceId}.pdf');
+    }
   }
 
   // ── PDF builder ──────────────────────────────────────────────────────────────
@@ -319,14 +335,25 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1a1a2e),
         iconTheme: const IconThemeData(color: Colors.white),
+        // When opened from payment: replace default back arrow with an X that
+        // pops back to the homepage (which is now on the Account/Orders tab).
+        leading: widget.fromPayment
+            ? IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                tooltip: 'View My Orders',
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : null,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(widget.invoiceId,
                 style: const TextStyle(
                     color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-            const Text('Official Invoice',
-                style: TextStyle(color: Colors.white38, fontSize: 11)),
+            Text(
+              widget.fromPayment ? 'Payment Confirmed ✓' : 'Official Invoice',
+              style: const TextStyle(color: Colors.white38, fontSize: 11),
+            ),
           ],
         ),
         actions: [

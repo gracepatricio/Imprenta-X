@@ -27,6 +27,13 @@ class _CustomerHomepageState extends State<CustomerHomepage> {
   void initState() {
     super.initState();
     _listenForDeletion();
+    // On web page reload (e.g. after returning from PayMongo), the session is
+    // restored without going through login(), so CartManager.loadForUser is
+    // never called. Reload here to ensure the cart is always available.
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      CartManager.loadForUser(user.uid);
+    }
   }
 
   /// Signs the user out and returns to login the moment an admin

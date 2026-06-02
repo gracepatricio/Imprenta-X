@@ -1,6 +1,20 @@
+import 'dart:typed_data';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Opens [url] in the platform's external application (browser, viewer, etc.).
+// Mobile stubs — same-tab navigation and localStorage are web-only.
+void navigateCurrentPage(String url) {}
+String getPaymentReturnStatus() => '';
+void clearPaymentReturnParam() {}
+void savePendingPayment(String json) {}
+String? loadPendingPayment() => null;
+void clearPendingPayment() {}
+// On mobile the PDF is shared via Printing.sharePdf — no-op here.
+Future<void> downloadBytes(Uint8List bytes, String mimeType, String filename) async {}
+
+void openUrlSync(String url) {
+  launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+}
+
 Future<void> openFileInNewTab(String url) async {
   final uri = Uri.parse(url);
   if (await canLaunchUrl(uri)) {
@@ -8,7 +22,6 @@ Future<void> openFileInNewTab(String url) async {
   }
 }
 
-/// On non-web platforms, downloading and viewing are the same — open externally.
 Future<void> downloadFile(String url, String filename) async {
   await openFileInNewTab(url);
 }

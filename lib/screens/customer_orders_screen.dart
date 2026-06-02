@@ -279,76 +279,46 @@ class _OrderCardState extends State<_OrderCard> {
 
     setState(() => _payingNow = true);
     try {
-      // For balance payments, reuse existing unpaid link if available
-      String? reuseUrl;
-      String? reuseLinkId;
-      double? reuseLinkAmount;
+      // Always create a fresh link — never reuse stored URLs.
+      // Stored URLs can belong to a different API environment (test vs live)
+      // and show "Invalid Request" even when the link status is 'unpaid'.
+      final link = await PayMongoService.createLink(
+        amount:      chosen,
+        description: isInitial
+            ? 'Downpayment $orderId (Imprenta X)'
+            : 'Balance Payment $orderId (Imprenta X)',
+      );
+
+      await FirebaseFirestore.instance.collection('PayMongoLinks').doc(link.id).set({
+        'order_id':        orderId,
+        'purpose':         isInitial ? 'downpayment' : 'balance',
+        'expected_amount': chosen,
+        'processed':       false,
+        'created_at':      FieldValue.serverTimestamp(),
+      });
 
       if (!isInitial) {
-        final existingUrl    = widget.order['balance_checkout_url'] as String?;
-        final existingLinkId = widget.order['balance_link_id']      as String?;
-        final existingAmt    = (widget.order['balance_link_amount'] as num?)?.toDouble();
-
-        if (existingUrl != null && existingLinkId != null) {
-          try {
-            final status = await PayMongoService.getLinkStatus(existingLinkId);
-            if (status == 'unpaid') {
-              reuseUrl       = existingUrl;
-              reuseLinkId    = existingLinkId;
-              reuseLinkAmount = existingAmt ?? chosen;
-            }
-          } catch (_) {}
-        }
-      }
-
-      final checkoutUrl;
-      final linkId;
-      final payAmt;
-
-      if (reuseUrl != null) {
-        checkoutUrl = reuseUrl;
-        linkId      = reuseLinkId!;
-        payAmt      = reuseUrl == null ? chosen : (reuseLinkAmount ?? chosen);
-      } else {
-        final link = await PayMongoService.createLink(
-          amount:      chosen,
-          description: isInitial
-              ? 'Downpayment $orderId (Imprenta X)'
-              : 'Balance Payment $orderId (Imprenta X)',
-        );
-
-        // Log link → order mapping so webhook can find the order
-        await FirebaseFirestore.instance.collection('PayMongoLinks').doc(link.id).set({
-          'order_id':        orderId,
-          'purpose':         isInitial ? 'downpayment' : 'balance',
-          'expected_amount': chosen,
-          'processed':       false,
-          'created_at':      FieldValue.serverTimestamp(),
+        await FirebaseFirestore.instance.collection('Orders').doc(orderId).update({
+          'balance_link_id':      link.id,
+          'balance_checkout_url': link.checkoutUrl,
+          'balance_link_amount':  chosen,
         });
-
-        // For balance payments: persist link on order so the QR is always accessible
-        if (!isInitial) {
-          await FirebaseFirestore.instance.collection('Orders').doc(orderId).update({
-            'balance_link_id':      link.id,
-            'balance_checkout_url': link.checkoutUrl,
-            'balance_link_amount':  chosen,
-          });
-        }
-
-        checkoutUrl = link.checkoutUrl;
-        linkId      = link.id;
-        payAmt      = chosen;
       }
+
+      final checkoutUrl = link.checkoutUrl;
+      final linkId      = link.id;
+      final payAmt      = chosen;
 
       if (!mounted) return;
 
       final paid = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => PaymentWebViewScreen(
-            checkoutUrl: checkoutUrl,
-            linkId:      linkId,
-            orderId:     orderId,
-            payAmount:   payAmt,
+            checkoutUrl:      checkoutUrl,
+            linkId:           linkId,
+            orderId:          orderId,
+            payAmount:        payAmt,
+            isBalancePayment: !isInitial,
           ),
         ),
       );
@@ -676,10 +646,19 @@ class _OrderCardState extends State<_OrderCard> {
       'sale_date':            FieldValue.serverTimestamp(),
     });
 
-    if (mounted) {
+    if (!mounted) return;
+
+    // invoiceId was already retrieved above for the batch update — reuse it.
+    if (invoiceId != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => InvoiceScreen(invoiceId: invoiceId, fromPayment: true),
+        ),
+      );
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(isFullyPaid
-            ? '₱${paidAmount.toStringAsFixed(2)} paid — order is now fully settled!'
+            ? '₱${paidAmount.toStringAsFixed(2)} paid — order fully settled!'
             : '₱${paidAmount.toStringAsFixed(2)} paid. Remaining: ₱${newRemain.toStringAsFixed(2)}'),
         backgroundColor: isFullyPaid ? Colors.green.shade700 : Colors.blue.shade700,
         duration: const Duration(seconds: 4),
@@ -1090,7 +1069,8 @@ class _PaymentQrSection extends StatefulWidget {
 class _PaymentQrSectionState extends State<_PaymentQrSection> {
   String? _localUrl;
   bool    _generating = false;
-  bool    _stale      = false; // true while a stale link is being replaced
+  bool    _stale      = false;
+  bool    _validating = true; // hide any URL until we've verified the stored link
 
   @override
   void initState() {
@@ -1104,14 +1084,25 @@ class _PaymentQrSectionState extends State<_PaymentQrSection> {
     final linkId = isInitial
         ? widget.order['paymongo_link_id'] as String?
         : widget.order['balance_link_id']  as String?;
-    if (linkId == null || !mounted) return;
+
+    if (linkId == null || !mounted) {
+      // No stored link — generate a fresh one (for balance) or just unhide (initial has no QR).
+      if (mounted) setState(() => _validating = false);
+      return;
+    }
     try {
       final status = await PayMongoService.getLinkStatus(linkId);
-      // If already paid, leave as-is (don't regenerate a paid link).
-      if (status == 'paid') return;
+      if (!mounted) return;
+      if (status == 'paid') {
+        // QR was paid directly (scanned without going through Pay button).
+        // Update order balance in Firestore and regenerate QR if balance remains.
+        if (!isInitial) await _applyQrPayment(linkId);
+        setState(() => _validating = false);
+        return;
+      }
+      setState(() => _validating = false);
     } catch (_) {
-      // getLinkStatus threw → link is expired or belongs to a different API key.
-      // Clear the stale fields and silently regenerate.
+      // getLinkStatus threw → link expired or belongs to a different API key.
       if (!mounted) return;
       setState(() => _stale = true);
       final orderId = widget.order['order_id']?.toString() ?? widget.docId;
@@ -1132,7 +1123,8 @@ class _PaymentQrSectionState extends State<_PaymentQrSection> {
   }
 
   String? get _checkoutUrl {
-    if (_stale) return _localUrl; // hide stale URL while regenerating
+    if (_validating) return null; // never show until validation completes
+    if (_stale) return _localUrl;
     return _localUrl ??
         (widget.status == 'awaiting_payment'
             ? widget.order['paymongo_checkout_url'] as String?
@@ -1141,6 +1133,44 @@ class _PaymentQrSectionState extends State<_PaymentQrSection> {
 
   double? get _linkAmount =>
       (widget.order['balance_link_amount'] as num?)?.toDouble();
+
+  /// Called when a balance QR was paid directly (not through Pay button).
+  /// Updates Firestore and clears the used link so a new QR can be generated.
+  Future<void> _applyQrPayment(String paidLinkId) async {
+    final orderId    = widget.order['order_id']?.toString() ?? widget.docId;
+    final paid       = (widget.order['balance_link_amount'] as num?)?.toDouble() ?? 0;
+    if (paid <= 0) return;
+    final oldPaid    = (widget.order['amount_paid']       as num?)?.toDouble() ?? 0;
+    final newPaid    = oldPaid + paid;
+    final newRemain  = ((widget.order['remaining_balance'] as num?)?.toDouble() ?? 0) - paid;
+    final fullyPaid  = newRemain < 0.01;
+
+    await FirebaseFirestore.instance.collection('Orders').doc(orderId).update({
+      'amount_paid':           newPaid,
+      'remaining_balance':     newRemain.clamp(0.0, double.infinity),
+      'payment_status':        fullyPaid ? 'paid' : 'partial',
+      if (fullyPaid) 'fully_paid_at': FieldValue.serverTimestamp(),
+      'balance_link_id':      FieldValue.delete(),
+      'balance_checkout_url': FieldValue.delete(),
+      'balance_link_amount':  FieldValue.delete(),
+    }).catchError((_) {});
+
+    await FirebaseFirestore.instance.collection('Payments').doc().set({
+      'order_id':             orderId,
+      'amount':               paid,
+      'payment_type':         'balance',
+      'payment_method':       'online',
+      'transaction_reference': paidLinkId,
+      'payment_date':         FieldValue.serverTimestamp(),
+      'status':               'paid',
+    }).catchError((_) {});
+
+    // If balance remains, trigger auto-generation of new QR
+    if (!fullyPaid && mounted) {
+      setState(() => _stale = true);
+      await _generate();
+    }
+  }
 
   Future<void> _generate() async {
     setState(() => _generating = true);
@@ -1184,9 +1214,10 @@ class _PaymentQrSectionState extends State<_PaymentQrSection> {
             .update(orderUpdates),
       ]);
 
-      if (mounted) setState(() => _localUrl = link.checkoutUrl);
+      if (mounted) setState(() { _localUrl = link.checkoutUrl; _validating = false; });
     } catch (e) {
       if (mounted) {
+        setState(() => _validating = false);
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('QR generation failed: $e'),
                 backgroundColor: Colors.red.shade700));
@@ -1200,6 +1231,14 @@ class _PaymentQrSectionState extends State<_PaymentQrSection> {
   Widget build(BuildContext context) {
     final url    = _checkoutUrl;
     final amount = _linkAmount ?? widget.remaining;
+
+    // Still validating stored link — show spinner so no expired URL is visible
+    if (_validating || _generating && url == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: CircularProgressIndicator(color: AppTheme.gold)),
+      );
+    }
 
     // No URL yet and not awaiting_payment → show Generate button
     if (url == null && widget.status != 'awaiting_payment') {

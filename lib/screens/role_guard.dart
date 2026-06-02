@@ -28,7 +28,18 @@ class _RoleGuardState extends State<RoleGuard> {
   }
 
   Future<void> _check() async {
-    final user = FirebaseAuth.instance.currentUser;
+    // After main() pre-loads auth state, currentUser is already set.
+    // The firstWhere skips any spurious null emission and returns the real user.
+    User? user;
+    try {
+      user = await FirebaseAuth.instance
+          .authStateChanges()
+          .firstWhere((u) => u != null)
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      user = null;
+    }
+
     if (user == null) {
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);

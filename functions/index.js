@@ -45,13 +45,22 @@ exports.pmCreateLink = onRequest(
       return res.status(400).json({ error: 'amount and description are required' });
     }
 
+    const centavos = Math.round(Number(amount) * 100);
+    console.log('[pmCreateLink] amount_pesos=' + amount + ' centavos=' + centavos + ' desc=' + description);
+
+    // PayMongo minimum is ₱1.00 (100 centavos) in live mode.
+    const isLive = PM_SK && PM_SK.startsWith('sk_live');
+    if (isLive && centavos < 100) {
+      return res.status(400).json({ error: 'Minimum payment amount is ₱1.00 (PayMongo requirement).' });
+    }
+
     const r = await fetch(`${PM_BASE}/links`, {
       method:  'POST',
       headers: { Authorization: pmAuth(), 'Content-Type': 'application/json' },
       body: JSON.stringify({
         data: {
           attributes: {
-            amount:      Math.round(Number(amount) * 100),
+            amount:      centavos,
             description: String(description),
             remarks:     'Imprenta X',
           },
@@ -61,12 +70,14 @@ exports.pmCreateLink = onRequest(
 
     const json = await r.json();
     if (!r.ok) {
-      console.error('pmCreateLink error:', JSON.stringify(json));
+      console.error('[pmCreateLink] PayMongo error:', JSON.stringify(json));
       return res.status(r.status).json({ error: json });
     }
 
     const d = json.data;
     const a = d.attributes;
+    console.log('[pmCreateLink] OK id=' + d.id + ' url=' + a.checkout_url + ' livemode=' + a.livemode);
+
     return res.status(200).json({
       id:              d.id,
       checkoutUrl:     a.checkout_url,

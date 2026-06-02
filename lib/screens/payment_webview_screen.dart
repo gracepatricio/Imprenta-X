@@ -18,6 +18,8 @@ class PaymentWebViewScreen extends StatefulWidget {
   final String linkId;
   final String orderId;
   final double payAmount;
+  /// True when paying a remaining balance (not an initial cart checkout).
+  final bool isBalancePayment;
 
   const PaymentWebViewScreen({
     super.key,
@@ -25,6 +27,7 @@ class PaymentWebViewScreen extends StatefulWidget {
     required this.linkId,
     required this.orderId,
     required this.payAmount,
+    this.isBalancePayment = false,
   });
 
   @override
@@ -40,9 +43,10 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
   @override
   void initState() {
     super.initState();
-    _openBrowser();
-    // Mobile: auto-poll so the screen closes automatically once payment lands.
-    // Web users tend to switch tabs, so manual check is less disruptive there.
+    // Do NOT auto-open here — initState runs in an async context so the browser
+    // drops the user-gesture context and Firefox bounce-tracker blocks pm.link.
+    // The user taps the "Open Payment Page" button which calls _openPaymentUrl()
+    // synchronously, preserving the gesture context end-to-end.
     if (!kIsWeb) _startPolling();
   }
 
@@ -52,10 +56,11 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
     super.dispose();
   }
 
-  Future<void> _openBrowser() async {
-    // file_utils uses dart:html window.open on web and url_launcher on mobile,
-    // both of which reliably open the URL outside the app.
-    await file_utils.openFileInNewTab(widget.checkoutUrl);
+  /// Called directly from button onPressed — NO await before this call.
+  /// Keeps the browser's user-gesture context alive so pm.link is treated
+  /// as user-initiated (critical for Firefox bounce-tracker protection).
+  void _openPaymentUrl() {
+    file_utils.openUrlSync(widget.checkoutUrl);
     if (mounted) setState(() => _opened = true);
   }
 
@@ -111,9 +116,11 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
         title: const Text('Leave payment?',
             style: TextStyle(color: Colors.white, fontSize: 16,
                 fontWeight: FontWeight.bold)),
-        content: const Text(
-          'Your order is saved. Complete payment anytime from My Orders.',
-          style: TextStyle(color: Colors.white70, fontSize: 13),
+        content: Text(
+          widget.isBalancePayment
+              ? 'You can pay the remaining balance anytime from My Orders.'
+              : 'Payment cancelled — your cart items will remain unchanged.',
+          style: const TextStyle(color: Colors.white70, fontSize: 13),
         ),
         actions: [
           TextButton(
@@ -199,7 +206,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
                         number: '1',
                         text: _opened
                             ? 'PayMongo checkout opened in your browser'
-                            : 'Opening PayMongo checkout…',
+                            : 'Tap "Open Payment Page" below to start',
                         done: _opened,
                       ),
                       const SizedBox(height: 12),
@@ -212,8 +219,8 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
                       _Step(
                         number: '3',
                         text: kIsWeb
-                            ? 'Come back here and tap "I\'ve Paid"'
-                            : 'Return to this screen — it will update automatically',
+                            ? 'After paying, press the browser Back button to return — your order will be confirmed automatically'
+                            : 'After paying, press Back to return — your order will be confirmed automatically',
                       ),
                     ],
                   ),
@@ -262,11 +269,12 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Reopen / open browser button
+                // Open / Reopen button — calls _openPaymentUrl() synchronously
+                // so the browser preserves the user-gesture context for pm.link
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: _openBrowser,
+                    onPressed: _openPaymentUrl,
                     icon: const Icon(Icons.open_in_new_rounded,
                         color: Colors.white54, size: 16),
                     label: Text(

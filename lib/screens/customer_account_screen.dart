@@ -1183,78 +1183,61 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
 
     setState(() => _payingNow = true);
     try {
-      // Check for reusable balance link
-      String? useUrl, useLinkId;
-      if (_status != 'awaiting_payment') {
-        final existUrl = widget.data['balance_checkout_url'] as String?;
-        final existLinkId = widget.data['balance_link_id'] as String?;
-        if (existUrl != null && existLinkId != null) {
-          try {
-            final s = await PayMongoService.getLinkStatus(existLinkId);
-            if (s == 'unpaid') {
-              useUrl = existUrl;
-              useLinkId = existLinkId;
-            }
-          } catch (_) {}
-        }
-      }
-
-      final String checkoutUrl, linkId;
-      if (useUrl != null) {
-        checkoutUrl = useUrl;
-        linkId = useLinkId!;
-      } else {
-        final isInitial = _status == 'awaiting_payment';
-        final link = await PayMongoService.createLink(
-          amount: chosen,
-          description: isInitial
-              ? 'Downpayment $orderId (Imprenta X)'
-              : 'Balance Payment $orderId (Imprenta X)',
-        );
+      // Always create a fresh link — never reuse stored URLs.
+      // Stored URLs may be from a different API environment (test vs live)
+      // and will show "Invalid Request" even when link status is 'unpaid'.
+      final isInitial = _status == 'awaiting_payment';
+      final link = await PayMongoService.createLink(
+        amount: chosen,
+        description: isInitial
+            ? 'Downpayment $orderId (Imprenta X)'
+            : 'Balance Payment $orderId (Imprenta X)',
+      );
+      await FirebaseFirestore.instance
+          .collection('PayMongoLinks')
+          .doc(link.id)
+          .set({
+            'order_id': orderId,
+            'purpose': isInitial ? 'downpayment' : 'balance',
+            'expected_amount': chosen,
+            'processed': false,
+            'created_at': FieldValue.serverTimestamp(),
+          });
+      if (!isInitial) {
         await FirebaseFirestore.instance
-            .collection('PayMongoLinks')
-            .doc(link.id)
-            .set({
-              'order_id': orderId,
-              'purpose': isInitial ? 'downpayment' : 'balance',
-              'expected_amount': chosen,
-              'processed': false,
-              'created_at': FieldValue.serverTimestamp(),
+            .collection('Orders')
+            .doc(orderId)
+            .update({
+              'balance_link_id': link.id,
+              'balance_checkout_url': link.checkoutUrl,
+              'balance_link_amount': chosen,
             });
-        if (!isInitial) {
-          await FirebaseFirestore.instance
-              .collection('Orders')
-              .doc(orderId)
-              .update({
-                'balance_link_id': link.id,
-                'balance_checkout_url': link.checkoutUrl,
-                'balance_link_amount': chosen,
-              });
-        }
-        checkoutUrl = link.checkoutUrl;
-        linkId = link.id;
       }
+      final String checkoutUrl = link.checkoutUrl;
+      final String linkId = link.id;
 
       if (!mounted) return;
       final paid = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => PaymentWebViewScreen(
-            checkoutUrl: checkoutUrl,
-            linkId: linkId,
-            orderId: orderId,
-            payAmount: chosen,
+            checkoutUrl:      checkoutUrl,
+            linkId:           linkId,
+            orderId:          orderId,
+            payAmount:        chosen,
+            isBalancePayment: !isInitial,
           ),
         ),
       );
 
       if (paid == true && mounted) {
-        Navigator.pop(context); // close sheet
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Payment confirmed for $orderId!'),
-            backgroundColor: Colors.green.shade700,
-          ),
-        );
+        Navigator.pop(context); // close the bottom sheet
+        // Navigate to invoice to show the updated payment record
+        final invoiceId = widget.data['invoice_id']?.toString();
+        if (invoiceId != null) {
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => InvoiceScreen(invoiceId: invoiceId, fromPayment: true),
+          ));
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1739,7 +1722,8 @@ class _AccountQrSection extends StatefulWidget {
 class _AccountQrSectionState extends State<_AccountQrSection> {
   String? _localUrl;
   bool _generating = false;
-  bool _stale = false;
+  bool _stale      = false;
+  bool _validating = true;
 
   @override
   void initState() {
@@ -1755,12 +1739,20 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
     final linkId = isInitial
         ? widget.order['paymongo_link_id'] as String?
         : widget.order['balance_link_id']  as String?;
-    if (linkId == null || !mounted) return;
+    if (linkId == null || !mounted) {
+      if (mounted) setState(() => _validating = false);
+      return;
+    }
     try {
       final status = await PayMongoService.getLinkStatus(linkId);
-      if (status == 'paid') return; // already paid — leave as-is
+      if (!mounted) return;
+      if (status == 'paid') {
+        if (!isInitial) await _applyQrPayment(linkId);
+        setState(() => _validating = false);
+        return;
+      }
+      setState(() => _validating = false);
     } catch (_) {
-      // getLinkStatus threw → link is expired or belongs to a different API key.
       if (!mounted) return;
       setState(() => _stale = true);
       final orderId = widget.order['order_id']?.toString() ?? widget.docId;
@@ -1789,11 +1781,47 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
   }
 
   String? get _url {
+    if (_validating) return null; // never expose old URL before validation
     if (_stale) return _localUrl;
     return _localUrl ??
         (widget.status == 'awaiting_payment'
             ? widget.order['paymongo_checkout_url'] as String?
             : widget.order['balance_checkout_url'] as String?);
+  }
+
+  Future<void> _applyQrPayment(String paidLinkId) async {
+    final orderId   = widget.order['order_id']?.toString() ?? widget.docId;
+    final paid      = (widget.order['balance_link_amount'] as num?)?.toDouble() ?? 0;
+    if (paid <= 0) return;
+    final oldPaid   = (widget.order['amount_paid']       as num?)?.toDouble() ?? 0;
+    final newPaid   = oldPaid + paid;
+    final newRemain = ((widget.order['remaining_balance'] as num?)?.toDouble() ?? 0) - paid;
+    final fullyPaid = newRemain < 0.01;
+
+    await FirebaseFirestore.instance.collection('Orders').doc(orderId).update({
+      'amount_paid':          newPaid,
+      'remaining_balance':    newRemain.clamp(0.0, double.infinity),
+      'payment_status':       fullyPaid ? 'paid' : 'partial',
+      if (fullyPaid) 'fully_paid_at': FieldValue.serverTimestamp(),
+      'balance_link_id':      FieldValue.delete(),
+      'balance_checkout_url': FieldValue.delete(),
+      'balance_link_amount':  FieldValue.delete(),
+    }).catchError((_) {});
+
+    await FirebaseFirestore.instance.collection('Payments').doc().set({
+      'order_id':             orderId,
+      'amount':               paid,
+      'payment_type':         'balance',
+      'payment_method':       'online',
+      'transaction_reference': paidLinkId,
+      'payment_date':         FieldValue.serverTimestamp(),
+      'status':               'paid',
+    }).catchError((_) {});
+
+    if (!fullyPaid && mounted) {
+      setState(() => _stale = true);
+      await _generate();
+    }
   }
 
   Future<void> _generate() async {
@@ -1837,9 +1865,10 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
             .doc(orderId)
             .update(orderUpdates),
       ]);
-      if (mounted) setState(() => _localUrl = link.checkoutUrl);
+      if (mounted) setState(() { _localUrl = link.checkoutUrl; _validating = false; });
     } catch (e) {
       if (mounted) {
+        setState(() => _validating = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed: $e'),
@@ -1858,6 +1887,16 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
     final amount =
         (widget.order['balance_link_amount'] as num?)?.toDouble() ??
         widget.remaining;
+
+    // Show spinner while validating or regenerating — never show an expired URL
+    if (_validating || (_generating && url == null)) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: CircularProgressIndicator(color: AppTheme.gold),
+        ),
+      );
+    }
 
     if (url == null && widget.status != 'awaiting_payment') {
       return Container(
