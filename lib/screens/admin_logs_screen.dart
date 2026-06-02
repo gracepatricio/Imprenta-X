@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
 import 'sales_widgets.dart';
+import 'sales_import_widget.dart';
 import 'invoice_screen.dart';
 
 // =============================================================================
@@ -76,9 +77,9 @@ class _G {
       );
 
   static InputDecoration field(
-    String hint, {
-    IconData? icon,
-  }) => InputDecoration(
+      String hint, {
+        IconData? icon,
+      }) => InputDecoration(
     hintText: hint,
     hintStyle: const TextStyle(color: textMuted, fontSize: 13),
     prefixIcon: icon != null ? Icon(icon, size: 16, color: textMuted) : null,
@@ -152,14 +153,14 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
     (_LogsTab.jobQueue, 'Job Queue', Icons.queue_outlined),
     (_LogsTab.salesRecord, 'Sales Record', Icons.receipt_long_outlined),
     (
-      _LogsTab.employeeActivity,
-      'Employee Activity',
-      Icons.people_outline_rounded,
+    _LogsTab.employeeActivity,
+    'Employee Activity',
+    Icons.people_outline_rounded,
     ),
     (
-      _LogsTab.customerFeedback,
-      'Customer Feedback',
-      Icons.rate_review_outlined,
+    _LogsTab.customerFeedback,
+    'Customer Feedback',
+    Icons.rate_review_outlined,
     ),
   ];
 
@@ -291,13 +292,13 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                             decoration: isActive
                                 ? _G.solidPill(_G.navyBlue, glow: true)
                                 : BoxDecoration(
-                                    color: _G.surfaceThin,
-                                    borderRadius: BorderRadius.circular(99),
-                                    border: Border.all(
-                                      color: _G.borderMid,
-                                      width: 0.9,
-                                    ),
-                                  ),
+                              color: _G.surfaceThin,
+                              borderRadius: BorderRadius.circular(99),
+                              border: Border.all(
+                                color: _G.borderMid,
+                                width: 0.9,
+                              ),
+                            ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -375,23 +376,23 @@ class _JobQueueTabState extends State<_JobQueueTab> {
 
   static const _statusTabs = [
     (
-      _QueueSubTab.pending,
-      'Pending',
-      Icons.hourglass_empty_rounded,
-      Color(0xFFD97706),
+    _QueueSubTab.pending,
+    'Pending',
+    Icons.hourglass_empty_rounded,
+    Color(0xFFD97706),
     ),
     (_QueueSubTab.active, 'Active', Icons.bolt_rounded, Color(0xFF2563EB)),
     (
-      _QueueSubTab.ready,
-      'Ready',
-      Icons.check_circle_outline,
-      Color(0xFF16A34A),
+    _QueueSubTab.ready,
+    'Ready',
+    Icons.check_circle_outline,
+    Color(0xFF16A34A),
     ),
     (
-      _QueueSubTab.cancelled,
-      'Cancelled',
-      Icons.cancel_outlined,
-      Color(0xFFDC2626),
+    _QueueSubTab.cancelled,
+    'Cancelled',
+    Icons.cancel_outlined,
+    Color(0xFFDC2626),
     ),
   ];
 
@@ -413,12 +414,12 @@ class _JobQueueTabState extends State<_JobQueueTab> {
                     items: _statusTabs
                         .map(
                           (t) => _PillSegmentItem(
-                            value: t.$1,
-                            label: t.$2,
-                            icon: t.$3,
-                            accent: t.$4,
-                          ),
-                        )
+                        value: t.$1,
+                        label: t.$2,
+                        icon: t.$3,
+                        accent: t.$4,
+                      ),
+                    )
                         .toList(),
                     onChanged: (v) => setState(() => _sub = v),
                   ),
@@ -461,8 +462,8 @@ class _JobQueueTabState extends State<_JobQueueTab> {
           Expanded(
             child: isHistory
                 ? _AdminOrderHistory(
-                    onBack: () => setState(() => _sub = _QueueSubTab.pending),
-                  )
+              onBack: () => setState(() => _sub = _QueueSubTab.pending),
+            )
                 : _buildQueueContent(),
           ),
         ],
@@ -545,20 +546,20 @@ class _PillSegmentControl<T> extends StatelessWidget {
                 ),
                 decoration: isActive
                     ? BoxDecoration(
-                        color: item.accent,
-                        borderRadius: BorderRadius.circular(99),
-                        boxShadow: [
-                          BoxShadow(
-                            color: item.accent.withValues(alpha: 0.30),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      )
+                  color: item.accent,
+                  borderRadius: BorderRadius.circular(99),
+                  boxShadow: [
+                    BoxShadow(
+                      color: item.accent.withValues(alpha: 0.30),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                )
                     : const BoxDecoration(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.all(Radius.circular(99)),
-                      ),
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.all(Radius.circular(99)),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -666,9 +667,9 @@ class _QueueStatusList extends StatelessWidget {
         final docs = [...(snapshot.data?.docs ?? [])]
           ..sort((a, b) {
             final ta =
-                (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
             final tb =
-                (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
@@ -738,14 +739,14 @@ class _QueueStatusList extends StatelessWidget {
                   final products =
                       (data['products'] as List?)
                           ?.cast<Map<String, dynamic>>() ??
-                      [];
+                          [];
                   final dateStr = _fmtDate(data['created_at']);
                   final statusColor = _statusColor(status);
                   final productSummary = products.isEmpty
                       ? null
                       : products
-                            .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
-                            .join(', ');
+                      .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
+                      .join(', ');
 
                   return _JobCard(
                     index: i + 1,
@@ -973,9 +974,9 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
       final docs = [...snap.docs]
         ..sort((a, b) {
           final ta =
-              (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           final tb =
-              (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           if (ta == null && tb == null) return 0;
           if (ta == null) return 1;
           if (tb == null) return -1;
@@ -1112,16 +1113,16 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                         ),
                         suffixIcon: _search.isNotEmpty
                             ? GestureDetector(
-                                onTap: () {
-                                  _searchCtrl.clear();
-                                  setState(() => _search = '');
-                                },
-                                child: const Icon(
-                                  Icons.clear,
-                                  size: 15,
-                                  color: _G.textMuted,
-                                ),
-                              )
+                          onTap: () {
+                            _searchCtrl.clear();
+                            setState(() => _search = '');
+                          },
+                          child: const Icon(
+                            Icons.clear,
+                            size: 15,
+                            color: _G.textMuted,
+                          ),
+                        )
                             : null,
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(
@@ -1149,10 +1150,10 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                     boxShadow: [
                       BoxShadow(
                         color:
-                            (_statusFilter == 'all'
-                                    ? _G.navyBlue
-                                    : _filterAccent(_statusFilter))
-                                .withValues(alpha: 0.30),
+                        (_statusFilter == 'all'
+                            ? _G.navyBlue
+                            : _filterAccent(_statusFilter))
+                            .withValues(alpha: 0.30),
                         blurRadius: 10,
                         offset: const Offset(0, 3),
                       ),
@@ -1208,14 +1209,14 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                       selectedItemBuilder: (_) => _statusOpts
                           .map(
                             (opt) => Text(
-                              opt.$2,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          )
+                          opt.$2,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
                           .toList(),
                     ),
                   ),
@@ -1333,11 +1334,11 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                             (data['amount_paid'] as num?)?.toDouble() ?? 0;
                         final remaining =
                             (data['remaining_balance'] as num?)?.toDouble() ??
-                            (total - paid);
+                                (total - paid);
                         final products =
                             (data['products'] as List?)
                                 ?.cast<Map<String, dynamic>>() ??
-                            [];
+                                [];
                         final dateStr = _fmtDate(data['created_at']);
                         final invoiceId = data['invoice_id']?.toString();
 
@@ -1689,31 +1690,37 @@ class _SalesRecordSubTabState extends State<_SalesRecordSubTab> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-          child: Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: _G.surfaceThin,
-              borderRadius: BorderRadius.circular(99),
-              border: Border.all(color: _G.borderMid, width: 0.9),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _SalesPillTab(
-                  label: 'Sales Record',
-                  icon: Icons.table_rows_outlined,
-                  isActive: _sub == _SalesSubTab.record,
-                  onTap: () => setState(() => _sub = _SalesSubTab.record),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: _G.surfaceThin,
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(color: _G.borderMid, width: 0.9),
                 ),
-                const SizedBox(width: 4),
-                _SalesPillTab(
-                  label: 'Sales Report',
-                  icon: Icons.bar_chart_rounded,
-                  isActive: _sub == _SalesSubTab.report,
-                  onTap: () => setState(() => _sub = _SalesSubTab.report),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _SalesPillTab(
+                      label: 'Sales Record',
+                      icon: Icons.table_rows_outlined,
+                      isActive: _sub == _SalesSubTab.record,
+                      onTap: () => setState(() => _sub = _SalesSubTab.record),
+                    ),
+                    const SizedBox(width: 4),
+                    _SalesPillTab(
+                      label: 'Sales Report',
+                      icon: Icons.bar_chart_rounded,
+                      isActive: _sub == _SalesSubTab.report,
+                      onTap: () => setState(() => _sub = _SalesSubTab.report),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const Spacer(),
+              if (_sub == _SalesSubTab.record) const SalesImportButton(),
+            ],
           ),
         ),
         const SizedBox(height: 8),
@@ -1751,9 +1758,9 @@ class _SalesPillTab extends StatelessWidget {
         decoration: isActive
             ? _G.solidPill(_G.navyBlue)
             : const BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.all(Radius.circular(99)),
-              ),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.all(Radius.circular(99)),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2206,7 +2213,7 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                   final mat =
                       data['material_name']?.toString().toLowerCase() ?? '';
                   return (_employeeFilter.isEmpty ||
-                          emp.contains(_employeeFilter)) &&
+                      emp.contains(_employeeFilter)) &&
                       (_materialFilter.isEmpty ||
                           mat.contains(_materialFilter));
                 }).toList();
@@ -2392,7 +2399,7 @@ class _CustomerFeedbackTab extends StatelessWidget {
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         customer,
@@ -2424,7 +2431,7 @@ class _CustomerFeedbackTab extends StatelessWidget {
                                   Row(
                                     children: List.generate(
                                       5,
-                                      (s) => Icon(
+                                          (s) => Icon(
                                         s < rating
                                             ? Icons.star_rounded
                                             : Icons.star_outline_rounded,
@@ -2738,7 +2745,7 @@ class _CustomerIdText extends StatelessWidget {
         final cid =
             (snap.data?.data() as Map<String, dynamic>?)?['customer_id']
                 ?.toString() ??
-            '';
+                '';
         if (cid.isEmpty) return const SizedBox.shrink();
         return _label(cid);
       },

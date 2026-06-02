@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,6 +8,130 @@ import 'employee_pos_screen.dart';
 import 'invoice_screen.dart';
 import 'design_file_viewer.dart';
 import '../services/inventory_service.dart';
+
+// =============================================================================
+// Design Tokens — Liquid Glass (matches Account screen)
+// =============================================================================
+class _G {
+  static const Color navyBlue = Color(0xFF0F1A2E);
+  static const Color surface = Color(0xF8FFFFFF);
+  static const Color surfaceMid = Color(0xF0FFFFFF);
+  static const Color surfaceThin = Color(0xA0FFFFFF);
+
+  static const Color borderMid = Color(0x70FFFFFF);
+  static const Color borderDim = Color(0x30FFFFFF);
+  static const Color borderSolid = Color(0xFFE5E7EB);
+
+  static const Color textPrimary = Color(0xFF0F172A);
+  static const Color textSecondary = Color(0xCC0F172A);
+  static const Color textMuted = Color(0x880F172A);
+
+  static const Color accentBlue = Color(0xFF3B82F6);
+  static const Color accentViolet = Color(0xFF8B5CF6);
+  static const Color accentEmerald = Color(0xFF10B981);
+  static const Color accentAmber = Color(0xFFF59E0B);
+  static const Color accentRose = Color(0xFFEF4444);
+  static const Color amber = Color(0xFFB45309);
+
+  static const BoxShadow elevatedShadow = BoxShadow(
+    color: Color(0x22000000),
+    blurRadius: 32,
+    spreadRadius: -4,
+    offset: Offset(0, 8),
+  );
+  static const BoxShadow rowShadow = BoxShadow(
+    color: Color(0x10000000),
+    blurRadius: 10,
+    offset: Offset(0, 3),
+  );
+
+  static BoxDecoration glass({
+    double radius = 16,
+    bool elevated = false,
+    Color? tintBorder,
+  }) => BoxDecoration(
+    color: surfaceMid,
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: tintBorder ?? borderMid, width: 0.9),
+    boxShadow: [elevated ? elevatedShadow : rowShadow],
+  );
+
+  static BoxDecoration pill({Color? tint}) => BoxDecoration(
+    color: tint != null ? tint.withValues(alpha: 0.15) : surfaceThin,
+    borderRadius: BorderRadius.circular(99),
+    border: Border.all(
+      color: tint != null ? tint.withValues(alpha: 0.50) : borderMid,
+      width: 0.9,
+    ),
+  );
+
+  static BoxDecoration solidPill(Color color, {bool glow = false}) =>
+      BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(99),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: glow ? 0.38 : 0.22),
+            blurRadius: glow ? 16 : 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      );
+
+  static InputDecoration field(
+      String hint, {
+        IconData? icon,
+      }) => InputDecoration(
+    hintText: hint,
+    hintStyle: const TextStyle(color: textMuted, fontSize: 13),
+    prefixIcon: icon != null ? Icon(icon, size: 16, color: textMuted) : null,
+    filled: true,
+    fillColor: surface,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: borderMid, width: 0.9),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: navyBlue, width: 1.5),
+    ),
+  );
+}
+
+// Reusable frosted-glass card wrapper
+class _BlurCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final double radius;
+  final bool elevated;
+  final Color? tintBorder;
+
+  const _BlurCard({
+    required this.child,
+    this.padding,
+    this.radius = 18,
+    this.elevated = false,
+    this.tintBorder,
+  });
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(radius),
+    child: BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+      child: Container(
+        decoration: _G.glass(
+          radius: radius,
+          elevated: elevated,
+          tintBorder: tintBorder,
+        ),
+        padding: padding,
+        child: child,
+      ),
+    ),
+  );
+}
 
 class EmployeeLogsScreen extends StatefulWidget {
   const EmployeeLogsScreen({super.key});
@@ -44,42 +169,113 @@ class _EmployeeLogsScreenState extends State<EmployeeLogsScreen> {
   }
 }
 
+enum _SalesSubTab { record, report }
+
 class _SalesSection extends StatefulWidget {
   const _SalesSection();
 
   @override
-  State<_SalesSection> createState() => _SalesSectionState();
+  State<_SalesSection> createState() => _SalesRecordSubTabState();
 }
 
-class _SalesSectionState extends State<_SalesSection> {
-  int _subTab = 0; // 0 = Sales Record, 1 = Sales Report
+class _SalesRecordSubTabState extends State<_SalesSection> {
+  _SalesSubTab _sub = _SalesSubTab.record;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: AppTheme.glassCard(opacity: 0.13, radius: 18),
+    return _BlurCard(
+      radius: 20,
+      elevated: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: _UnderlineTabBar(
-              tabs: const ['Sales Record', 'Sales Report'],
-              active: _subTab,
-              onTap: (i) => setState(() => _subTab = i),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: _G.surfaceThin,
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(color: _G.borderMid, width: 0.9),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _SalesPillTab(
+                    label: 'Sales Record',
+                    icon: Icons.table_rows_outlined,
+                    isActive: _sub == _SalesSubTab.record,
+                    onTap: () => setState(() => _sub = _SalesSubTab.record),
+                  ),
+                  const SizedBox(width: 4),
+                  _SalesPillTab(
+                    label: 'Sales Report',
+                    icon: Icons.bar_chart_rounded,
+                    isActive: _sub == _SalesSubTab.report,
+                    onTap: () => setState(() => _sub = _SalesSubTab.report),
+                  ),
+                ],
+              ),
             ),
           ),
-          Divider(
-            color: Colors.white.withValues(alpha: 0.1),
-            height: 1,
-            thickness: 1,
-          ),
+          const SizedBox(height: 8),
           Expanded(
-            child: _subTab == 0
-                ? const SalesRecordTable() // ← from sales_widgets.dart
-                : const SalesReportView(), // ← from sales_widgets.dart
+            child: _sub == _SalesSubTab.record
+                ? const SalesRecordTable()
+                : const SalesReportView(),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SalesPillTab extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _SalesPillTab({
+    required this.label,
+    required this.icon,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: isActive
+            ? _G.solidPill(_G.navyBlue)
+            : const BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.all(Radius.circular(99)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: isActive ? Colors.white : _G.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? Colors.white : _G.textSecondary,
+                fontSize: 12,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -129,6 +325,29 @@ class _PillTabBar extends StatelessWidget {
   }
 }
 
+
+// =============================================================================
+// Public entry-point — used by the top-level navbar tab in EmployeeHomepage
+// =============================================================================
+class EmployeeJobQueueScreen extends StatelessWidget {
+  final int initialTab;
+  const EmployeeJobQueueScreen({super.key, this.initialTab = 0});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      child: _JobQueueSection(initialTab: initialTab),
+    );
+  }
+}
+
+// =============================================================================
+// Job Queue Section — 5 sub-tabs: Pending, Active, Ready for Pickup,
+// Cancelled, Order History
+// =============================================================================
+
+// Underline-style tab bar used by the Job Queue section.
 class _UnderlineTabBar extends StatelessWidget {
   final List<String> tabs;
   final int active;
@@ -172,26 +391,6 @@ class _UnderlineTabBar extends StatelessWidget {
   }
 }
 
-// =============================================================================
-// Public entry-point — used by the top-level navbar tab in EmployeeHomepage
-// =============================================================================
-class EmployeeJobQueueScreen extends StatelessWidget {
-  final int initialTab;
-  const EmployeeJobQueueScreen({super.key, this.initialTab = 0});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-      child: _JobQueueSection(initialTab: initialTab),
-    );
-  }
-}
-
-// =============================================================================
-// Job Queue Section — 5 sub-tabs: Pending, Active, Ready for Pickup,
-// Cancelled, Order History
-// =============================================================================
 class _JobQueueSection extends StatefulWidget {
   final int initialTab;
   const _JobQueueSection({this.initialTab = 0});
@@ -3322,4 +3521,3 @@ class _QueueCard extends StatelessWidget {
     );
   }
 }
-

@@ -2244,6 +2244,9 @@ class _AdminChartPainter extends CustomPainter {
 }
 
 // SalesReportView
+// =============================================================================
+// Employee Sales Report — mirrors AdminSalesReportView
+// =============================================================================
 class SalesReportView extends StatefulWidget {
   const SalesReportView({super.key});
 
@@ -2261,294 +2264,283 @@ class _SalesReportViewState extends State<SalesReportView> {
           .collection('Sales_Records')
           .orderBy('sale_date', descending: false)
           .snapshots(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.white38),
+      builder: (context, salesSnap) {
+        if (salesSnap.connectionState == ConnectionState.waiting) {
+          return Center(
+            child: CircularProgressIndicator(
+              color: _T.textPrimary.withValues(alpha: 0.4),
+            ),
           );
         }
-        if (snap.hasError) {
+        if (salesSnap.hasError) {
           return Center(
             child: Text(
-              'Error: ${snap.error}',
-              style: const TextStyle(color: Colors.redAccent),
+              'Error: ${salesSnap.error}',
+              style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13),
             ),
           );
         }
 
-        final allDocs = snap.data?.docs ?? [];
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('Orders')
+              .where(
+            'status',
+            whereIn: ['pending', 'in_production', 'ready', 'completed'],
+          )
+              .snapshots(),
+          builder: (context, ordersSnap) {
+            double outstandingBalance = 0;
+            if (ordersSnap.hasData) {
+              for (final doc in ordersSnap.data!.docs) {
+                final d = doc.data() as Map<String, dynamic>;
+                final remaining = (d['remaining_balance'] as num?)?.toDouble();
+                if (remaining != null && remaining > 0.01) {
+                  outstandingBalance += remaining;
+                } else {
+                  final total = (d['total_price'] as num?)?.toDouble() ?? 0;
+                  final paid = (d['amount_paid'] as num?)?.toDouble() ?? 0;
+                  final diff = total - paid;
+                  if (diff > 0.01) outstandingBalance += diff;
+                }
+              }
+            }
 
-        // Period-filtered docs
-        final docs = allDocs.where((doc) {
-          final d = doc.data() as Map<String, dynamic>;
-          final ts = d['sale_date'] as Timestamp?;
-          if (ts == null) return _selectedRange == null;
-          return _isWithinDateRange(ts.toDate().toLocal(), _selectedRange);
-        }).toList();
+            final allDocs = salesSnap.data?.docs ?? [];
 
-        // Build buckets
-        final bucketMap = _buildBucketMap(allDocs, _selectedRange);
-        final monthBuckets = bucketMap.values.toList()
-          ..sort((a, b) => a.month.compareTo(b.month));
+            // Period-filtered docs
+            final docs = allDocs.where((doc) {
+              final d = doc.data() as Map<String, dynamic>;
+              final ts = d['sale_date'] as Timestamp?;
+              if (ts == null) return _selectedRange == null;
+              return _isWithinDateRange(ts.toDate().toLocal(), _selectedRange);
+            }).toList();
 
-        double totalRevenue = 0;
-        double downpaymentTotal = 0;
-        double balanceTotal = 0;
-        final orderIds = <String>{};
+            // Build buckets
+            final bucketMap = _buildBucketMap(allDocs, _selectedRange);
+            final monthBuckets = bucketMap.values.toList()
+              ..sort((a, b) => a.month.compareTo(b.month));
 
-        for (final doc in docs) {
-          final d = doc.data() as Map<String, dynamic>;
-          final amount = (d['sale_amount'] as num?)?.toDouble() ?? 0;
-          final type = d['payment_type']?.toString() ?? '';
-          final ordId = d['order_id']?.toString() ?? '';
+            double totalRevenue = 0;
+            double downpaymentTotal = 0;
+            double balanceTotal = 0;
+            final orderIds = <String>{};
 
-          totalRevenue += amount;
-          if (type == 'downpayment') downpaymentTotal += amount;
-          if (type == 'balance' || type == 'cash' || type == 'full')
-            balanceTotal += amount;
-          if (ordId.isNotEmpty) orderIds.add(ordId);
+            for (final doc in docs) {
+              final d = doc.data() as Map<String, dynamic>;
+              final amount = (d['sale_amount'] as num?)?.toDouble() ?? 0;
+              final type = d['payment_type']?.toString() ?? '';
+              final ordId = d['order_id']?.toString() ?? '';
 
-          final ts = d['sale_date'] as Timestamp?;
-          if (ts != null) {
-            final dt = ts.toDate();
-            final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
-            if (bucketMap.containsKey(key)) bucketMap[key]!.total += amount;
-          }
-        }
+              totalRevenue += amount;
+              if (type == 'downpayment') downpaymentTotal += amount;
+              if (type == 'balance' || type == 'cash' || type == 'full')
+                balanceTotal += amount;
+              if (ordId.isNotEmpty) orderIds.add(ordId);
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Sales Report',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
+              final ts = d['sale_date'] as Timestamp?;
+              if (ts != null) {
+                final dt = ts.toDate();
+                final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+                if (bucketMap.containsKey(key)) bucketMap[key]!.total += amount;
+              }
+            }
 
-              _DateFilterButton(
-                selectedRange: _selectedRange,
-                onChanged: (range) => setState(() => _selectedRange = range),
-                dark: true,
-              ),
-              const SizedBox(height: 16),
-
-              LayoutBuilder(
-                builder: (_, constraints) {
-                  final narrow = constraints.maxWidth < 400;
-                  return Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _ReportCard(
-                        'Total Revenue',
-                        '₱${totalRevenue.toStringAsFixed(2)}',
-                        AppTheme.gold,
-                        narrow,
+                      Text(
+                        'Sales Report',
+                        style: TextStyle(
+                          color: _T.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
+                        ),
                       ),
-                      _ReportCard(
-                        'Orders',
-                        '${orderIds.length}',
-                        Colors.blueAccent,
-                        narrow,
-                      ),
-                      _ReportCard(
-                        'Downpayments',
-                        '₱${downpaymentTotal.toStringAsFixed(2)}',
-                        Colors.blue,
-                        narrow,
-                      ),
-                      _ReportCard(
-                        'Balance Collected',
-                        '₱${balanceTotal.toStringAsFixed(2)}',
-                        Colors.green,
-                        narrow,
+                      SizedBox(height: 2),
+                      Text(
+                        'Revenue breakdown and trends',
+                        style: TextStyle(color: _T.textMuted, fontSize: 12),
                       ),
                     ],
-                  );
-                },
-              ),
-              const SizedBox(height: 24),
-
-              Row(
-                children: [
-                  const Icon(
-                    Icons.bar_chart_rounded,
-                    color: Colors.blueAccent,
-                    size: 14,
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    _selectedRange == null
-                        ? 'ALL TIME BY MONTH'
-                        : 'SELECTED RANGE REVENUE',
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1,
+                  const SizedBox(height: 12),
+
+                  _DateFilterButton(
+                    selectedRange: _selectedRange,
+                    onChanged: (range) =>
+                        setState(() => _selectedRange = range),
+                  ),
+                  const SizedBox(height: 20),
+
+                  LayoutBuilder(
+                    builder: (_, constraints) {
+                      final narrow = constraints.maxWidth < 460;
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _AdminReportCard(
+                            label: 'Total Revenue',
+                            value: '₱${totalRevenue.toStringAsFixed(2)}',
+                            color: _T.gold,
+                            bg: const Color(0xFFFFFBEB),
+                            border: const Color(0xFFFDE68A),
+                            narrow: narrow,
+                          ),
+                          _AdminReportCard(
+                            label: 'Orders',
+                            value: '${orderIds.length}',
+                            color: const Color(0xFF1D4ED8),
+                            bg: const Color(0xFFEFF6FF),
+                            border: const Color(0xFFBFDBFE),
+                            narrow: narrow,
+                          ),
+                          _AdminReportCard(
+                            label: 'Downpayments',
+                            value: '₱${downpaymentTotal.toStringAsFixed(2)}',
+                            color: const Color(0xFF6D28D9),
+                            bg: const Color(0xFFF5F3FF),
+                            border: const Color(0xFFDDD6FE),
+                            narrow: narrow,
+                          ),
+                          _AdminReportCard(
+                            label: 'Balance Collected',
+                            value: '₱${balanceTotal.toStringAsFixed(2)}',
+                            color: const Color(0xFF15803D),
+                            bg: const Color(0xFFF0FDF4),
+                            border: const Color(0xFFBBF7D0),
+                            narrow: narrow,
+                          ),
+                          _AdminReportCard(
+                            label: 'Balance to Collect',
+                            value: '₱${outstandingBalance.toStringAsFixed(2)}',
+                            color: const Color(0xFFDC2626),
+                            bg: const Color(0xFFFEF2F2),
+                            border: const Color(0xFFFECACA),
+                            narrow: narrow,
+                            tooltip:
+                            'Total remaining balance on non-cancelled orders',
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
+
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _T.divider, width: 1),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x08000000),
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFFBFDBFE),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.bar_chart_rounded,
+                                color: Color(0xFF1D4ED8),
+                                size: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Monthly Revenue',
+                                  style: TextStyle(
+                                    color: _T.textPrimary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Text(
+                                  _selectedRange == null
+                                      ? 'All time by month'
+                                      : 'Selected range by month',
+                                  style: const TextStyle(
+                                    color: _T.textMuted,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: 160,
+                          child: CustomPaint(
+                            painter: _AdminChartPainter(buckets: monthBuckets),
+                            child: Container(),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: monthBuckets
+                              .map(
+                                (b) => Column(
+                              children: [
+                                Text(
+                                  b.label,
+                                  style: const TextStyle(
+                                    color: _T.textMuted,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                                if (b.total > 0) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '₱${b.total >= 1000 ? '${(b.total / 1000).toStringAsFixed(1)}k' : b.total.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      color: _T.gold,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
+                              .toList(),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 160,
-                child: CustomPaint(
-                  painter: _ChartPainter(buckets: monthBuckets),
-                  child: Container(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: monthBuckets
-                    .map(
-                      (b) => Column(
-                    children: [
-                      Text(
-                        b.label,
-                        style: const TextStyle(
-                          color: Colors.white38,
-                          fontSize: 10,
-                        ),
-                      ),
-                      if (b.total > 0)
-                        Text(
-                          '₱${b.total.toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            color: AppTheme.gold,
-                            fontSize: 9,
-                          ),
-                        ),
-                    ],
-                  ),
-                )
-                    .toList(),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
   }
-}
-
-class _ReportCard extends StatelessWidget {
-  final String label, value;
-  final Color color;
-  final bool narrow;
-  const _ReportCard(this.label, this.value, this.color, this.narrow);
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: narrow ? double.infinity : 160,
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: color.withValues(alpha: 0.2)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 11),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _ChartPainter extends CustomPainter {
-  final List<_MonthBucket> buckets;
-  _ChartPainter({required this.buckets});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (buckets.isEmpty) return;
-    final maxVal = buckets.map((b) => b.total).reduce((a, b) => a > b ? a : b);
-    final effectiveMax = maxVal == 0 ? 1.0 : maxVal;
-    final n = buckets.length;
-    final stepX = n <= 1 ? size.width : size.width / (n - 1);
-
-    final gridPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
-      ..strokeWidth = 1;
-    for (int i = 0; i <= 3; i++) {
-      final y = size.height * i / 3;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    final points = List.generate(
-      n,
-          (i) => Offset(
-        i * stepX,
-        size.height - (buckets[i].total / effectiveMax) * size.height * 0.85,
-      ),
-    );
-
-    final fillPath = Path()..moveTo(points.first.dx, size.height);
-    for (final p in points) fillPath.lineTo(p.dx, p.dy);
-    fillPath.lineTo(points.last.dx, size.height);
-    fillPath.close();
-    canvas.drawPath(
-      fillPath,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.blueAccent.withValues(alpha: 0.3),
-            Colors.blueAccent.withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
-    );
-
-    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
-    for (int i = 1; i < points.length; i++) {
-      final prev = points[i - 1];
-      final curr = points[i];
-      linePath.cubicTo(
-        (prev.dx + curr.dx) / 2,
-        prev.dy,
-        (prev.dx + curr.dx) / 2,
-        curr.dy,
-        curr.dx,
-        curr.dy,
-      );
-    }
-    canvas.drawPath(
-      linePath,
-      Paint()
-        ..color = Colors.blueAccent
-        ..strokeWidth = 2.5
-        ..style = PaintingStyle.stroke,
-    );
-
-    final dotBg = Paint()..color = const Color(0xFF1a1a2e);
-    final dotFill = Paint()..color = Colors.blueAccent;
-    for (final p in points) {
-      canvas.drawCircle(p, 5, dotBg);
-      canvas.drawCircle(p, 4, dotFill);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ChartPainter old) => old.buckets != buckets;
 }
