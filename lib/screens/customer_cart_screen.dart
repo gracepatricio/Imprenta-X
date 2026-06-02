@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -8,7 +7,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image/image.dart' as img;
 import '../services/cart_manager.dart';
 import '../services/paymongo_service.dart';
-import '../services/file_utils.dart' as file_utils;
 import 'app_theme.dart';
 import 'payment_webview_screen.dart';
 import 'invoice_screen.dart';
@@ -24,24 +22,12 @@ class CustomerCartScreen extends StatefulWidget {
 
 class _CustomerCartScreenState extends State<CustomerCartScreen> {
   final Set<int> _selected = {};
-  bool _checkingOut       = false;
-  bool _processingPayment = false; // true while verifying a pending payment
+  bool _checkingOut = false;
 
   @override
   void initState() {
     super.initState();
     _selectAll();
-    if (kIsWeb) {
-      // Check synchronously: if pending data exists, show processing screen
-      // immediately so the user never sees the old cart flash before the API
-      // calls complete.
-      if (file_utils.loadPendingPayment() != null) {
-        _processingPayment = true;
-      }
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _checkPendingPayment(),
-      );
-    }
   }
 
   void _selectAll() {
@@ -624,29 +610,10 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       setState(() => _checkingOut = false);
       if (!mounted) return;
 
-      if (kIsWeb) {
-        // ── Web: navigate the current tab to PayMongo (no popup needed).
-        // Save all order data to localStorage (no plugin needed) so
-        // _checkPendingPayment() can restore it when the user returns.
-        file_utils.savePendingPayment(jsonEncode({
-          'orderId':             orderId,
-          'linkId':              link.id,
-          'uid':                 user.uid,
-          'customerName':        customerName,
-          'customerEmail':       customerEmail,
-          'customerId':          customerId,
-          'products':            products,
-          'subtotal':            _subtotal,
-          'payAmount':           payAmount,
-          'turnaroundDays':      turnaroundDays,
-          'estimatedCompletion': estimatedCompletion.toIso8601String(),
-          'cartIndices':         selectedList,
-        }));
-        file_utils.navigateCurrentPage(link.checkoutUrl);
-        return;
-      }
-
-      // ── Mobile: use PaymentWebViewScreen with background polling.
+      // Open PaymentWebViewScreen on ALL platforms.
+      // On web:  opens PayMongo in a new tab; auto-polls every 4 s.
+      // On mobile: opens in external browser; auto-polls every 4 s.
+      // When polling detects 'paid' the screen pops automatically — no button press needed.
       final paid = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => PaymentWebViewScreen(
@@ -661,6 +628,9 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       if (!mounted) return;
 
       if (paid == true) {
+        // Capture total BEFORE removing cart items — _subtotal getter reads
+        // CartManager.items which will be empty after removeIndices.
+        final total = _subtotal;
         CartManager.removeIndices(selectedList);
         widget.onOrderPlaced?.call();
         await _onPaymentConfirmed(
@@ -670,14 +640,14 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
           customerId:          customerId,
           products:            products,
           paidAmount:          payAmount,
-          total:               _subtotal,
+          total:               total,
           turnaroundDays:      turnaroundDays,
           estimatedCompletion: estimatedCompletion,
           linkId:              link.id,
           uid:                 user.uid,
         );
       }
-      // If not paid on mobile: cart unchanged, nothing in Firestore.
+      // If not paid: cart unchanged, nothing written to Firestore.
 
     } catch (e) {
       messenger.showSnackBar(SnackBar(
@@ -686,78 +656,6 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       ));
       if (mounted) setState(() => _checkingOut = false);
     }
-  }
-
-  // ── Web: called on screen init to process a payment return ─────────────────
-
-  Future<void> _checkPendingPayment() async {
-    // Clean up any ?pm= URL param if present (from an explicit redirect).
-    final returnStatus = file_utils.getPaymentReturnStatus();
-    if (returnStatus.isNotEmpty) file_utils.clearPaymentReturnParam();
-
-    // Check localStorage regardless of URL params — PayMongo Payment Links
-    // don't support redirect URLs, so the user always returns via back button.
-    // We detect completion by calling getLinkStatus directly.
-    final raw = file_utils.loadPendingPayment();
-    if (raw == null) return;
-
-    final data   = jsonDecode(raw) as Map<String, dynamic>;
-    final linkId = data['linkId'] as String;
-    final uid    = data['uid']    as String;
-
-    String payStatus;
-    try {
-      payStatus = await PayMongoService.getLinkStatus(linkId);
-    } catch (_) {
-      return; // can't verify — leave pending data for next cart open
-    }
-
-    if (payStatus != 'paid') {
-      if (returnStatus == 'failed') file_utils.clearPendingPayment();
-      if (mounted) setState(() => _processingPayment = false);
-      return;
-    }
-
-    // Payment confirmed — process the order.
-    file_utils.clearPendingPayment();
-    if (!mounted) return;
-
-    // Ensure cart is loaded before removing items.
-    await CartManager.loadForUser(uid);
-    if (!mounted) return;
-
-    final orderId           = data['orderId']       as String;
-    final customerName      = data['customerName']  as String;
-    final customerEmail     = data['customerEmail'] as String;
-    final customerId        = data['customerId']    as String;
-    final products          = List<Map<String, dynamic>>.from(
-        (data['products'] as List).map((e) => Map<String, dynamic>.from(e as Map)));
-    final subtotal          = (data['subtotal']     as num).toDouble();
-    final payAmount         = (data['payAmount']    as num).toDouble();
-    final turnaroundDays    = data['turnaroundDays'] as int;
-    final estimatedCompletion = DateTime.parse(data['estimatedCompletion'] as String);
-    final cartIndices       = (data['cartIndices']  as List?)
-        ?.map((e) => e as int).toList() ?? [];
-
-    if (cartIndices.isNotEmpty) {
-      CartManager.removeIndices(cartIndices);
-      widget.onOrderPlaced?.call();
-      if (mounted) setState(() {});
-    }
-
-    await _onPaymentConfirmed(
-      orderId:             orderId,
-      customerName:        customerName,
-      customerEmail:       customerEmail,
-      customerId:          customerId,
-      products:            products,
-      paidAmount:          payAmount,
-      total:               subtotal,
-      turnaroundDays:      turnaroundDays,
-      estimatedCompletion: estimatedCompletion,
-      linkId:              linkId,
-      uid:                 uid,
-    );
   }
 
   Future<void> _onPaymentConfirmed({
@@ -888,22 +786,6 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Show a full-screen spinner while verifying a pending web payment.
-    // This prevents a flash of the old cart before the check resolves.
-    if (_processingPayment) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(color: AppTheme.gold),
-            SizedBox(height: 16),
-            Text('Confirming your payment…',
-                style: TextStyle(color: Colors.white54, fontSize: 13)),
-          ],
-        ),
-      );
-    }
-
     return ValueListenableBuilder<int>(
       valueListenable: CartManager.count,
       builder: (context, _, __) {

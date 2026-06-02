@@ -32,7 +32,8 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git pull *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(firebase functions:log --only pmCreateLink,pmGetStatus)"
     ]
   }
 }

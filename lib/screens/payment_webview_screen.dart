@@ -34,7 +34,8 @@ class PaymentWebViewScreen extends StatefulWidget {
   State<PaymentWebViewScreen> createState() => _PaymentWebViewScreenState();
 }
 
-class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
+class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
+    with WidgetsBindingObserver {
   bool _opened    = false;
   bool _checking  = false;
   String? _message;
@@ -43,17 +44,24 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
   @override
   void initState() {
     super.initState();
-    // Do NOT auto-open here — initState runs in an async context so the browser
-    // drops the user-gesture context and Firefox bounce-tracker blocks pm.link.
-    // The user taps the "Open Payment Page" button which calls _openPaymentUrl()
-    // synchronously, preserving the gesture context end-to-end.
-    if (!kIsWeb) _startPolling();
+    WidgetsBinding.instance.addObserver(this);
+    _startPolling();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
     super.dispose();
+  }
+
+  /// Fires when the user switches back to this app/tab after paying.
+  /// Checks payment status immediately — don't wait for the next poll tick.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_checking && mounted) {
+      _checkPayment();
+    }
   }
 
   /// Called directly from button onPressed — NO await before this call.
@@ -86,7 +94,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
       if (status == 'paid') {
         Navigator.of(context).pop(true);
       } else {
-        if (!kIsWeb) _startPolling(); // resume auto-poll on mobile
+        _startPolling(); // resume polling
         setState(() {
           _checking = false;
           _message  = 'Payment not yet detected. Finish payment in the browser '
@@ -94,7 +102,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
         });
       }
     } catch (e) {
-      if (!kIsWeb) _startPolling();
+      _startPolling();
       if (mounted) {
         setState(() {
           _checking = false;
@@ -216,11 +224,10 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
                             '(scan the QR or enter details)',
                       ),
                       const SizedBox(height: 12),
-                      _Step(
+                      const _Step(
                         number: '3',
-                        text: kIsWeb
-                            ? 'After paying, press the browser Back button to return — your order will be confirmed automatically'
-                            : 'After paying, press Back to return — your order will be confirmed automatically',
+                        text: 'After paying, return to this screen — '
+                            'your order will be confirmed automatically',
                       ),
                     ],
                   ),
