@@ -168,13 +168,79 @@ class _CustomerAboutScreenState extends State<CustomerAboutScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(title: 'Our Story'),
-          const SizedBox(height: 20),
-          _buildTimeline(),
+          // ── Our Story frosted glass container ──────────────────────
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 12, 9, 31)
+                      .withValues(alpha: 0.40),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.30),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.18),
+                      blurRadius: 32,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _SectionHeader(title: 'Our Story'),
+                    const SizedBox(height: 20),
+                    _buildTimeline(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
           const SizedBox(height: 24),
-          _SectionHeader(title: 'Visit Us'),
-          const SizedBox(height: 16),
-          _buildContactCard(),
+
+          // ── Visit Us frosted glass container ───────────────────────
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 12, 9, 31)
+                      .withValues(alpha: 0.40),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.30),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.18),
+                      blurRadius: 32,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _SectionHeader(title: 'Visit Us'),
+                    const SizedBox(height: 16),
+                    _buildContactItems(),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -205,40 +271,15 @@ class _CustomerAboutScreenState extends State<CustomerAboutScreen> {
       ),
     ];
 
-    // ── Frosted glass applied to Our Story container ──────────────────────
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.30),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.18),
-                blurRadius: 32,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Column(
-            children: entries.asMap().entries.map((e) {
-              final isLast = e.key == entries.length - 1;
-              return _TimelineRow(entry: e.value, isLast: isLast);
-            }).toList(),
-          ),
-        ),
-      ),
+    return Column(
+      children: entries.asMap().entries.map((e) {
+        final isLast = e.key == entries.length - 1;
+        return _TimelineRow(entry: e.value, isLast: isLast);
+      }).toList(),
     );
   }
 
-  Widget _buildContactCard() {
+  Widget _buildContactItems() {
     final items = [
       _ContactItem(
         icon: Icons.location_on_outlined,
@@ -263,47 +304,21 @@ class _CustomerAboutScreenState extends State<CustomerAboutScreen> {
       ),
     ];
 
-    // ── Frosted glass applied to Visit Us container ───────────────────────
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.30),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.18),
-                blurRadius: 32,
-                offset: const Offset(0, 6),
+    return Column(
+      children: items.asMap().entries.map((e) {
+        final isLast = e.key == items.length - 1;
+        return Column(
+          children: [
+            _ContactDetailRow(item: e.value),
+            if (!isLast)
+              Divider(
+                color: Colors.white.withValues(alpha: 0.08),
+                height: 24,
+                thickness: 1,
               ),
-            ],
-          ),
-          child: Column(
-            children: items.asMap().entries.map((e) {
-              final isLast = e.key == items.length - 1;
-              return Column(
-                children: [
-                  _ContactDetailRow(item: e.value),
-                  if (!isLast)
-                    Divider(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      height: 24,
-                      thickness: 1,
-                    ),
-                ],
-              );
-            }).toList(),
-          ),
-        ),
-      ),
+          ],
+        );
+      }).toList(),
     );
   }
 }

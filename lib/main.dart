@@ -14,26 +14,18 @@ import 'screens/admin_homepage.dart';
 import 'screens/role_guard.dart';
 import 'screens/change_password_screen.dart';
 import 'services/notification_service.dart';
+import 'screens/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  // On web: clear the session when the browser tab/window is closed.
-  // Users must log in fresh each time they open the app.
   if (kIsWeb) {
     await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
   }
-  // Pre-resolve auth state BEFORE running the app.
-  // On web page refresh, Firebase reads sessionStorage asynchronously — without
-  // this await the very first authStateChanges emission is null, which causes
-  // RoleGuard to redirect to login even for a logged-in user.
   await FirebaseAuth.instance.authStateChanges()
       .first
       .timeout(const Duration(seconds: 5), onTimeout: () => null);
   await NotificationService.initialize();
-  // Initialize SharedPreferences cache only — do NOT load any cart yet.
-  // The cart is loaded per-user inside AuthService.login() after the user
-  // successfully authenticates, so we never mix up carts between accounts.
 
   String? resetOobCode;
   if (kIsWeb) {
@@ -98,6 +90,10 @@ class MyApp extends StatelessWidget {
         splashFactory: NoSplash.splashFactory,
         highlightColor: Colors.transparent,
       ),
+      // ── Global background applied once here — covers every screen ────────
+      // builder wraps every route's widget tree with AppBackground,
+      // so no individual screen needs to set its own background.
+      builder: (context, child) => AppBackground(child: child!),
       initialRoute: resetOobCode != null ? '/reset-password' : '/',
       routes: {
         '/': (context) => LoginScreen(),
@@ -115,6 +111,24 @@ class MyApp extends StatelessWidget {
           return ChangePasswordScreen(role: args['role'] as String);
         },
       },
+    );
+  }
+}
+
+// ── AppBackground ─────────────────────────────────────────────────────────────
+// Sits below every screen. Picks landscape or portrait asset automatically.
+// Individual screens should have transparent/no background scaffolds —
+// remove any existing BoxDecoration background from your Scaffold/Container
+// in each screen so this one shows through.
+class AppBackground extends StatelessWidget {
+  final Widget child;
+  const AppBackground({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: AppTheme.backgroundDecoration(context),
+      child: child,
     );
   }
 }

@@ -115,7 +115,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen>
       return Scaffold(
         backgroundColor: const Color(0xFF0f0f23),
         body: Container(
-          decoration: AppTheme.backgroundDecoration,
+decoration: AppTheme.backgroundDecoration(context),
           child: body,
         ),
       );

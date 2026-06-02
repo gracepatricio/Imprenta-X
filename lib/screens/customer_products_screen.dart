@@ -162,7 +162,7 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
                                           crossAxisCount: cols,
                                           mainAxisSpacing: 14,
                                           crossAxisSpacing: 14,
-                                          childAspectRatio: 0.65,
+childAspectRatio: 0.60,
                                         ),
                                     itemCount: products.length,
                                     itemBuilder: (_, i) => _ProductCard(
@@ -877,7 +877,7 @@ class _ProductCardState extends State<_ProductCard> {
               Expanded(
                 flex: 4,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.max,
@@ -921,12 +921,12 @@ class _ProductCardState extends State<_ProductCard> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 8),
+const SizedBox(height: 4),
                       SizedBox(
                         width: double.infinity,
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+padding: const EdgeInsets.symmetric(vertical: 6),
                           decoration: BoxDecoration(
                             color: _hovered
                                 ? AppTheme.gold

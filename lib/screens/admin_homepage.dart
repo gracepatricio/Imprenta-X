@@ -108,7 +108,7 @@ class _AdminHomepageState extends State<AdminHomepage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: AppTheme.backgroundDecoration,
+decoration: AppTheme.backgroundDecoration(context),
         child: Column(
           children: [
             AppNavBar(

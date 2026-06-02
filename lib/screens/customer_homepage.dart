@@ -91,7 +91,7 @@ class _CustomerHomepageState extends State<CustomerHomepage> {
 
         return Scaffold(
           body: Container(
-            decoration: AppTheme.backgroundDecoration,
+decoration: AppTheme.backgroundDecoration(context),
             child: Column(
               children: [
                 AppNavBar(

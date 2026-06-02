@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Background image
+  // Background image (legacy — kept for backward compat)
   static const DecorationImage backgroundImage = DecorationImage(
     image: AssetImage('assets/images/sysbackground.jpg'),
     fit: BoxFit.cover,
@@ -19,13 +19,24 @@ class AppTheme {
     end: Alignment.bottomRight,
   );
 
-  // Main background
-  static BoxDecoration get backgroundDecoration => const BoxDecoration(
-    image: DecorationImage(
-      image: AssetImage('assets/images/sysbackground.jpg'),
-      fit: BoxFit.cover,
-    ),
-  );
+  // ── Responsive background ──────────────────────────────────────────────────
+  // Use this everywhere. Automatically picks the right asset per screen size.
+  // < 600px wide  → sysbackground_mobile.jpg  (portrait)
+  // ≥ 600px wide  → sysbackground.jpg         (landscape)
+  static BoxDecoration backgroundDecoration(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
+    return BoxDecoration(
+      image: DecorationImage(
+        image: AssetImage(
+          isMobile
+              ? 'assets/images/sysbackground_mobile.jpg'
+              : 'assets/images/sysbackground.jpg',
+        ),
+        fit: BoxFit.cover,
+        alignment: Alignment.center,
+      ),
+    );
+  }
 
   // ── Frosted glass card ─────────────────────────────────────────────────────
   static BoxDecoration glassCard({double opacity = 0.30, double radius = 20}) {
@@ -70,7 +81,6 @@ class AppTheme {
   }
 
   // ── Colors ─────────────────────────────────────────────────────────────────
-  // Updated: clean saturated amber-gold, uniform across all screens
   static const Color gold = Color(0xFFFFE9AD);
   static const Color accent = Color(0xFF00b89c);
 

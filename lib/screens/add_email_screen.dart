@@ -151,7 +151,7 @@ class _AddEmailScreenState extends State<AddEmailScreen>
       canPop: false,
       child: Scaffold(
         body: Container(
-          decoration: AppTheme.backgroundDecoration,
+decoration: AppTheme.backgroundDecoration(context),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 600;

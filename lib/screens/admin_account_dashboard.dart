@@ -159,7 +159,7 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: AppTheme.backgroundDecoration,
+decoration: AppTheme.backgroundDecoration(context),
         child: Column(
           children: [
             AppNavBar(

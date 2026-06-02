@@ -107,7 +107,7 @@ class _CustomerOrderChatScreenState extends State<CustomerOrderChatScreen> {
       backgroundColor: Colors.transparent,
       resizeToAvoidBottomInset: true,
       body: Container(
-        decoration: AppTheme.backgroundDecoration,
+decoration: AppTheme.backgroundDecoration(context),
         child: SafeArea(
           child: Column(
             children: [

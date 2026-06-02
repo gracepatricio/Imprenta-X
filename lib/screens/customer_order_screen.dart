@@ -318,7 +318,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: AppTheme.backgroundDecoration,
+decoration: AppTheme.backgroundDecoration(context),
         child: Column(
           children: [
             SafeArea(

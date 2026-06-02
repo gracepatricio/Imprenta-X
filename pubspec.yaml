@@ -53,7 +53,8 @@ flutter:
   assets:
     - assets/images/imprentalogo.jpg
     - assets/images/sysbackground.jpg
-
+    - assets/images/sysbackground_mobile.jpg
+    
   fonts:
     - family: Spartan
       fonts:
