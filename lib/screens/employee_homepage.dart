@@ -24,9 +24,8 @@ import 'app_navbar.dart';
 import 'platform_utils.dart';
 import 'employee_home_screen.dart';
 import 'employee_inventory_screen.dart';
-import 'employee_inventory_forecast_screen.dart';
-import 'employee_logs_screen.dart';               // full web version
-import 'employee_job_queue_mobile_screen.dart';   // read-only mobile version
+import 'employee_logs_screen.dart'; // full web version
+import 'employee_job_queue_mobile_screen.dart'; // read-only mobile version
 import 'employee_account_screen.dart';
 
 class EmployeeHomepage extends StatefulWidget {
@@ -46,12 +45,7 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
     'Account',
   ];
 
-  static const _mobileItems = [
-    'Home',
-    'Inventory',
-    'Job Queue',
-    'Account',
-  ];
+  static const _mobileItems = ['Home', 'Inventory', 'Job Queue', 'Account'];
 
   List<String> get _navItems =>
       PlatformUtils.isMobileDevice ? _mobileItems : _webItems;
@@ -78,20 +72,21 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
         .snapshots()
         .listen(
           (snap) async {
-        final deleted =
-            !snap.exists || (snap.data() as Map?)?['is_deleted'] == true;
-        if (deleted && mounted) {
-          await FirebaseAuth.instance.signOut();
-          if (mounted) {
-            Navigator.of(context)
-                .pushNamedAndRemoveUntil('/', (_) => false);
-          }
-        }
-      },
-      onError: (_) {
-        // Network unavailable — ignore, listener resumes on reconnect.
-      },
-    );
+            final deleted =
+                !snap.exists || (snap.data() as Map?)?['is_deleted'] == true;
+            if (deleted && mounted) {
+              await FirebaseAuth.instance.signOut();
+              if (mounted) {
+                Navigator.of(
+                  context,
+                ).pushNamedAndRemoveUntil('/', (_) => false);
+              }
+            }
+          },
+          onError: (_) {
+            // Network unavailable — ignore, listener resumes on reconnect.
+          },
+        );
   }
 
   @override
@@ -107,12 +102,11 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
     if (PlatformUtils.isMobileDevice) {
       switch (_active) {
         case 'Inventory':
-          return const _InventoryTabContainer();
+          return const EmployeeInventoryScreen();
         case 'Account':
           return EmployeeAccountScreen(
             // Mobile: "view logs" shortcut still goes to Job Queue tab.
-            onNavigateToLogs: (_) =>
-                setState(() => _active = 'Job Queue'),
+            onNavigateToLogs: (_) => setState(() => _active = 'Job Queue'),
           );
         case 'Job Queue':
           return const EmployeeMobileJobQueueScreen();
@@ -124,7 +118,7 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
     // Web / desktop: full feature set.
     switch (_active) {
       case 'Inventory':
-        return const _InventoryTabContainer();
+        return const EmployeeInventoryScreen();
       case 'Job Queue':
         return const EmployeeJobQueueScreen();
       case 'Accounting':
@@ -144,7 +138,7 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-decoration: AppTheme.backgroundDecoration(context),
+        decoration: AppTheme.backgroundDecoration(context),
         child: Column(
           children: [
             AppNavBar(
@@ -153,104 +147,6 @@ decoration: AppTheme.backgroundDecoration(context),
               onTap: (item) => setState(() => _active = item),
             ),
             Expanded(child: _screen),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Inventory tab container (web only) ────────────────────────────────────
-
-class _InventoryTabContainer extends StatefulWidget {
-  const _InventoryTabContainer();
-
-  @override
-  State<_InventoryTabContainer> createState() =>
-      _InventoryTabContainerState();
-}
-
-class _InventoryTabContainerState extends State<_InventoryTabContainer> {
-  int _tab = 0; // 0 = Inventory, 1 = Forecast
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-          child: Row(
-            children: [
-              _InventoryPillTab(
-                label: 'Inventory',
-                icon: Icons.inventory_2_outlined,
-                isActive: _tab == 0,
-                onTap: () => setState(() => _tab = 0),
-              ),
-              const SizedBox(width: 8),
-              _InventoryPillTab(
-                label: 'Forecast',
-                icon: Icons.trending_up_rounded,
-                isActive: _tab == 1,
-                onTap: () => setState(() => _tab = 1),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 6),
-        Expanded(
-          child: _tab == 0
-              ? const EmployeeInventoryScreen()
-              : const EmployeeInventoryForecastScreen(),
-        ),
-      ],
-    );
-  }
-}
-
-class _InventoryPillTab extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _InventoryPillTab({
-    required this.label,
-    required this.icon,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding:
-        const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive
-              ? AppTheme.gold
-              : Colors.white.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(30),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon,
-                size: 14,
-                color: isActive ? Colors.black : Colors.white70),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? Colors.black : Colors.white70,
-                fontWeight:
-                isActive ? FontWeight.w700 : FontWeight.w400,
-                fontSize: 13,
-              ),
-            ),
           ],
         ),
       ),

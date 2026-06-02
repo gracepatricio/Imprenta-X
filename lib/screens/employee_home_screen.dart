@@ -12,14 +12,33 @@ class EmployeeHomeScreen extends StatefulWidget {
   State<EmployeeHomeScreen> createState() => _EmployeeHomeScreenState();
 }
 
-class _EmployeeHomeScreenState extends State<EmployeeHomeScreen>
-    with SingleTickerProviderStateMixin {
+class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
   late DateTime _now;
   Timer? _timer;
   String _employeeName = '';
 
-  late AnimationController _glowController;
-  late Animation<double> _glowAnim;
+  static const List<String> _quotes = [
+    'Quality is not an act, it is a habit.',
+    'Great work begins with great attention to detail.',
+    'Every print tells a story. Make yours count.',
+    'Precision today, excellence always.',
+    'Craftsmanship is pride made visible.',
+    'Small details make big impressions.',
+    'Do it right the first time.',
+    'Your work is a reflection of your standards.',
+    'Consistency builds reputation.',
+    'Behind every great product is a dedicated team.',
+    'Excellence is the gradual result of always striving to do better.',
+    'Take pride in how far you\'ve come.',
+    'Good enough is the enemy of great.',
+    'A strong team makes light work of heavy tasks.',
+    'Today\'s effort is tomorrow\'s result.',
+  ];
+
+  String get _dailyQuote {
+    final dayOfYear = _now.difference(DateTime(_now.year, 1, 1)).inDays;
+    return _quotes[dayOfYear % _quotes.length];
+  }
 
   @override
   void initState() {
@@ -29,16 +48,6 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen>
       if (mounted) setState(() => _now = DateTime.now());
     });
     _loadEmployeeName();
-
-    _glowController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 3500),
-    )..repeat(reverse: true);
-
-    _glowAnim = CurvedAnimation(
-      parent: _glowController,
-      curve: Curves.easeInOut,
-    );
   }
 
   Future<void> _loadEmployeeName() async {
@@ -58,7 +67,6 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen>
   @override
   void dispose() {
     _timer?.cancel();
-    _glowController.dispose();
     super.dispose();
   }
 
@@ -68,364 +76,401 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen>
     final greeting = hour < 12
         ? 'Good morning'
         : hour < 17
-            ? 'Good afternoon'
-            : 'Good evening';
+        ? 'Good afternoon'
+        : 'Good evening';
     final displayName = _employeeName.isNotEmpty ? _employeeName : 'Employee';
 
     final weekdays = [
-      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-      'Friday', 'Saturday', 'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
     ];
     final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final dateStr =
         '${weekdays[_now.weekday - 1]}, ${months[_now.month - 1]} ${_now.day}, ${_now.year}';
     final clockStr =
-        '${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}:${_now.second.toString().padLeft(2, '0')}';
+        '${_now.hour.toString().padLeft(2, '0')}:'
+        '${_now.minute.toString().padLeft(2, '0')}:'
+        '${_now.second.toString().padLeft(2, '0')}';
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final screenW = constraints.maxWidth;
-
-        // ── Responsive scale factor ──────────────────────────────────
         final isNarrow = screenW < 480;
-        final cardMaxW = isNarrow ? screenW - 32.0 : 420.0;
 
-        final logoSize     = isNarrow ? (screenW * 0.22).clamp(72.0, 96.0) : 90.0;
-        final logoRing     = logoSize + 6;
-        final logoGlow     = logoSize + 18;
-        final brandSize    = isNarrow ? (screenW * 0.052).clamp(16.0, 22.0) : 22.0;
-        final taglineSize  = isNarrow ? 11.5 : 13.0;
-        final nameFontSize = isNarrow ? 20.0 : 24.0;
-        final cardPadH     = isNarrow ? 20.0 : 24.0;
-        final cardPadV     = isNarrow ? 20.0 : 24.0;
+        final cardMaxW = isNarrow ? screenW - 32.0 : 520.0;
+        final padH = isNarrow ? 20.0 : 24.0;
+        final padV = isNarrow ? 20.0 : 24.0;
+
+        final greetingLabelSize = isNarrow ? 12.0 : 14.0;
+        final nameFontSize = isNarrow ? 30.0 : 38.0;
+        final brandFontSize = isNarrow ? 15.0 : 17.0;
+        final taglineFontSize = isNarrow ? 11.5 : 12.5;
+        final quoteFontSize = isNarrow ? 13.0 : 15.0;
+        final metaFontSize = isNarrow ? 12.0 : 13.0;
+        final badgeFontSize = isNarrow ? 12.0 : 13.0;
+        final logoSize = isNarrow ? 50.0 : 58.0;
 
         return Center(
           child: SizedBox(
             width: cardMaxW,
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
-                // ── Logo — soft gold glow ──────────────────────────────
-                AnimatedBuilder(
-                  animation: _glowAnim,
-                  builder: (context, child) {
-                    // ── TUNED: softer opacity, smaller blur & spread ──
-                    final logoGlowOpacity =
-                        lerpDouble(0.10, 0.30, _glowAnim.value)!;
-                    final logoGlowBlur =
-                        lerpDouble(12.0, 28.0, _glowAnim.value)!;
-                    final logoGlowSpread =
-                        lerpDouble(0.0, 4.0, _glowAnim.value)!;
-
-                    return Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Animated outer glow halo — no dark drop shadow
-                        Container(
-                          width: logoGlow,
-                          height: logoGlow,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFE8C96A)
-                                    .withValues(alpha: logoGlowOpacity),
-                                blurRadius: logoGlowBlur,
-                                spreadRadius: logoGlowSpread,
-                              ),
-                              // ── REMOVED: dark black blob shadow ──────
-                            ],
-                          ),
+                // ── Greeting — outside, above card ──────────────────
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: 4,
+                    bottom: isNarrow ? 20.0 : 24.0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        greeting,
+                        style: TextStyle(
+                          fontSize: greetingLabelSize,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.45),
+                          letterSpacing: 0.3,
                         ),
-                        // Thin gold border ring
-                        Container(
-                          width: logoRing,
-                          height: logoRing,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: const Color(0xFFE8C96A)
-                                  .withValues(alpha: 0.50),
-                              width: 1.5,
-                            ),
-                          ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        displayName,
+                        style: TextStyle(
+                          fontSize: nameFontSize,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: -1.0,
+                          height: 1.05,
                         ),
-                        // Logo image
-                        ClipOval(
-                          child: SizedBox(
-                            width: logoSize,
-                            height: logoSize,
-                            child: Image.asset(
-                              'assets/images/imprentalogo.jpg',
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                child: Icon(
-                                  Icons.local_print_shop_rounded,
-                                  color: Colors.white.withValues(alpha: 0.50),
-                                  size: logoSize * 0.44,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-
-                SizedBox(height: isNarrow ? 18.0 : 24.0),
-
-                // ── Brand name — gold glow ─────────────────────────────
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [
-                      Color(0xFFE8C96A),
-                      Color(0xFFFFFFFF),
-                      Color(0xFFE8C96A),
+                      ),
                     ],
-                    stops: [0.0, 0.50, 1.0],
-                  ).createShader(bounds),
-                  child: Text(
-                    'IMPRENTA INC.',
-                    style: TextStyle(
-                      fontSize: brandSize,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: isNarrow ? 6.0 : 9.0,
-                      shadows: const [
-                        Shadow(
-                          color: Color(0xFFE8C96A),
-                          blurRadius: 12,
-                          offset: Offset(0, 0),
-                        ),
-                        Shadow(
-                          color: Color(0xFFE8C96A),
-                          blurRadius: 28,
-                          offset: Offset(0, 0),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
 
-                SizedBox(height: isNarrow ? 8.0 : 12.0),
-
-                // ── Tagline ────────────────────────────────────────────
-                Text(
-                  'Specializes in manufacturing of customized product printing.',
-                  style: TextStyle(
-                    fontSize: taglineSize,
-                    color: Colors.white.withValues(alpha: 0.70),
-                    height: 1.65,
-                    letterSpacing: 0.2,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-
-                SizedBox(height: isNarrow ? 28.0 : 40.0),
-
-                // ── Greeting card — frosted glass + subtle breathing glow
-                AnimatedBuilder(
-                  animation: _glowAnim,
-                  builder: (context, child) {
-                    // ── TUNED: much softer card glow ──────────────────
-                    final glowOpacity =
-                        lerpDouble(0.08, 0.25, _glowAnim.value)!;
-                    final spreadRadius =
-                        lerpDouble(-6.0, 0.0, _glowAnim.value)!;
-                    final blurRadius =
-                        lerpDouble(16.0, 36.0, _glowAnim.value)!;
-
-                    return Container(
+                // ── Unified frosted card ─────────────────────────────
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                    child: Container(
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
+                        color: const Color(0xFF0C0724).withValues(alpha: 0.52),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.22),
+                          width: 1.2,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFFFF8E7)
-                                .withValues(alpha: glowOpacity),
-                            blurRadius: blurRadius,
-                            spreadRadius: spreadRadius,
-                            offset: Offset.zero,
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.15),
-                            blurRadius: 24,
-                            spreadRadius: -6,
-                            offset: const Offset(0, 10),
+                            color: Colors.black.withValues(alpha: 0.28),
+                            blurRadius: 40,
+                            offset: const Offset(0, 8),
                           ),
                         ],
                       ),
-                      child: child,
-                    );
-                  },
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-                      child: Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.92),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.80),
-                            width: 1,
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-
-                            // ── Top: greeting + badge ─────────────────
-                            Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                  cardPadH, cardPadV, cardPadH - 4, 0),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          greeting.toUpperCase(),
-                                          style: TextStyle(
-                                            fontSize: isNarrow ? 9.0 : 10.0,
-                                            color: const Color(0xFF0D1B2A)
-                                                .withValues(alpha: 0.45),
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 2.2,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          displayName,
-                                          style: TextStyle(
-                                            fontSize: nameFontSize,
-                                            fontWeight: FontWeight.w700,
-                                            color: const Color(0xFF0D1B2A),
-                                            letterSpacing: -0.5,
-                                            height: 1.15,
-                                          ),
-                                        ),
-                                      ],
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // ── 1. Brand section ──────────────────────
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              padH,
+                              padV,
+                              padH,
+                              padV,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // Logo tile
+                                Container(
+                                  width: logoSize,
+                                  height: logoSize,
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFFE8C96A,
+                                    ).withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: const Color(
+                                        0xFFE8C96A,
+                                      ).withValues(alpha: 0.38),
+                                      width: 0.5,
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(15.5),
+                                    child: Image.asset(
+                                      'assets/images/imprentalogo.jpg',
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Icon(
+                                        Icons.local_print_shop_rounded,
+                                        color: const Color(0xFFE8C96A),
+                                        size: isNarrow ? 24.0 : 28.0,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
 
-                                  // ── Employee badge — green ──────────
-                                Container(
-  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-  decoration: BoxDecoration(
-    color: const Color(0xFF3A8D68), // solid green
-    borderRadius: BorderRadius.circular(24),
-  ),
-  child: Row(
-    children: [
-      const Icon(
-        Icons.badge_outlined,
-        color: Colors.white,
-      ),
-      const SizedBox(width: 6),
-      const Text(
-        'Employee',
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    ],
-  ),
-)
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(height: 20),
-
-                            // ── Divider ───────────────────────────────
-                            Padding(
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: cardPadH),
-                              child: Divider(
-                                height: 1,
-                                thickness: 0.7,
-                                color: const Color(0xFF0D1B2A)
-                                    .withValues(alpha: 0.08),
-                              ),
-                            ),
-
-                            // ── Date (left) + Clock (right) ───────────
-                            Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                  cardPadH, 14, cardPadH, cardPadV - 4),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  // Date — left side
-                                  Row(
+                                // Brand name + tagline
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
-                                        Icons.calendar_today_outlined,
-                                        size: 12,
-                                        color: const Color(0xFF0C0724)
-                                            .withValues(alpha: 0.50),
+                                      ShaderMask(
+                                        shaderCallback: (bounds) =>
+                                            const LinearGradient(
+                                              colors: [
+                                                Color(0xFFE8C96A),
+                                                Color(0xFFFFFFFF),
+                                                Color(0xFFE8C96A),
+                                              ],
+                                              stops: [0.0, 0.50, 1.0],
+                                            ).createShader(bounds),
+                                        child: Text(
+                                          'IMPRENTA INC.',
+                                          style: TextStyle(
+                                            fontSize: brandFontSize,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                            letterSpacing: isNarrow ? 2.8 : 3.2,
+                                          ),
+                                        ),
                                       ),
-                                      const SizedBox(width: 7),
+                                      const SizedBox(height: 5),
                                       Text(
-                                        dateStr,
+                                        'Specializes in manufacturing of customized product printing.',
                                         style: TextStyle(
-                                          fontSize: isNarrow ? 11.0 : 12.0,
-                                          color: const Color(0xFF0C0724)
-                                              .withValues(alpha: 0.55),
+                                          fontSize: taglineFontSize,
+                                          color: Colors.white.withValues(
+                                            alpha: 0.45,
+                                          ),
+                                          height: 1.45,
                                           letterSpacing: 0.1,
-                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                     ],
                                   ),
+                                ),
+                                const SizedBox(width: 14),
 
-                                  // Clock — right side
-                                  Row(
+                                // Est. pill
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isNarrow ? 11.0 : 14.0,
+                                    vertical: 7,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFFE8C96A,
+                                    ).withValues(alpha: 0.09),
+                                    borderRadius: BorderRadius.circular(99),
+                                    border: Border.all(
+                                      color: const Color(
+                                        0xFFE8C96A,
+                                      ).withValues(alpha: 0.30),
+                                      width: 0.5,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Est. 2018',
+                                    style: TextStyle(
+                                      fontSize: isNarrow ? 11.0 : 12.0,
+                                      color: const Color(
+                                        0xFFE8C96A,
+                                      ).withValues(alpha: 0.85),
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: padH),
+                            child: Divider(
+                              height: 1,
+                              thickness: 0.5,
+                              color: Colors.white.withValues(alpha: 0.10),
+                            ),
+                          ),
+
+                          // ── 2. Daily quote ────────────────────────
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              padH,
+                              padV,
+                              padH,
+                              padV,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '\u201C',
+                                  style: TextStyle(
+                                    fontSize: isNarrow ? 28.0 : 34.0,
+                                    color: const Color(
+                                      0xFFE8C96A,
+                                    ).withValues(alpha: 0.60),
+                                    height: 0.80,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _dailyQuote,
+                                    style: TextStyle(
+                                      fontSize: quoteFontSize,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.55,
+                                      ),
+                                      fontStyle: FontStyle.italic,
+                                      height: 1.55,
+                                      letterSpacing: 0.15,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: padH),
+                            child: Divider(
+                              height: 1,
+                              thickness: 0.5,
+                              color: Colors.white.withValues(alpha: 0.10),
+                            ),
+                          ),
+
+                          // ── 3. Date, time, employee badge ─────────
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(padH, 16, padH, padV),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // Date
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.calendar_today_outlined,
+                                      size: 14,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.38,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 7),
+                                    Text(
+                                      dateStr,
+                                      style: TextStyle(
+                                        fontSize: metaFontSize,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.52,
+                                        ),
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0.1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const Spacer(),
+
+                                // Clock
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.access_time_outlined,
+                                      size: 14,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.38,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      clockStr,
+                                      style: TextStyle(
+                                        fontSize: metaFontSize,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.75,
+                                        ),
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 1.3,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(width: 14),
+
+                                // Employee badge
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isNarrow ? 12.0 : 15.0,
+                                    vertical: isNarrow ? 7.0 : 8.0,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2F7D5C),
+                                    borderRadius: BorderRadius.circular(99),
+                                  ),
+                                  child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Icon(
-                                        Icons.access_time_outlined,
-                                        size: 12,
-                                        color: const Color(0xFF0C0724)
-                                            .withValues(alpha: 0.50),
+                                        Icons.badge_outlined,
+                                        color: Colors.white,
+                                        size: isNarrow ? 14.0 : 15.0,
                                       ),
                                       const SizedBox(width: 6),
                                       Text(
-                                        clockStr,
+                                        'Employee',
                                         style: TextStyle(
-                                          fontSize: isNarrow ? 11.0 : 12.0,
-                                          color: const Color(0xFF0C0724)
-                                              .withValues(alpha: 0.70),
-                                          letterSpacing: 1.0,
+                                          color: Colors.white,
                                           fontWeight: FontWeight.w600,
-                                          fontFeatures: const [
-                                            FontFeature.tabularFigures(),
-                                          ],
+                                          fontSize: badgeFontSize,
                                         ),
                                       ),
                                     ],
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

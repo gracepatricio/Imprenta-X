@@ -13,16 +13,16 @@ class EmployeeManageAccount extends StatefulWidget {
 
 class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
   // ── Personal Info ──────────────────────────────────────────────
-  final _nameController  = TextEditingController();
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   bool _savingInfo = false;
 
   // ── Password ───────────────────────────────────────────────────
   final _currentPasswordController = TextEditingController();
-  final _newPasswordController     = TextEditingController();
+  final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _showCurrent = false;
-  bool _showNew     = false;
+  bool _showNew = false;
   bool _showConfirm = false;
   bool _savingPassword = false;
 
@@ -72,14 +72,14 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       setState(() {
-        _infoError   = 'Full name cannot be empty.';
+        _infoError = 'Full name cannot be empty.';
         _infoMessage = null;
       });
       return;
     }
     setState(() {
-      _savingInfo  = true;
-      _infoError   = null;
+      _savingInfo = true;
+      _infoError = null;
       _infoMessage = null;
     });
     try {
@@ -95,13 +95,13 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
         widget.onNameUpdated?.call(name);
         setState(() {
           _infoMessage = 'Personal information updated successfully.';
-          _infoError   = null;
+          _infoError = null;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _infoError   = 'Failed to update: ${e.toString()}';
+          _infoError = 'Failed to update: ${e.toString()}';
           _infoMessage = null;
         });
       }
@@ -114,33 +114,33 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       setState(() {
-        _pwError   = 'No user session found. Please log in again.';
+        _pwError = 'No user session found. Please log in again.';
         _pwMessage = null;
       });
       return;
     }
 
     final current = _currentPasswordController.text;
-    final newPw   = _newPasswordController.text;
+    final newPw = _newPasswordController.text;
     final confirm = _confirmPasswordController.text;
 
     if (current.isEmpty || newPw.isEmpty || confirm.isEmpty) {
       setState(() {
-        _pwError   = 'Please fill in all password fields.';
+        _pwError = 'Please fill in all password fields.';
         _pwMessage = null;
       });
       return;
     }
     if (newPw.length < 8) {
       setState(() {
-        _pwError   = 'New password must be at least 8 characters.';
+        _pwError = 'New password must be at least 8 characters.';
         _pwMessage = null;
       });
       return;
     }
     if (newPw != confirm) {
       setState(() {
-        _pwError   = 'New passwords do not match.';
+        _pwError = 'New passwords do not match.';
         _pwMessage = null;
       });
       return;
@@ -148,8 +148,8 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
 
     setState(() {
       _savingPassword = true;
-      _pwError        = null;
-      _pwMessage      = null;
+      _pwError = null;
+      _pwMessage = null;
     });
 
     String? errorMsg;
@@ -157,7 +157,7 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
     try {
       debugPrint('[PW] Step 1: reauthenticating ${user.email}');
       final credential = EmailAuthProvider.credential(
-        email:    user.email!,
+        email: user.email!,
         password: current,
       );
       await user.reauthenticateWithCredential(credential);
@@ -167,7 +167,9 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
       await user.reload();
       debugPrint('[PW] Done!');
     } on FirebaseAuthException catch (e) {
-      debugPrint('[PW] FirebaseAuthException — code: ${e.code}, message: ${e.message}');
+      debugPrint(
+        '[PW] FirebaseAuthException — code: ${e.code}, message: ${e.message}',
+      );
       switch (e.code) {
         case 'wrong-password':
         case 'invalid-credential':
@@ -198,14 +200,14 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
 
     if (errorMsg != null) {
       setState(() {
-        _pwError        = errorMsg;
-        _pwMessage      = null;
+        _pwError = errorMsg;
+        _pwMessage = null;
         _savingPassword = false;
       });
     } else {
       setState(() {
-        _pwMessage      = 'Password changed successfully.';
-        _pwError        = null;
+        _pwMessage = 'Password changed successfully.';
+        _pwError = null;
         _savingPassword = false;
         _currentPasswordController.clear();
         _newPasswordController.clear();
@@ -218,7 +220,8 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(
-          child: CircularProgressIndicator(color: Colors.white54));
+        child: CircularProgressIndicator(color: Colors.white54),
+      );
     }
     return SingleChildScrollView(
       child: Column(
@@ -227,9 +230,10 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
           const Text(
             'Manage Account',
             style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w700),
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 20),
           _buildPhotoRow(),
@@ -243,18 +247,18 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
             children: [
               Expanded(
                 child: _buildField(
-                  label:      'Full Name',
+                  label: 'Full Name',
                   controller: _nameController,
-                  hint:       'Enter your full name',
+                  hint: 'Enter your full name',
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: _buildField(
-                  label:      'Email Address',
+                  label: 'Email Address',
                   controller: _emailController,
-                  hint:       'Email address',
-                  readOnly:   true,
+                  hint: 'Email address',
+                  readOnly: true,
                 ),
               ),
             ],
@@ -279,17 +283,23 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
                   foregroundColor: Colors.black,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30)),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 32),
                 ),
                 child: _savingInfo
                     ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.black54))
-                    : const Text('Save',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.black54,
+                        ),
+                      )
+                    : const Text(
+                        'Save',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
               ),
             ),
           ),
@@ -304,22 +314,21 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
             children: [
               Expanded(
                 child: _buildPasswordField(
-                  label:      'Current Password',
+                  label: 'Current Password',
                   controller: _currentPasswordController,
-                  hint:       'Enter your current password',
-                  visible:    _showCurrent,
-                  onToggle:   () =>
-                      setState(() => _showCurrent = !_showCurrent),
+                  hint: 'Enter your current password',
+                  visible: _showCurrent,
+                  onToggle: () => setState(() => _showCurrent = !_showCurrent),
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: _buildPasswordField(
-                  label:      'New Password',
+                  label: 'New Password',
                   controller: _newPasswordController,
-                  hint:       'Enter your new password',
-                  visible:    _showNew,
-                  onToggle:   () => setState(() => _showNew = !_showNew),
+                  hint: 'Enter your new password',
+                  visible: _showNew,
+                  onToggle: () => setState(() => _showNew = !_showNew),
                 ),
               ),
             ],
@@ -330,12 +339,11 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
             children: [
               Expanded(
                 child: _buildPasswordField(
-                  label:      'Confirm New Password',
+                  label: 'Confirm New Password',
                   controller: _confirmPasswordController,
-                  hint:       'Re-enter your new password',
-                  visible:    _showConfirm,
-                  onToggle:   () =>
-                      setState(() => _showConfirm = !_showConfirm),
+                  hint: 'Re-enter your new password',
+                  visible: _showConfirm,
+                  onToggle: () => setState(() => _showConfirm = !_showConfirm),
                 ),
               ),
               // Empty right column to keep layout consistent
@@ -343,8 +351,10 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
             ],
           ),
           const SizedBox(height: 6),
-          const Text('Min. 8 Characters',
-              style: TextStyle(color: Colors.white60, fontSize: 12)),
+          const Text(
+            'Min. 8 Characters',
+            style: TextStyle(color: Colors.white60, fontSize: 12),
+          ),
           if (_pwMessage != null) ...[
             const SizedBox(height: 10),
             _feedbackBanner(message: _pwMessage!, isError: false),
@@ -365,17 +375,23 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
                   foregroundColor: Colors.black,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30)),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 32),
                 ),
                 child: _savingPassword
                     ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.black54))
-                    : const Text('Save',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.black54,
+                        ),
+                      )
+                    : const Text(
+                        'Save',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
               ),
             ),
           ),
@@ -403,10 +419,14 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Upload a new profile photo',
-                style: TextStyle(color: Colors.white, fontSize: 13)),
-            const Text('Accepted formats: JPG and PNG (max 5MB)',
-                style: TextStyle(color: Colors.white70, fontSize: 12)),
+            const Text(
+              'Upload a new profile photo',
+              style: TextStyle(color: Colors.white, fontSize: 13),
+            ),
+            const Text(
+              'Accepted formats: JPG and PNG (max 5MB)',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
             const SizedBox(height: 8),
             OutlinedButton(
               onPressed: () {
@@ -421,12 +441,17 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
                 foregroundColor: Colors.white,
                 side: BorderSide(color: Colors.white.withOpacity(0.4)),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30)),
-                padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
               ),
-              child: const Text('Choose a Photo',
-                  style: TextStyle(fontSize: 13)),
+              child: const Text(
+                'Choose a Photo',
+                style: TextStyle(fontSize: 13),
+              ),
             ),
           ],
         ),
@@ -437,11 +462,14 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
   Widget _sectionTitle(String title) {
     return Row(
       children: [
-        Text(title,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600)),
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Divider(color: Colors.white.withOpacity(0.2), thickness: 1),
@@ -459,17 +487,22 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w500)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
           readOnly: readOnly,
           style: TextStyle(
-              color: readOnly ? Colors.white60 : Colors.white, fontSize: 14),
+            color: readOnly ? Colors.white60 : Colors.white,
+            fontSize: 14,
+          ),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: Colors.white54, fontSize: 14),
@@ -477,8 +510,10 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
             fillColor: readOnly
                 ? Colors.white.withOpacity(0.08)
                 : Colors.white.withOpacity(0.15),
-            contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
@@ -507,11 +542,14 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w500)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
@@ -522,12 +560,17 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
             hintStyle: const TextStyle(color: Colors.white54, fontSize: 14),
             filled: true,
             fillColor: Colors.white.withOpacity(0.15),
-            contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
             suffixIcon: IconButton(
               onPressed: onToggle,
-              icon: Icon(visible ? Icons.visibility : Icons.visibility_off,
-                  color: Colors.white60, size: 20),
+              icon: Icon(
+                visible ? Icons.visibility : Icons.visibility_off,
+                color: Colors.white60,
+                size: 20,
+              ),
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
@@ -574,8 +617,9 @@ class _EmployeeManageAccountState extends State<EmployeeManageAccount> {
             child: Text(
               message,
               style: TextStyle(
-                  color: isError ? Colors.redAccent : Colors.greenAccent,
-                  fontSize: 12),
+                color: isError ? Colors.redAccent : Colors.greenAccent,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
