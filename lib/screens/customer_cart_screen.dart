@@ -655,14 +655,10 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
         'timestamp':   FieldValue.serverTimestamp(),
       });
 
-      // 7. Remove from cart
-      CartManager.removeIndices(selectedList);
-      widget.onOrderPlaced?.call();
       setState(() => _checkingOut = false);
-
       if (!mounted) return;
 
-      // 8. Open PayMongo WebView
+      // 7. Open PayMongo payment screen
       final paid = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => PaymentWebViewScreen(
@@ -677,6 +673,9 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       if (!mounted) return;
 
       if (paid == true) {
+        // Payment confirmed — now safe to clear the cart
+        CartManager.removeIndices(selectedList);
+        widget.onOrderPlaced?.call();
         await _onPaymentConfirmed(
           orderId:        orderId,
           customerName:   customerName,
@@ -688,13 +687,9 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
           turnaroundDays: turnaroundDays,
           linkId:         link.id,
         );
-      } else {
-        messenger.showSnackBar(SnackBar(
-          content: Text('$orderId saved. Complete payment from My Orders.'),
-          backgroundColor: Colors.orange.shade700,
-          duration: const Duration(seconds: 4),
-        ));
       }
+      // If paid == false/null: order is saved as awaiting_payment in Firestore
+      // but cart items remain so the user can retry from here.
     } catch (e) {
       messenger.showSnackBar(SnackBar(
         content: Text('Checkout failed: $e'),

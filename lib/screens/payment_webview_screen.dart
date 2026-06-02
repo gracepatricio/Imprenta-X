@@ -1,11 +1,18 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import '../services/paymongo_service.dart';
+import '../services/file_utils.dart' as file_utils;
 import 'app_theme.dart';
 
+/// Handles PayMongo payment on all platforms.
+///
+/// On both web and mobile the checkout URL is opened in the external browser /
+/// a new tab.  A background poll (mobile) or a manual "I've Paid" button (web)
+/// detects completion and returns `true` to the caller.
+///
+/// Using WebView on mobile caused PayMongo to flag sessions as expired because
+/// it detects embedded browsers and blocks GCash / Maya deep-links.
 class PaymentWebViewScreen extends StatefulWidget {
   final String checkoutUrl;
   final String linkId;
@@ -25,77 +32,18 @@ class PaymentWebViewScreen extends StatefulWidget {
 }
 
 class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
-  @override
-  Widget build(BuildContext context) {
-    // webview_flutter only supports Android & iOS.
-    // On web (browser), fall back to launching an external tab.
-    if (kIsWeb) {
-      return _WebFallback(
-        checkoutUrl: widget.checkoutUrl,
-        linkId:      widget.linkId,
-        orderId:     widget.orderId,
-        payAmount:   widget.payAmount,
-      );
-    }
-    return _MobileWebView(
-      checkoutUrl: widget.checkoutUrl,
-      linkId:      widget.linkId,
-      orderId:     widget.orderId,
-      payAmount:   widget.payAmount,
-    );
-  }
-}
-
-// ── Mobile: in-app WebView with polling ──────────────────────────────────────
-
-class _MobileWebView extends StatefulWidget {
-  final String checkoutUrl;
-  final String linkId;
-  final String orderId;
-  final double payAmount;
-
-  const _MobileWebView({
-    required this.checkoutUrl,
-    required this.linkId,
-    required this.orderId,
-    required this.payAmount,
-  });
-
-  @override
-  State<_MobileWebView> createState() => _MobileWebViewState();
-}
-
-class _MobileWebViewState extends State<_MobileWebView> {
-  late final WebViewController _wvc;
+  bool _opened    = false;
+  bool _checking  = false;
+  String? _message;
   Timer? _poll;
-  bool _loading = true;
-  bool _paid    = false;
 
   @override
   void initState() {
     super.initState();
-    _wvc = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(NavigationDelegate(
-        onPageStarted: (_) => setState(() => _loading = true),
-        onPageFinished: (_) => setState(() => _loading = false),
-      ))
-      ..loadRequest(Uri.parse(widget.checkoutUrl));
-    _startPolling();
-  }
-
-  void _startPolling() {
-    _poll = Timer.periodic(const Duration(seconds: 4), (_) async {
-      if (_paid || !mounted) return;
-      try {
-        final status = await PayMongoService.getLinkStatus(widget.linkId);
-        if (status == 'paid' && mounted) {
-          _paid = true;
-          _poll?.cancel();
-          Navigator.of(context).pop(true);
-        }
-      } catch (_) {}
-    });
+    _openBrowser();
+    // Mobile: auto-poll so the screen closes automatically once payment lands.
+    // Web users tend to switch tabs, so manual check is less disruptive there.
+    if (!kIsWeb) _startPolling();
   }
 
   @override
@@ -104,16 +52,68 @@ class _MobileWebViewState extends State<_MobileWebView> {
     super.dispose();
   }
 
-  Future<void> _promptLeave() async {
+  Future<void> _openBrowser() async {
+    // file_utils uses dart:html window.open on web and url_launcher on mobile,
+    // both of which reliably open the URL outside the app.
+    await file_utils.openFileInNewTab(widget.checkoutUrl);
+    if (mounted) setState(() => _opened = true);
+  }
+
+  void _startPolling() {
+    _poll = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (!mounted) return;
+      try {
+        final status = await PayMongoService.getLinkStatus(widget.linkId);
+        if (status == 'paid' && mounted) {
+          _poll?.cancel();
+          Navigator.of(context).pop(true);
+        }
+      } catch (_) {}
+    });
+  }
+
+  Future<void> _checkPayment() async {
+    _poll?.cancel();
+    setState(() { _checking = true; _message = null; });
+    try {
+      final status = await PayMongoService.getLinkStatus(widget.linkId);
+      if (!mounted) return;
+      if (status == 'paid') {
+        Navigator.of(context).pop(true);
+      } else {
+        if (!kIsWeb) _startPolling(); // resume auto-poll on mobile
+        setState(() {
+          _checking = false;
+          _message  = 'Payment not yet detected. Finish payment in the browser '
+              'then tap "I\'ve Paid" again.';
+        });
+      }
+    } catch (e) {
+      if (!kIsWeb) _startPolling();
+      if (mounted) {
+        setState(() {
+          _checking = false;
+          _message  = 'Could not verify payment: $e';
+        });
+      }
+    }
+  }
+
+  Future<bool> _confirmLeave() async {
     final leave = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1a1a2e),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+        ),
         title: const Text('Leave payment?',
-            style: TextStyle(color: Colors.white)),
+            style: TextStyle(color: Colors.white, fontSize: 16,
+                fontWeight: FontWeight.bold)),
         content: const Text(
           'Your order is saved. Complete payment anytime from My Orders.',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: Colors.white70, fontSize: 13),
         ),
         actions: [
           TextButton(
@@ -127,117 +127,7 @@ class _MobileWebViewState extends State<_MobileWebView> {
         ],
       ),
     );
-    if ((leave ?? false) && mounted) Navigator.of(context).pop(false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _promptLeave();
-      },
-      child: Scaffold(
-        backgroundColor: const Color(0xFF0f0f23),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF1a1a2e),
-          automaticallyImplyLeading: false,
-          leading: IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: _promptLeave,
-          ),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Secure Payment',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold)),
-              Text(
-                '${widget.orderId}  ·  ₱${widget.payAmount.toStringAsFixed(2)}',
-                style: const TextStyle(color: Colors.white38, fontSize: 11),
-              ),
-            ],
-          ),
-          actions: [
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: SizedBox(
-                  width: 18, height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppTheme.gold),
-                ),
-              ),
-          ],
-        ),
-        body: WebViewWidget(controller: _wvc),
-      ),
-    );
-  }
-}
-
-// ── Web fallback: opens external tab + "I've paid" check button ───────────────
-
-class _WebFallback extends StatefulWidget {
-  final String checkoutUrl;
-  final String linkId;
-  final String orderId;
-  final double payAmount;
-
-  const _WebFallback({
-    required this.checkoutUrl,
-    required this.linkId,
-    required this.orderId,
-    required this.payAmount,
-  });
-
-  @override
-  State<_WebFallback> createState() => _WebFallbackState();
-}
-
-class _WebFallbackState extends State<_WebFallback> {
-  bool _opened   = false;
-  bool _checking = false;
-  String? _message;
-
-  @override
-  void initState() {
-    super.initState();
-    _openTab();
-  }
-
-  Future<void> _openTab() async {
-    final uri = Uri.parse(widget.checkoutUrl);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (mounted) setState(() => _opened = true);
-    }
-  }
-
-  Future<void> _checkPayment() async {
-    setState(() { _checking = true; _message = null; });
-    try {
-      final status = await PayMongoService.getLinkStatus(widget.linkId);
-      if (!mounted) return;
-      if (status == 'paid') {
-        Navigator.of(context).pop(true);
-      } else {
-        setState(() {
-          _checking = false;
-          _message  = 'Payment not yet detected. Complete the payment in '
-              'the browser tab and try again.';
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _checking = false;
-          _message  = 'Could not verify payment: $e';
-        });
-      }
-    }
+    return leave ?? false;
   }
 
   @override
@@ -246,29 +136,8 @@ class _WebFallbackState extends State<_WebFallback> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        final leave = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF1a1a2e),
-            title: const Text('Cancel payment?',
-                style: TextStyle(color: Colors.white)),
-            content: const Text(
-              'Your order is saved. You can pay later from My Orders.',
-              style: TextStyle(color: Colors.white70),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Stay', style: TextStyle(color: AppTheme.gold)),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
-              ),
-            ],
-          ),
-        );
-        if ((leave ?? false) && mounted) Navigator.of(context).pop(false);
+        final leave = await _confirmLeave();
+        if (leave && mounted) Navigator.of(context).pop(false);
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF0f0f23),
@@ -277,20 +146,22 @@ class _WebFallbackState extends State<_WebFallback> {
           automaticallyImplyLeading: false,
           leading: IconButton(
             icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () async {
+              final leave = await _confirmLeave();
+              if (leave && mounted) Navigator.of(context).pop(false);
+            },
           ),
           title: const Text('Complete Payment',
-              style: TextStyle(
-                  color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+              style: TextStyle(color: Colors.white, fontSize: 15,
+                  fontWeight: FontWeight.bold)),
         ),
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(28),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // PayMongo icon area
+                // Icon
                 Container(
                   width: 80, height: 80,
                   decoration: BoxDecoration(
@@ -302,23 +173,19 @@ class _WebFallbackState extends State<_WebFallback> {
                   child: const Icon(Icons.payment_rounded,
                       color: AppTheme.gold, size: 38),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 22),
 
                 Text(
                   '₱${widget.payAmount.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      color: AppTheme.gold,
-                      fontSize: 36,
+                  style: const TextStyle(color: AppTheme.gold, fontSize: 36,
                       fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  widget.orderId,
-                  style: const TextStyle(color: Colors.white54, fontSize: 13),
-                ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 4),
+                Text(widget.orderId,
+                    style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                const SizedBox(height: 28),
 
-                // Instructions
+                // Steps
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -331,7 +198,7 @@ class _WebFallbackState extends State<_WebFallback> {
                       _Step(
                         number: '1',
                         text: _opened
-                            ? 'PayMongo checkout opened in a new tab'
+                            ? 'PayMongo checkout opened in your browser'
                             : 'Opening PayMongo checkout…',
                         done: _opened,
                       ),
@@ -342,14 +209,16 @@ class _WebFallbackState extends State<_WebFallback> {
                             '(scan the QR or enter details)',
                       ),
                       const SizedBox(height: 12),
-                      const _Step(
+                      _Step(
                         number: '3',
-                        text: 'Come back here and tap "I\'ve Paid"',
+                        text: kIsWeb
+                            ? 'Come back here and tap "I\'ve Paid"'
+                            : 'Return to this screen — it will update automatically',
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 24),
 
                 // Error / info message
                 if (_message != null) ...[
@@ -370,7 +239,7 @@ class _WebFallbackState extends State<_WebFallback> {
                   const SizedBox(height: 16),
                 ],
 
-                // Primary: confirm payment
+                // "I've Paid" button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -382,7 +251,9 @@ class _WebFallbackState extends State<_WebFallback> {
                                 strokeWidth: 2, color: Colors.black))
                         : const Icon(Icons.check_circle_rounded),
                     label: Text(
-                      _checking ? 'Checking payment…' : "I've Paid",
+                      _checking
+                          ? 'Checking payment…'
+                          : kIsWeb ? "I've Paid" : "Check Payment Status",
                       style: const TextStyle(
                           fontWeight: FontWeight.bold, fontSize: 15),
                     ),
@@ -391,15 +262,17 @@ class _WebFallbackState extends State<_WebFallback> {
                 ),
                 const SizedBox(height: 12),
 
-                // Secondary: reopen tab
+                // Reopen / open browser button
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: _openTab,
+                    onPressed: _openBrowser,
                     icon: const Icon(Icons.open_in_new_rounded,
                         color: Colors.white54, size: 16),
-                    label: const Text('Reopen Payment Page',
-                        style: TextStyle(color: Colors.white54)),
+                    label: Text(
+                      _opened ? 'Reopen Payment Page' : 'Open Payment Page',
+                      style: const TextStyle(color: Colors.white54),
+                    ),
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(
                           color: Colors.white.withValues(alpha: 0.15)),
@@ -409,6 +282,29 @@ class _WebFallbackState extends State<_WebFallback> {
                     ),
                   ),
                 ),
+
+                if (!kIsWeb) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 12, height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Waiting for payment…',
+                        style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.35),
+                            fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -446,10 +342,8 @@ class _Step extends StatelessWidget {
           child: done
               ? const Icon(Icons.check, color: Colors.green, size: 13)
               : Text(number,
-                  style: const TextStyle(
-                      color: AppTheme.gold,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold)),
+                  style: const TextStyle(color: AppTheme.gold,
+                      fontSize: 11, fontWeight: FontWeight.bold)),
         ),
       ),
       const SizedBox(width: 12),

@@ -23,7 +23,14 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(p['name'],p.get\\('version',''\\)\\) for p in d.get\\('packages',[]\\) if 'firebase_auth' in p['name'].lower\\(\\)]\")",
       "Bash(python *)",
       "Bash(dir /s /b \"%LOCALAPPDATA%\\\\Pub\\\\Cache\\\\hosted\\\\pub.dev\\\\firebase_auth*\")",
-      "Bash(dir android\\\\app\\\\src\\\\main\\\\res\\\\mipmap-hdpi /b)"
+      "Bash(dir android\\\\app\\\\src\\\\main\\\\res\\\\mipmap-hdpi /b)",
+      "Bash(Test-Path *)",
+      "Bash(firebase functions:config:get)",
+      "Bash(firebase functions:log --only pmCreateLink)",
+      "Bash(firebase functions:log)",
+      "Bash(git fetch *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

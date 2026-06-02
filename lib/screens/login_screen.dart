@@ -98,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen>
         break;
       case 'admin':
         if (!kIsWeb) {
-          _snack('Admin access is only available on the web.');
+          _snack('Admin access is only available on the web.', isError: true);
           await _authService.signOut();
           return;
         }

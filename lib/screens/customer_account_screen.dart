@@ -1744,31 +1744,46 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
   @override
   void initState() {
     super.initState();
-    if (widget.status != 'awaiting_payment') {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _validateStoredLink(),
-      );
-    }
+    // Validate on load for ALL statuses — awaiting_payment links expire too.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _validateStoredLink(),
+    );
   }
 
   Future<void> _validateStoredLink() async {
-    final linkId = widget.order['balance_link_id'] as String?;
+    final isInitial = widget.status == 'awaiting_payment';
+    final linkId = isInitial
+        ? widget.order['paymongo_link_id'] as String?
+        : widget.order['balance_link_id']  as String?;
     if (linkId == null || !mounted) return;
     try {
-      await PayMongoService.getLinkStatus(linkId);
+      final status = await PayMongoService.getLinkStatus(linkId);
+      if (status == 'paid') return; // already paid — leave as-is
     } catch (_) {
+      // getLinkStatus threw → link is expired or belongs to a different API key.
       if (!mounted) return;
       setState(() => _stale = true);
       final orderId = widget.order['order_id']?.toString() ?? widget.docId;
-      FirebaseFirestore.instance
-          .collection('Orders')
-          .doc(orderId)
-          .update({
-            'balance_link_id': FieldValue.delete(),
-            'balance_checkout_url': FieldValue.delete(),
-            'balance_link_amount': FieldValue.delete(),
-          })
-          .catchError((_) {});
+      if (isInitial) {
+        FirebaseFirestore.instance
+            .collection('Orders')
+            .doc(orderId)
+            .update({
+              'paymongo_link_id':      FieldValue.delete(),
+              'paymongo_checkout_url': FieldValue.delete(),
+            })
+            .catchError((_) {});
+      } else {
+        FirebaseFirestore.instance
+            .collection('Orders')
+            .doc(orderId)
+            .update({
+              'balance_link_id':      FieldValue.delete(),
+              'balance_checkout_url': FieldValue.delete(),
+              'balance_link_amount':  FieldValue.delete(),
+            })
+            .catchError((_) {});
+      }
       if (mounted) await _generate();
     }
   }
@@ -1784,27 +1799,43 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
   Future<void> _generate() async {
     setState(() => _generating = true);
     try {
-      final orderId = widget.order['order_id']?.toString() ?? widget.docId;
+      final orderId   = widget.order['order_id']?.toString() ?? widget.docId;
+      final isInitial = widget.status == 'awaiting_payment';
+      final total     = (widget.order['total_price'] as num?)?.toDouble() ?? 0;
+      final amount    = isInitial
+          ? (total * 0.5 * 100).round() / 100
+          : widget.remaining;
+
       final link = await PayMongoService.createLink(
-        amount: widget.remaining,
-        description: 'Balance Payment $orderId (Imprenta X)',
+        amount: amount,
+        description: isInitial
+            ? 'Downpayment $orderId (Imprenta X)'
+            : 'Balance Payment $orderId (Imprenta X)',
       );
+
+      final orderUpdates = isInitial
+          ? {
+              'paymongo_link_id':      link.id,
+              'paymongo_checkout_url': link.checkoutUrl,
+            }
+          : {
+              'balance_link_id':      link.id,
+              'balance_checkout_url': link.checkoutUrl,
+              'balance_link_amount':  amount,
+            };
+
       await Future.wait([
-        FirebaseFirestore.instance
-            .collection('PayMongoLinks')
-            .doc(link.id)
-            .set({
-              'order_id': orderId,
-              'purpose': 'balance',
-              'expected_amount': widget.remaining,
-              'processed': false,
-              'created_at': FieldValue.serverTimestamp(),
-            }),
-        FirebaseFirestore.instance.collection('Orders').doc(orderId).update({
-          'balance_link_id': link.id,
-          'balance_checkout_url': link.checkoutUrl,
-          'balance_link_amount': widget.remaining,
+        FirebaseFirestore.instance.collection('PayMongoLinks').doc(link.id).set({
+          'order_id':        orderId,
+          'purpose':         isInitial ? 'downpayment' : 'balance',
+          'expected_amount': amount,
+          'processed':       false,
+          'created_at':      FieldValue.serverTimestamp(),
         }),
+        FirebaseFirestore.instance
+            .collection('Orders')
+            .doc(orderId)
+            .update(orderUpdates),
       ]);
       if (mounted) setState(() => _localUrl = link.checkoutUrl);
     } catch (e) {
