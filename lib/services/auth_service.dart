@@ -882,10 +882,10 @@ class AuthService {
 
   // ── Sign out ──────────────────────────────────────────────────────────────
 
-Future<void> signOut() async {
-  await NotificationService.clearToken();
-  await _auth.signOut();
-}
+  Future<void> signOut() async {
+    await NotificationService.clearToken();
+    await _auth.signOut();
+  }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -918,5 +918,63 @@ Future<void> signOut() async {
       await _firestore.collection('User').doc(uid).set(data);
     }
     return 'customer';
+  }
+
+  // create customers manually code
+  Future<({String? uid, String? customerId, String? error})>
+  createCustomerAccountManually({
+    required String email,
+    required String fullName,
+    required String password,
+  }) async {
+    FirebaseApp? secondaryApp;
+    try {
+      secondaryApp = await _createSecondaryApp();
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+
+      UserCredential cred;
+      try {
+        cred = await secondaryAuth.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use') {
+          return (
+            uid: null,
+            customerId: null,
+            error: 'That email is already registered.',
+          );
+        }
+        return (
+          uid: null,
+          customerId: null,
+          error: e.message ?? 'Failed to create account.',
+        );
+      }
+
+      final uid = cred.user!.uid;
+      await secondaryAuth.signOut();
+
+      final customerId = await generateCustomerId();
+      await _firestore.collection('User').doc(uid).set({
+        'email': email,
+        'full_name': fullName,
+        'customer_id': customerId,
+        'employee_id': null,
+        'user_role': 'customer',
+        'must_change_password': false,
+        'temp_password': null,
+        'date_created': FieldValue.serverTimestamp(),
+        'is_deleted': false,
+        'is_disabled': false,
+      });
+
+      return (uid: uid, customerId: customerId, error: null);
+    } catch (e) {
+      return (uid: null, customerId: null, error: 'Failed: $e');
+    } finally {
+      await secondaryApp?.delete();
+    }
   }
 }

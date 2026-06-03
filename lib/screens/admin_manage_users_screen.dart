@@ -202,6 +202,40 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       );
   }
 
+  Future<void> _createCustomer() async {
+    // Show form dialog to collect name, email, password
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.35),
+      builder: (ctx) => const _CreateCustomerDialog(),
+    );
+    if (result == null) return;
+
+    setState(() => _isCreating = true);
+    final res = await _authService.createCustomerAccountManually(
+      email: result['email']!,
+      fullName: result['fullName']!,
+      password: result['password']!,
+    );
+    if (!mounted) return;
+    setState(() => _isCreating = false);
+
+    if (res.error != null) {
+      _snack(res.error!, isError: true);
+      return;
+    }
+
+    if (mounted) {
+      _showCredentialsDialog(
+        role: 'Customer',
+        idLabel: 'Customer ID',
+        idValue: res.customerId ?? '',
+        password: result['password']!,
+      );
+    }
+  }
+
   // ── Dialogs ────────────────────────────────────────────────────────────────
   void _showCredentialsDialog({
     required String role,
@@ -739,6 +773,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         isCreating: _isCreating,
         onCreateEmployee: _createEmployee,
         onCreateAdmin: _createAdmin,
+        onCreateCustomer: _createCustomer, // add this
       ),
     ],
   );
@@ -1697,10 +1732,12 @@ class _CreateButton extends StatefulWidget {
   final bool isCreating;
   final VoidCallback onCreateEmployee;
   final VoidCallback onCreateAdmin;
+  final VoidCallback onCreateCustomer; // ADD THIS
   const _CreateButton({
     required this.isCreating,
     required this.onCreateEmployee,
     required this.onCreateAdmin,
+    required this.onCreateCustomer, // ADD THIS
   });
 
   @override
@@ -1800,6 +1837,20 @@ class _CreateButtonState extends State<_CreateButton>
                             onTap: () {
                               _removeOverlay();
                               widget.onCreateEmployee();
+                            },
+                          ),
+                          // After the existing Create Employee option:
+                          const SizedBox(height: 4),
+                          _dropdownOption(
+                            icon: Icons.person_add_rounded,
+                            label: 'Create Customer',
+                            subtitle: 'Manual customer account',
+                            color: _G.accentBlue,
+                            bg: const Color(0xFFDBEAFE),
+                            onTap: () {
+                              _removeOverlay();
+                              widget
+                                  .onCreateCustomer(); // we'll add this callback below
                             },
                           ),
                         ],
@@ -1918,4 +1969,192 @@ class _CreateButtonState extends State<_CreateButton>
       ),
     );
   }
+}
+
+class _CreateCustomerDialog extends StatefulWidget {
+  const _CreateCustomerDialog();
+
+  @override
+  State<_CreateCustomerDialog> createState() => _CreateCustomerDialogState();
+}
+
+class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  bool _obscure = true;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      contentPadding: EdgeInsets.zero,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      content: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            width: 420,
+            decoration: _glassDialog(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _GlassDialogHeader(
+                  icon: Icons.person_add_rounded,
+                  iconColor: _G.accentBlue,
+                  title: 'Create Customer Account',
+                ),
+                Divider(height: 1, color: _G.borderMid),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Full Name
+                      _field('Full Name', _nameCtrl, Icons.person_outline),
+                      const SizedBox(height: 12),
+                      // Email
+                      _field(
+                        'Email',
+                        _emailCtrl,
+                        Icons.email_outlined,
+                        keyboard: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 12),
+                      // Password
+                      _fieldPassword(),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _G.textSecondary,
+                              side: const BorderSide(
+                                color: _G.borderMid,
+                                width: 0.9,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 10,
+                              ),
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () {
+                              final name = _nameCtrl.text.trim();
+                              final email = _emailCtrl.text.trim();
+                              final password = _passwordCtrl.text.trim();
+                              if (name.isEmpty ||
+                                  email.isEmpty ||
+                                  password.isEmpty)
+                                return;
+                              Navigator.pop(context, {
+                                'fullName': name,
+                                'email': email,
+                                'password': password,
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _G.accentBlue,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 10,
+                              ),
+                            ),
+                            child: const Text(
+                              'Create',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _field(
+    String hint,
+    TextEditingController ctrl,
+    IconData icon, {
+    TextInputType? keyboard,
+  }) => TextField(
+    controller: ctrl,
+    keyboardType: keyboard,
+    style: const TextStyle(color: _G.textPrimary, fontSize: 13),
+    decoration: InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: _G.textMuted, fontSize: 13),
+      prefixIcon: Icon(icon, size: 16, color: _G.textMuted),
+      filled: true,
+      fillColor: _G.surfaceThin,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _G.borderMid, width: 0.9),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _G.navyBlue, width: 1.5),
+      ),
+    ),
+  );
+
+  Widget _fieldPassword() => TextField(
+    controller: _passwordCtrl,
+    obscureText: _obscure,
+    style: const TextStyle(color: _G.textPrimary, fontSize: 13),
+    decoration: InputDecoration(
+      hintText: 'Password',
+      hintStyle: const TextStyle(color: _G.textMuted, fontSize: 13),
+      prefixIcon: const Icon(Icons.lock_outline, size: 16, color: _G.textMuted),
+      suffixIcon: IconButton(
+        icon: Icon(
+          _obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+          size: 16,
+          color: _G.textMuted,
+        ),
+        onPressed: () => setState(() => _obscure = !_obscure),
+      ),
+      filled: true,
+      fillColor: _G.surfaceThin,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _G.borderMid, width: 0.9),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _G.navyBlue, width: 1.5),
+      ),
+    ),
+  );
 }
