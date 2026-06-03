@@ -604,23 +604,28 @@ class _JobQueueSectionState extends State<_JobQueueSection>
             indent: 16,
             endIndent: 16,
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: _DeadlineAlertBanner(),
-          ),
-          const SizedBox(height: 8),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TabBarView(
-                controller: _tabs,
-                children: const [
-                  _QueueList(jobStatus: 'pending'),
-                  _QueueList(jobStatus: 'active'),
-                  _ReadyForPickupList(),
-                  _QueueList(jobStatus: 'cancelled'),
-                  _EmployeeOrderHistory(),
-                ],
+            child: NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: const _DeadlineAlertBanner(),
+                  ),
+                ),
+              ],
+              body: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TabBarView(
+                  controller: _tabs,
+                  children: const [
+                    _QueueList(jobStatus: 'pending'),
+                    _QueueList(jobStatus: 'active'),
+                    _ReadyForPickupList(),
+                    _QueueList(jobStatus: 'cancelled'),
+                    _EmployeeOrderHistory(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -4016,77 +4021,92 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
                 ),
 
                 if (_expanded)
-                  ...due.map((doc) {
-                    final data     = doc.data() as Map<String, dynamic>;
-                    final orderId  = data['order_id']?.toString() ?? doc.id;
-                    final customer = data['customer_name']?.toString() ?? '—';
-                    final status   = data['status']?.toString() ?? '';
-                    final ts       = data['estimated_completion'] as Timestamp?;
-                    final dueDate  = ts?.toDate().toLocal();
-                    final isOverdue = dueDate != null && dueDate.isBefore(now);
-                    final todayMid  = DateTime(now.year, now.month, now.day);
-                    final dueMid    = dueDate != null
-                        ? DateTime(dueDate.year, dueDate.month, dueDate.day)
-                        : null;
-                    final diff     = dueMid?.difference(todayMid).inDays;
-                    final rowColor = isOverdue ? _Glass.accentRose : _Glass.accentAmber;
-                    final dueLabel = dueDate == null
-                        ? '—'
-                        : diff! < 0
-                            ? 'Overdue (${_fmtBanner(dueDate)})'
-                            : diff == 0
-                                ? 'Due TODAY'
-                                : 'Due ${_fmtBanner(dueDate)}';
-                    final statusLabel = status == 'in_production' ? 'Active' : 'Pending';
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 240),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: due.map((doc) {
+                          final data      = doc.data() as Map<String, dynamic>;
+                          final orderId   = data['order_id']?.toString() ?? doc.id;
+                          final customer  = data['customer_name']?.toString() ?? '—';
+                          final status    = data['status']?.toString() ?? '';
+                          final ts        = data['estimated_completion'] as Timestamp?;
+                          final dueDate   = ts?.toDate().toLocal();
+                          final isOverdue = dueDate != null && dueDate.isBefore(now);
+                          final todayMid  = DateTime(now.year, now.month, now.day);
+                          final dueMid    = dueDate != null
+                              ? DateTime(dueDate.year, dueDate.month, dueDate.day)
+                              : null;
+                          final diff      = dueMid?.difference(todayMid).inDays;
+                          final rowColor  = isOverdue ? _Glass.accentRose : _Glass.accentAmber;
+                          final dueLabel  = dueDate == null
+                              ? '—'
+                              : diff! < 0
+                                  ? 'Overdue (${_fmtBanner(dueDate)})'
+                                  : diff == 0
+                                      ? 'Due TODAY'
+                                      : 'Due ${_fmtBanner(dueDate)}';
+                          final statusLabel = status == 'in_production' ? 'Active' : 'Pending';
 
-                    return Container(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 22),
-                          Expanded(
-                            child: Text(
-                              '$orderId · $customer',
-                              style: const TextStyle(
-                                color: _Glass.textSecondary,
-                                fontSize: 11,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                          return Container(
+                            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                            child: Row(
+                              children: [
+                                const SizedBox(width: 22),
+                                Expanded(
+                                  child: Text(
+                                    '$orderId · $customer',
+                                    style: const TextStyle(
+                                      color: _Glass.textSecondary,
+                                      fontSize: 13,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: _Glass.surfaceThin,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                        color: _Glass.borderMid, width: 0.7),
+                                  ),
+                                  child: Text(
+                                    statusLabel,
+                                    style: const TextStyle(
+                                      color: _Glass.textMuted,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: rowColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    dueLabel,
+                                    style: TextStyle(
+                                      color: rowColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _Glass.surfaceThin,
-                              borderRadius: BorderRadius.circular(5),
-                              border: Border.all(color: _Glass.borderMid, width: 0.7),
-                            ),
-                            child: Text(
-                              statusLabel,
-                              style: const TextStyle(color: _Glass.textMuted, fontSize: 9, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: rowColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              dueLabel,
-                              style: TextStyle(
-                                color: rowColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
+                          );
+                        }).toList(),
                       ),
-                    );
-                  }),
+                    ),
+                  ),
               ],
             ),
           ),

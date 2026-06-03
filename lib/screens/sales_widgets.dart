@@ -2503,7 +2503,7 @@ class _InteractiveChartState extends State<_InteractiveChart> {
           Text(
             b.total == 0
                 ? 'No sales'
-                : '₱${b.total >= 1000 ? '${(b.total / 1000).toStringAsFixed(1)}k' : b.total.toStringAsFixed(2)}',
+                : '₱${b.total.toStringAsFixed(2)}',
             style: const TextStyle(
               color: AppTheme.gold,
               fontSize: 13,
