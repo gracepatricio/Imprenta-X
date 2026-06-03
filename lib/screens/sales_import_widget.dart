@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:intl/intl.dart';
+import '../services/sales_file_picker.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 class _G {
@@ -118,27 +118,23 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
 
   // ── File pick + parse ──────────────────────────────────────────────────────
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xlsx', 'xls', 'csv'],
-      withData: true,
-    );
-    if (result == null || result.files.isEmpty) return;
+    final picked = await pickSalesFile();
+    if (picked == null) return;
 
-    final file = result.files.first;
+    final (fileName, bytes) = picked;
     setState(() {
       _step     = _ImportStep.parsing;
-      _fileName = file.name;
+      _fileName = fileName;
       _errorMsg = null;
       _rows     = [];
     });
 
     try {
       List<_SalesRow> parsed;
-      if (file.name.toLowerCase().endsWith('.csv')) {
-        parsed = _parseCsv(utf8.decode(file.bytes!));
+      if (fileName.toLowerCase().endsWith('.csv')) {
+        parsed = _parseCsv(utf8.decode(bytes));
       } else {
-        parsed = _parseXlsx(file.bytes!);
+        parsed = _parseXlsx(bytes);
       }
 
       if (parsed.isEmpty) throw Exception('No valid data rows found.');

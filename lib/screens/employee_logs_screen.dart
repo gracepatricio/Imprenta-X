@@ -8,6 +8,7 @@ import 'employee_pos_screen.dart';
 import 'invoice_screen.dart';
 import 'design_file_viewer.dart';
 import '../services/inventory_service.dart';
+import '../services/turnaround_service.dart';
 
 // =============================================================================
 // Design Tokens — Liquid Glass (aligned with EmployeeInventoryScreen)
@@ -602,6 +603,10 @@ class _JobQueueSectionState extends State<_JobQueueSection>
             color: _Glass.borderDim,
             indent: 16,
             endIndent: 16,
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: _DeadlineAlertBanner(),
           ),
           const SizedBox(height: 8),
           Expanded(
@@ -1313,40 +1318,13 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
 
   int get _turnaround {
     if (_items.isEmpty) return 1;
-    final days = _items.fold<double>(0.0, (s, item) {
-      final cat = (item.productData['category']?.toString() ?? '')
-          .toLowerCase();
-      final qty = item.qty;
-      double d;
-      if (cat.contains('calling card')) {
-        if (qty <= 100)
-          d = 0.5;
-        else if (qty <= 500)
-          d = 1.0;
-        else
-          d = (qty / 500).ceilToDouble().clamp(2.0, 7.0);
-      } else if (cat.contains('sticker') || cat.contains('photo')) {
-        if (qty <= 50)
-          d = 0.5;
-        else if (qty <= 200)
-          d = 1.0;
-        else
-          d = (qty / 200).ceilToDouble().clamp(2.0, 5.0);
-      } else if (cat.contains('large format')) {
-        d = 1.0;
-      } else if (cat.contains('invitation')) {
-        if (qty <= 50)
-          d = 1.0;
-        else if (qty <= 200)
-          d = 2.0;
-        else
-          d = 3.0;
-      } else {
-        d = 1.0;
-      }
-      return s + d;
-    });
-    return days.ceil().clamp(1, 21);
+    final products = _items.map((item) => {
+      'category': item.productData['category']?.toString() ?? '',
+      'qty':      item.qty,
+      if (item.widthFt  != null) 'width_ft':  item.widthFt,
+      if (item.heightFt != null) 'height_ft': item.heightFt,
+    }).toList();
+    return TurnaroundService.computeOrderDays(products);
   }
 
   Future<String> _nextId(String counter, String prefix) async {
@@ -1439,15 +1417,16 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
 
       final queueRef = db.collection('Order_Queue').doc();
       batch.set(queueRef, {
-        'order_id': orderId,
-        'customer_uid': '',
-        'customer_name': customerName,
-        'job_status': 'pending',
-        'turnaround_days': turnaroundDays,
-        'products': products,
-        'total_price': total,
-        'walk_in': true,
-        'created_at': now,
+        'order_id':             orderId,
+        'customer_uid':         '',
+        'customer_name':        customerName,
+        'job_status':           'pending',
+        'turnaround_days':      turnaroundDays,
+        'estimated_completion': Timestamp.fromDate(estimatedCompletion),
+        'products':             products,
+        'total_price':          total,
+        'walk_in':              true,
+        'created_at':           now,
       });
 
       final invoiceRef = db.collection('Invoices').doc(invoiceId);
@@ -3554,6 +3533,16 @@ class _QueueCard extends StatelessWidget {
         (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final dateStr = _fmtDate(data['created_at']);
 
+    // Estimated completion: stored directly (new orders) or computed as fallback
+    final DateTime? estimatedCompletion = (() {
+      final ts = data['estimated_completion'] as Timestamp?;
+      if (ts != null) return ts.toDate().toLocal();
+      final created = (data['created_at'] as Timestamp?)?.toDate().toLocal();
+      final ta = data['turnaround_days'] as int?;
+      if (created == null || ta == null) return null;
+      return created.add(Duration(days: ta));
+    })();
+
     final isCompleted =
         data['is_completed'] as bool? ?? (jobStatus == 'completed');
 
@@ -3745,6 +3734,10 @@ class _QueueCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (estimatedCompletion != null && jobStatus != 'cancelled') ...[
+              const SizedBox(height: 6),
+              _DueDateRow(dueDate: estimatedCompletion),
+            ],
             const SizedBox(height: 12),
 
             if (jobStatus != 'cancelled')
@@ -3866,5 +3859,245 @@ class _QueueCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// =============================================================================
+// _DueDateRow — compact due-date chip shown on each queue card
+// =============================================================================
+class _DueDateRow extends StatelessWidget {
+  final DateTime dueDate;
+  const _DueDateRow({required this.dueDate});
+
+  @override
+  Widget build(BuildContext context) {
+    final now  = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final due   = DateTime(dueDate.year, dueDate.month, dueDate.day);
+    final diff  = due.difference(today).inDays;
+
+    final Color color;
+    final String label;
+
+    if (diff < 0) {
+      color = _Glass.accentRose;
+      label = 'Overdue by ${-diff} day${diff == -1 ? '' : 's'} — ${_fmt(dueDate)}';
+    } else if (diff == 0) {
+      color = _Glass.accentRose;
+      label = 'Target completion: TODAY';
+    } else if (diff == 1) {
+      color = _Glass.accentAmber;
+      label = 'Target completion: Tomorrow (${_fmt(dueDate)})';
+    } else {
+      color = _Glass.accentEmerald;
+      label = 'Target completion: ${_fmt(dueDate)}';
+    }
+
+    return Row(
+      children: [
+        Icon(Icons.flag_rounded, size: 12, color: color.withValues(alpha: 0.85)),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: diff <= 0 ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _fmt(DateTime d) {
+    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${m[d.month - 1]} ${d.day}, ${d.year}';
+  }
+}
+
+// =============================================================================
+// _DeadlineAlertBanner — sticky alert at top of Job Queue for urgent orders
+// =============================================================================
+class _DeadlineAlertBanner extends StatefulWidget {
+  const _DeadlineAlertBanner();
+  @override
+  State<_DeadlineAlertBanner> createState() => _DeadlineAlertBannerState();
+}
+
+class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
+  bool _expanded = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final now       = DateTime.now();
+    final threshold = now.add(const Duration(days: 2));
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('Orders')
+          .where('status', whereIn: ['pending', 'in_production'])
+          .snapshots(),
+      builder: (ctx, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+
+        final due = snap.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final ts = data['estimated_completion'] as Timestamp?;
+          if (ts == null) return false;
+          return ts.toDate().isBefore(threshold);
+        }).toList()
+          ..sort((a, b) {
+            final ta = ((a.data() as Map)['estimated_completion'] as Timestamp?)?.toDate();
+            final tb = ((b.data() as Map)['estimated_completion'] as Timestamp?)?.toDate();
+            if (ta == null && tb == null) return 0;
+            if (ta == null) return 1;
+            if (tb == null) return -1;
+            return ta.compareTo(tb);
+          });
+
+        if (due.isEmpty) return const SizedBox.shrink();
+
+        final overdueCount = due.where((doc) {
+          final ts = ((doc.data() as Map)['estimated_completion'] as Timestamp?)?.toDate();
+          return ts != null && ts.isBefore(now);
+        }).length;
+
+        final isUrgent = overdueCount > 0;
+        final accent   = isUrgent ? _Glass.accentRose : _Glass.accentAmber;
+
+        return AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          alignment: Alignment.topCenter,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 4),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: accent.withValues(alpha: 0.28)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: () => setState(() => _expanded = !_expanded),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isUrgent ? Icons.warning_amber_rounded : Icons.access_time_rounded,
+                          size: 14,
+                          color: accent,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            isUrgent
+                                ? '$overdueCount overdue${due.length - overdueCount > 0 ? ' · ${due.length - overdueCount} due soon' : ''} — action needed'
+                                : '${due.length} order${due.length == 1 ? '' : 's'} due within 2 days',
+                            style: TextStyle(
+                              color: accent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                          size: 16,
+                          color: accent.withValues(alpha: 0.7),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                if (_expanded)
+                  ...due.map((doc) {
+                    final data     = doc.data() as Map<String, dynamic>;
+                    final orderId  = data['order_id']?.toString() ?? doc.id;
+                    final customer = data['customer_name']?.toString() ?? '—';
+                    final status   = data['status']?.toString() ?? '';
+                    final ts       = data['estimated_completion'] as Timestamp?;
+                    final dueDate  = ts?.toDate().toLocal();
+                    final isOverdue = dueDate != null && dueDate.isBefore(now);
+                    final todayMid  = DateTime(now.year, now.month, now.day);
+                    final dueMid    = dueDate != null
+                        ? DateTime(dueDate.year, dueDate.month, dueDate.day)
+                        : null;
+                    final diff     = dueMid?.difference(todayMid).inDays;
+                    final rowColor = isOverdue ? _Glass.accentRose : _Glass.accentAmber;
+                    final dueLabel = dueDate == null
+                        ? '—'
+                        : diff! < 0
+                            ? 'Overdue (${_fmtBanner(dueDate)})'
+                            : diff == 0
+                                ? 'Due TODAY'
+                                : 'Due ${_fmtBanner(dueDate)}';
+                    final statusLabel = status == 'in_production' ? 'Active' : 'Pending';
+
+                    return Container(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 22),
+                          Expanded(
+                            child: Text(
+                              '$orderId · $customer',
+                              style: const TextStyle(
+                                color: _Glass.textSecondary,
+                                fontSize: 11,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _Glass.surfaceThin,
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(color: _Glass.borderMid, width: 0.7),
+                            ),
+                            child: Text(
+                              statusLabel,
+                              style: const TextStyle(color: _Glass.textMuted, fontSize: 9, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: rowColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              dueLabel,
+                              style: TextStyle(
+                                color: rowColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _fmtBanner(DateTime d) {
+    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${m[d.month - 1]} ${d.day}';
   }
 }

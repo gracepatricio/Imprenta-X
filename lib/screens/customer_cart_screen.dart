@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image/image.dart' as img;
 import '../services/cart_manager.dart';
 import '../services/paymongo_service.dart';
+import '../services/turnaround_service.dart';
 import 'app_theme.dart';
 import 'payment_webview_screen.dart';
 import 'invoice_screen.dart';
@@ -135,18 +136,18 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     final minPay       = _downpayment;
 
     // Build per-item turnaround info for summary
-    final summaryItems   = selectedList.map((i) => items[i]).toList();
-    final turnaroundExact = summaryItems.fold<double>(
-        0.0, (sum, item) => sum + item.estimatedDaysExact);
-    final turnaroundDays = turnaroundExact.ceil().clamp(1, 21);
+    final summaryItems = selectedList.map((i) => items[i]).toList();
+    final productMapsPreview = summaryItems.map((item) => {
+      'category': item.category,
+      'qty':      item.quantity,
+      if (item.widthFt  != null) 'width_ft':  item.widthFt,
+      if (item.heightFt != null) 'height_ft': item.heightFt,
+    }).toList();
+    final turnaroundDays = TurnaroundService.computeOrderDays(productMapsPreview);
     final turnaroundLabel = () {
-      final d = turnaroundExact;
-      if (d <= 0.5) return 'Same day';
-      if (d <  1.0) return '< 1 day';
-      if (d == 1.0) return '~1 day';
-      if (d <= 1.5) return '~1–2 days';
-      if (d <= 2.0) return '~2 days';
-      return '~${d.ceil()} days';
+      if (turnaroundDays <= 1) return '~1 business day';
+      if (turnaroundDays <= 3) return '~$turnaroundDays business days';
+      return '~$turnaroundDays days';
     }();
 
     final amountCtrl = TextEditingController(text: minPay.toStringAsFixed(2));
@@ -582,12 +583,15 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
         });
       }
 
-      // 3. Turnaround
-      final selectedItems  = selectedList.map((i) => items[i]).toList();
-      final turnaroundDays = selectedItems
-          .fold<double>(0.0, (s, it) => s + it.estimatedDaysExact)
-          .ceil()
-          .clamp(1, 21);
+      // 3. Turnaround (order-level, accounts for multi-product complexity)
+      final selectedItems = selectedList.map((i) => items[i]).toList();
+      final productMaps   = selectedItems.map((item) => {
+        'category': item.category,
+        'qty':      item.quantity,
+        if (item.widthFt  != null) 'width_ft':  item.widthFt,
+        if (item.heightFt != null) 'height_ft': item.heightFt,
+      }).toList();
+      final turnaroundDays      = TurnaroundService.computeOrderDays(productMaps);
       final estimatedCompletion = DateTime.now().add(Duration(days: turnaroundDays));
 
       // 4. Create PayMongo link (Cloud Function also resolves pm.link redirect
@@ -722,14 +726,15 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     // Create Order_Queue entry
     final queueRef = FirebaseFirestore.instance.collection('Order_Queue').doc();
     batch.set(queueRef, {
-      'order_id':        orderId,
-      'customer_uid':    uid,
-      'customer_name':   customerName,
-      'job_status':      'pending',
-      'turnaround_days': turnaroundDays,
-      'products':        products,
-      'total_price':     total,
-      'created_at':      now,
+      'order_id':             orderId,
+      'customer_uid':         uid,
+      'customer_name':        customerName,
+      'job_status':           'pending',
+      'turnaround_days':      turnaroundDays,
+      'estimated_completion': Timestamp.fromDate(estimatedCompletion),
+      'products':             products,
+      'total_price':          total,
+      'created_at':           now,
     });
 
     await batch.commit();
