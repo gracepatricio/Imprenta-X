@@ -33,7 +33,13 @@
       "Bash(git commit -m ' *)",
       "Bash(git pull *)",
       "Bash(npm install *)",
-      "Bash(firebase functions:log --only pmCreateLink,pmGetStatus)"
+      "Bash(firebase functions:log --only pmCreateLink,pmGetStatus)",
+      "PowerShell(try { Get-ChildItem \"$env:APPDATA\\\\firebase\" } catch {}; try { Get-ChildItem \"$HOME\\\\.config\\\\firebase\" } catch {})",
+      "PowerShell(firebase login:list *)",
+      "PowerShell(node -e \"const p = require\\('path'\\); const os = require\\('os'\\); console.log\\(p.join\\(os.homedir\\(\\), '.config', 'configstore', 'firebase-tools.json'\\)\\)\" 2>&1)",
+      "PowerShell(npm list *)",
+      "Bash(Find C:\\\\Users\\\\ADMIN\\\\AndroidStudioProjects\\\\Imprenta-X-main\\\\lib\\\\screens *)",
+      "Bash(git checkout *)"
     ]
   }
 }
