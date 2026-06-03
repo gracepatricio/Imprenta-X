@@ -12,7 +12,7 @@ import '../services/file_utils.dart' as file_utils;
 import 'app_theme.dart';
 
 // =============================================================================
-// Design Tokens
+// Design Tokens — dark mode (standalone / full-screen)
 // =============================================================================
 class _G {
   static const Color activeBtn = Color(0xFFF5F0C0);
@@ -26,7 +26,30 @@ class _G {
   static const Color accentViolet = Color(0xFF8B5CF6);
 }
 
-// Blur + dark glass wrapper
+// =============================================================================
+// Light-mode tokens — used when ChatScreen is embedded inside the
+// light _BlurCard of EmployeeAccountScreen's Messages tab.
+// =============================================================================
+class _GL {
+  static const Color navyBlue = Color(0xFF0F1A2E);
+  static const Color textPrimary = Color(0xFF0F172A);
+  static const Color textSecondary = Color(0xCC0F172A);
+  static const Color textMuted = Color(0x880F172A);
+  static const Color borderMid = Color(0x70FFFFFF);
+  static const Color inputBorder = Color(0xFFD8DCE4);
+  static const Color surface = Color(0xFFF7F8FA);
+  static const Color surfaceMid = Color(0xF0FFFFFF);
+
+  static const Color accentAmber = Color(0xFFF59E0B);
+  static const Color accentEmerald = Color(0xFF10B981);
+  static const Color accentRose = Color(0xFFEF4444);
+
+  // Send button — keep the amber palette for continuity
+  static const Color activeBtn = Color(0xFF0F1A2E);
+  static const Color activeBtnText = Colors.white;
+}
+
+// Blur + dark glass wrapper (standalone use)
 class _GlassBox extends StatelessWidget {
   final Widget child;
   final double borderRadius;
@@ -68,8 +91,6 @@ class _GlassBox extends StatelessWidget {
 // =============================================================================
 // ChatScreen  (unified customer + employee general chat)
 // =============================================================================
-
-/// Unified chat screen used by both customers and employees.
 class ChatScreen extends StatefulWidget {
   final String customerUid;
   final String customerName;
@@ -98,7 +119,6 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _sending = false;
   String _senderName = '';
 
-  // Pending file (picked but not yet sent)
   bool _uploadingFile = false;
   String? _pendingFileUrl;
   String? _pendingFileName;
@@ -110,7 +130,7 @@ class _ChatScreenState extends State<ChatScreen> {
   late final CollectionReference _chatRef;
   StreamSubscription? _unreadSub;
 
-  // ── Lifecycle ────────────────────────────────────────────────────────────────
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
   void initState() {
@@ -145,7 +165,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  // ── Thread setup ─────────────────────────────────────────────────────────────
+  // ── Thread setup ───────────────────────────────────────────────────────────
 
   Future<void> _ensureThread() async {
     final snap = await _threadRef.get();
@@ -184,7 +204,7 @@ class _ChatScreenState extends State<ChatScreen> {
     await _addMessage({'text': lines.join('\n'), 'file_url': null});
   }
 
-  // ── Send ─────────────────────────────────────────────────────────────────────
+  // ── Send ───────────────────────────────────────────────────────────────────
 
   Future<void> _sendText() async {
     final text = _msgCtrl.text.trim();
@@ -215,16 +235,13 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
   }
 
-  // Pick + upload a file but do NOT send yet — user must press Send button.
   Future<void> _pickFile() async {
     if (_uploadingFile || _sending) return;
     try {
       final picked = await pickDesignFiles(multiple: false);
       if (picked == null || picked.isEmpty) return;
       final (fileName, fileBytes) = picked.first;
-
       setState(() => _uploadingFile = true);
-
       final ext = fileName.split('.').last.toLowerCase();
       final bytes = _compressIfImage(fileBytes, ext);
       final ts = DateTime.now().millisecondsSinceEpoch;
@@ -236,7 +253,6 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       final url = await task.ref.getDownloadURL();
       final fileType = {'jpg', 'jpeg', 'png'}.contains(ext) ? 'image' : 'file';
-
       if (mounted) {
         setState(() {
           _uploadingFile = false;
@@ -258,13 +274,11 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _clearPendingFile() {
-    setState(() {
-      _pendingFileUrl = null;
-      _pendingFileName = null;
-      _pendingFileType = null;
-    });
-  }
+  void _clearPendingFile() => setState(() {
+    _pendingFileUrl = null;
+    _pendingFileName = null;
+    _pendingFileType = null;
+  });
 
   Future<void> _addMessage(Map<String, dynamic> extra) async {
     final role = widget.isEmployee ? 'employee' : 'customer';
@@ -289,34 +303,48 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  // ── Delete ───────────────────────────────────────────────────────────────────
+  // ── Delete ─────────────────────────────────────────────────────────────────
 
   void _confirmDelete(String msgId, String senderUid) {
     if (senderUid != _myUid) return;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0C091F),
+        backgroundColor: widget.embedded
+            ? Colors.white
+            : const Color(0xFF0C091F),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+          side: BorderSide(
+            color: widget.embedded
+                ? _GL.inputBorder
+                : Colors.white.withValues(alpha: 0.15),
+          ),
         ),
-        title: const Text(
+        title: Text(
           'Delete Message',
           style: TextStyle(
-            color: _G.textPrimary,
+            color: widget.embedded ? _GL.textPrimary : _G.textPrimary,
             fontSize: 15,
             fontWeight: FontWeight.w700,
           ),
         ),
-        content: const Text(
+        content: Text(
           'This message will be removed for everyone.',
-          style: TextStyle(color: _G.textSecondary, fontSize: 13),
+          style: TextStyle(
+            color: widget.embedded ? _GL.textSecondary : _G.textSecondary,
+            fontSize: 13,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: _G.textMuted)),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: widget.embedded ? _GL.textMuted : _G.textMuted,
+              ),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -368,7 +396,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -451,7 +479,9 @@ class _ChatScreenState extends State<ChatScreen> {
     return '${mo[date.month - 1]} ${date.day}, ${date.year}';
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────────
+  // ── Header ─────────────────────────────────────────────────────────────────
+  // When embedded: light surface, no Active badge, thinner close button.
+  // When standalone: original dark _GlassBox header.
 
   Widget _buildHeader(BuildContext context) {
     final headerName = widget.isEmployee
@@ -459,6 +489,97 @@ class _ChatScreenState extends State<ChatScreen> {
         : 'Imprenta Inc.';
     final headerSub = widget.isEmployee ? 'Customer' : 'Printing Services';
 
+    // ── Embedded (light) header ──────────────────────────────────
+    if (widget.embedded) {
+      return Container(
+        decoration: BoxDecoration(
+          color: _GL.surfaceMid,
+          border: Border(
+            bottom: BorderSide(color: _GL.inputBorder, width: 1.0),
+          ),
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
+        child: Row(
+          children: [
+            // Close button
+            if (widget.onClose != null)
+              GestureDetector(
+                onTap: widget.onClose,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: _GL.navyBlue.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(
+                      color: _GL.navyBlue.withValues(alpha: 0.15),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.close_rounded,
+                    color: _GL.textMuted,
+                    size: 15,
+                  ),
+                ),
+              ),
+            const SizedBox(width: 10),
+
+            // Avatar
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _GL.navyBlue.withValues(alpha: 0.10),
+                border: Border.all(
+                  color: _GL.navyBlue.withValues(alpha: 0.25),
+                  width: 1.5,
+                ),
+              ),
+              child: Icon(
+                widget.isEmployee
+                    ? Icons.person_rounded
+                    : Icons.local_print_shop_rounded,
+                color: _GL.navyBlue,
+                size: 17,
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // Title + subtitle
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    headerName,
+                    style: const TextStyle(
+                      color: _GL.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      letterSpacing: -0.2,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    headerSub,
+                    style: const TextStyle(
+                      color: _GL.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // No Active badge in embedded mode
+          ],
+        ),
+      );
+    }
+
+    // ── Standalone (dark) header — original ──────────────────────
     return _GlassBox(
       borderRadius: 0,
       borderColor: Colors.transparent,
@@ -472,10 +593,9 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ),
-        padding: EdgeInsets.fromLTRB(widget.embedded ? 12 : 8, 12, 16, 12),
+        padding: const EdgeInsets.fromLTRB(8, 12, 16, 12),
         child: Row(
           children: [
-            // Back / close button
             if (!widget.embedded)
               GestureDetector(
                 onTap: () => Navigator.pop(context),
@@ -496,31 +616,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     size: 16,
                   ),
                 ),
-              )
-            else if (widget.onClose != null)
-              GestureDetector(
-                onTap: widget.onClose,
-                child: Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(99),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.20),
-                      width: 1.0,
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.close_rounded,
-                    color: _G.textMuted,
-                    size: 16,
-                  ),
-                ),
               ),
             const SizedBox(width: 12),
-
-            // Avatar
             Container(
               width: 44,
               height: 44,
@@ -541,8 +638,6 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             const SizedBox(width: 12),
-
-            // Title + subtitle
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -568,8 +663,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ],
               ),
             ),
-
-            // Online indicator
+            // Active badge — standalone only
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -609,18 +703,26 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // Pending file preview chip shown above the text input
+  // ── Pending file chip ──────────────────────────────────────────────────────
+
   Widget _buildPendingFileChip() {
+    final isLight = widget.embedded;
     if (_uploadingFile) {
       return Container(
         margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: isLight
+              ? _GL.navyBlue.withValues(alpha: 0.05)
+              : Colors.white.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+          border: Border.all(
+            color: isLight
+                ? _GL.inputBorder
+                : Colors.white.withValues(alpha: 0.15),
+          ),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
@@ -628,13 +730,16 @@ class _ChatScreenState extends State<ChatScreen> {
               height: 14,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: _G.accentAmber,
+                color: isLight ? _GL.navyBlue : _G.accentAmber,
               ),
             ),
-            SizedBox(width: 8),
+            const SizedBox(width: 8),
             Text(
               'Uploading…',
-              style: TextStyle(color: _G.textMuted, fontSize: 12),
+              style: TextStyle(
+                color: isLight ? _GL.textMuted : _G.textMuted,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -680,8 +785,273 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // ── Input bar ──────────────────────────────────────────────────────────────
+  // Light version for embedded, dark for standalone.
+
+  Widget _buildInputBar(BuildContext context) {
+    final isLight = widget.embedded;
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+
+    if (isLight) {
+      // ── Light input bar ──────────────────────────────────────
+      return Container(
+        decoration: BoxDecoration(
+          color: _GL.surfaceMid,
+          border: Border(top: BorderSide(color: _GL.inputBorder, width: 1.0)),
+        ),
+        padding: EdgeInsets.fromLTRB(10, 10, 12, bottom > 0 ? 10 : 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            // Attach
+            GestureDetector(
+              onTap: (_uploadingFile || _sending) ? null : _pickFile,
+              child: Container(
+                width: 38,
+                height: 38,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: _GL.navyBlue.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: (_uploadingFile || _sending)
+                        ? _GL.inputBorder
+                        : (_pendingFileUrl != null
+                              ? _G.accentAmber.withValues(alpha: 0.60)
+                              : _GL.inputBorder),
+                    width: 1.0,
+                  ),
+                ),
+                child: Icon(
+                  Icons.attach_file_rounded,
+                  size: 17,
+                  color: (_uploadingFile || _sending)
+                      ? _GL.textMuted
+                      : (_pendingFileUrl != null
+                            ? _G.accentAmber
+                            : _GL.textSecondary),
+                ),
+              ),
+            ),
+
+            // Text field
+            Expanded(
+              child: Container(
+                constraints: const BoxConstraints(maxHeight: 140),
+                decoration: BoxDecoration(
+                  color: _GL.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: _GL.inputBorder, width: 1.2),
+                ),
+                child: TextField(
+                  controller: _msgCtrl,
+                  style: const TextStyle(
+                    color: _GL.textPrimary,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                  maxLines: null,
+                  textInputAction: TextInputAction.newline,
+                  decoration: InputDecoration(
+                    hintText: _pendingFileUrl != null
+                        ? 'Add a caption… (optional)'
+                        : 'Type a message…',
+                    hintStyle: const TextStyle(
+                      color: _GL.textMuted,
+                      fontSize: 14,
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Send button
+            GestureDetector(
+              onTap: (_sending || _uploadingFile) ? null : _sendText,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: (_sending || _uploadingFile)
+                      ? _GL.navyBlue.withValues(alpha: 0.30)
+                      : _GL.activeBtn,
+                  shape: BoxShape.circle,
+                  boxShadow: (_sending || _uploadingFile)
+                      ? []
+                      : [
+                          BoxShadow(
+                            color: _GL.navyBlue.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                ),
+                child: (_sending || _uploadingFile)
+                    ? const Padding(
+                        padding: EdgeInsets.all(11),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white54,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.send_rounded,
+                        color: _GL.activeBtnText,
+                        size: 18,
+                      ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Dark input bar (standalone) — original ────────────────
+    return _GlassBox(
+      borderRadius: 0,
+      borderColor: Colors.transparent,
+      bgColor: const Color(0xFF0C091F).withValues(alpha: 0.72),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: Colors.white.withValues(alpha: 0.12),
+              width: 1.0,
+            ),
+          ),
+        ),
+        padding: EdgeInsets.fromLTRB(10, 12, 14, bottom > 0 ? 12 : 18),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            GestureDetector(
+              onTap: (_uploadingFile || _sending) ? null : _pickFile,
+              child: Container(
+                width: 42,
+                height: 42,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: (_uploadingFile || _sending)
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : (_pendingFileUrl != null
+                              ? _G.accentAmber.withValues(alpha: 0.60)
+                              : Colors.white.withValues(alpha: 0.20)),
+                    width: 1.0,
+                  ),
+                ),
+                child: Icon(
+                  Icons.attach_file_rounded,
+                  size: 18,
+                  color: (_uploadingFile || _sending)
+                      ? _G.textMuted
+                      : (_pendingFileUrl != null
+                            ? _G.accentAmber
+                            : _G.textSecondary),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(
+                    constraints: const BoxConstraints(maxHeight: 140),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.22),
+                        width: 1.1,
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _msgCtrl,
+                      style: const TextStyle(
+                        color: _G.textPrimary,
+                        fontSize: 15,
+                        height: 1.4,
+                      ),
+                      maxLines: null,
+                      textInputAction: TextInputAction.newline,
+                      decoration: InputDecoration(
+                        hintText: _pendingFileUrl != null
+                            ? 'Add a caption… (optional)'
+                            : 'Type a message…',
+                        hintStyle: const TextStyle(
+                          color: _G.textMuted,
+                          fontSize: 15,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: (_sending || _uploadingFile) ? null : _sendText,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: (_sending || _uploadingFile)
+                      ? Colors.white.withValues(alpha: 0.10)
+                      : _G.activeBtn,
+                  shape: BoxShape.circle,
+                  boxShadow: (_sending || _uploadingFile)
+                      ? []
+                      : [
+                          BoxShadow(
+                            color: _G.activeBtn.withValues(alpha: 0.45),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                ),
+                child: (_sending || _uploadingFile)
+                    ? const Padding(
+                        padding: EdgeInsets.all(13),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _G.activeBtnText,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.send_rounded,
+                        color: _G.activeBtnText,
+                        size: 20,
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
+    final isLight = widget.embedded;
+
     final chatColumn = Column(
       children: [
         _buildHeader(context),
@@ -697,9 +1067,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
               if (snap.connectionState == ConnectionState.waiting &&
                   docs.isEmpty) {
-                return const Center(
+                return Center(
                   child: CircularProgressIndicator(
-                    color: _G.accentAmber,
+                    color: isLight ? _GL.navyBlue : _G.accentAmber,
                     strokeWidth: 2,
                   ),
                 );
@@ -711,30 +1081,34 @@ class _ChatScreenState extends State<ChatScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 72,
-                        height: 72,
+                        width: 64,
+                        height: 64,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.07),
+                          color: isLight
+                              ? _GL.navyBlue.withValues(alpha: 0.06)
+                              : Colors.white.withValues(alpha: 0.07),
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.15),
+                            color: isLight
+                                ? _GL.inputBorder
+                                : Colors.white.withValues(alpha: 0.15),
                           ),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.chat_bubble_outline_rounded,
-                          color: _G.textMuted,
-                          size: 32,
+                          color: isLight ? _GL.textMuted : _G.textMuted,
+                          size: 28,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       Text(
                         widget.isEmployee
                             ? 'No messages from ${widget.customerName} yet'
                             : 'Send a message to our team',
-                        style: const TextStyle(
-                          color: _G.textSecondary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
+                        style: TextStyle(
+                          color: isLight ? _GL.textSecondary : _G.textSecondary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -743,7 +1117,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 );
               }
 
-              // Build a flat list that interleaves date separators
               final items = <dynamic>[];
               DateTime? prevDay;
               for (final doc in docs) {
@@ -764,17 +1137,15 @@ class _ChatScreenState extends State<ChatScreen> {
                 controller: _scroll,
                 reverse: true,
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 20,
+                  horizontal: 14,
+                  vertical: 16,
                 ),
                 itemCount: items.length,
                 itemBuilder: (_, i) {
                   final item = items[items.length - 1 - i];
-
                   if (item is String) {
-                    return _DateSeparator(label: item);
+                    return _DateSeparator(label: item, isLight: isLight);
                   }
-
                   final doc = item as QueryDocumentSnapshot;
                   final d = doc.data() as Map<String, dynamic>;
                   final msgId = doc.id;
@@ -806,7 +1177,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   }
 
                   if (role == 'system') {
-                    return _SystemBubble(text: text, time: time);
+                    return _SystemBubble(
+                      text: text,
+                      time: time,
+                      isLight: isLight,
+                    );
                   }
 
                   return _Bubble(
@@ -819,6 +1194,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     fileType: fileType,
                     time: time,
                     senderLabel: senderLabel,
+                    isLight: isLight,
                     onDelete: isMe && !deleted
                         ? () => _confirmDelete(msgId, sender)
                         : null,
@@ -829,150 +1205,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
 
-        // Pending file preview
         _buildPendingFileChip(),
-
-        // ── Input bar ──────────────────────────────────────────────────
-        _GlassBox(
-          borderRadius: 0,
-          borderColor: Colors.transparent,
-          bgColor: const Color(0xFF0C091F).withValues(alpha: 0.72),
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border(
-                top: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  width: 1.0,
-                ),
-              ),
-            ),
-            padding: EdgeInsets.fromLTRB(
-              10,
-              12,
-              14,
-              MediaQuery.of(context).viewInsets.bottom > 0 ? 12 : 18,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Attach button
-                GestureDetector(
-                  onTap: (_uploadingFile || _sending) ? null : _pickFile,
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(99),
-                      border: Border.all(
-                        color: (_uploadingFile || _sending)
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : (_pendingFileUrl != null
-                                  ? _G.accentAmber.withValues(alpha: 0.60)
-                                  : Colors.white.withValues(alpha: 0.20)),
-                        width: 1.0,
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.attach_file_rounded,
-                      size: 18,
-                      color: (_uploadingFile || _sending)
-                          ? _G.textMuted
-                          : (_pendingFileUrl != null
-                                ? _G.accentAmber
-                                : _G.textSecondary),
-                    ),
-                  ),
-                ),
-
-                // Text field
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                      child: Container(
-                        constraints: const BoxConstraints(maxHeight: 140),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.22),
-                            width: 1.1,
-                          ),
-                        ),
-                        child: TextField(
-                          controller: _msgCtrl,
-                          style: const TextStyle(
-                            color: _G.textPrimary,
-                            fontSize: 15,
-                            height: 1.4,
-                          ),
-                          maxLines: null,
-                          textInputAction: TextInputAction.newline,
-                          decoration: InputDecoration(
-                            hintText: _pendingFileUrl != null
-                                ? 'Add a caption… (optional)'
-                                : 'Type a message…',
-                            hintStyle: const TextStyle(
-                              color: _G.textMuted,
-                              fontSize: 15,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 14,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-
-                // Send button
-                GestureDetector(
-                  onTap: (_sending || _uploadingFile) ? null : _sendText,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: (_sending || _uploadingFile)
-                          ? Colors.white.withValues(alpha: 0.10)
-                          : _G.activeBtn,
-                      shape: BoxShape.circle,
-                      boxShadow: (_sending || _uploadingFile)
-                          ? []
-                          : [
-                              BoxShadow(
-                                color: _G.activeBtn.withValues(alpha: 0.45),
-                                blurRadius: 16,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                    ),
-                    child: (_sending || _uploadingFile)
-                        ? const Padding(
-                            padding: EdgeInsets.all(13),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: _G.activeBtnText,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.send_rounded,
-                            color: _G.activeBtnText,
-                            size: 20,
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        _buildInputBar(context),
       ],
     );
 
@@ -989,62 +1223,68 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// ── Date separator ────────────────────────────────────────────────────────────
-
+// =============================================================================
+// Date separator
+// =============================================================================
 class _DateSeparator extends StatelessWidget {
   final String label;
-  const _DateSeparator({required this.label});
+  final bool isLight;
+  const _DateSeparator({required this.label, this.isLight = false});
 
   @override
   Widget build(BuildContext context) {
+    final lineColor = isLight
+        ? const Color(0xFFD8DCE4)
+        : Colors.white.withValues(alpha: 0.08);
+    final chipBg = isLight
+        ? const Color(0xFFF0F1F4)
+        : Colors.white.withValues(alpha: 0.07);
+    final chipBorder = isLight
+        ? const Color(0xFFD8DCE4)
+        : Colors.white.withValues(alpha: 0.12);
+    final textColor = isLight ? const Color(0x880F172A) : _G.textMuted;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       child: Row(
         children: [
-          Expanded(
-            child: Container(
-              height: 1,
-              color: Colors.white.withValues(alpha: 0.08),
-            ),
-          ),
+          Expanded(child: Container(height: 1, color: lineColor)),
           const SizedBox(width: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.07),
+              color: chipBg,
               borderRadius: BorderRadius.circular(99),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.12),
-                width: 0.9,
-              ),
+              border: Border.all(color: chipBorder, width: 0.9),
             ),
             child: Text(
               label,
-              style: const TextStyle(
-                color: _G.textMuted,
+              style: TextStyle(
+                color: textColor,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ),
           const SizedBox(width: 12),
-          Expanded(
-            child: Container(
-              height: 1,
-              color: Colors.white.withValues(alpha: 0.08),
-            ),
-          ),
+          Expanded(child: Container(height: 1, color: lineColor)),
         ],
       ),
     );
   }
 }
 
-// ── System notification bubble ────────────────────────────────────────────────
-
+// =============================================================================
+// System bubble
+// =============================================================================
 class _SystemBubble extends StatelessWidget {
   final String text, time;
-  const _SystemBubble({required this.text, required this.time});
+  final bool isLight;
+  const _SystemBubble({
+    required this.text,
+    required this.time,
+    this.isLight = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1094,8 +1334,8 @@ class _SystemBubble extends StatelessWidget {
                   Text(
                     text,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: _G.textPrimary,
+                    style: TextStyle(
+                      color: isLight ? _GL.textPrimary : _G.textPrimary,
                       fontSize: 14,
                       height: 1.5,
                     ),
@@ -1103,7 +1343,10 @@ class _SystemBubble extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     time,
-                    style: const TextStyle(color: _G.textMuted, fontSize: 11),
+                    style: TextStyle(
+                      color: isLight ? _GL.textMuted : _G.textMuted,
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
@@ -1115,8 +1358,9 @@ class _SystemBubble extends StatelessWidget {
   }
 }
 
-// ── Chat bubble ───────────────────────────────────────────────────────────────
-
+// =============================================================================
+// Chat bubble
+// =============================================================================
 class _Bubble extends StatelessWidget {
   final bool isRight;
   final bool isMe;
@@ -1127,6 +1371,7 @@ class _Bubble extends StatelessWidget {
   final String? fileType;
   final String time;
   final String? senderLabel;
+  final bool isLight;
   final VoidCallback? onDelete;
 
   const _Bubble({
@@ -1135,6 +1380,7 @@ class _Bubble extends StatelessWidget {
     required this.deleted,
     required this.text,
     required this.time,
+    required this.isLight,
     this.fileUrl,
     this.fileName,
     this.fileType,
@@ -1158,14 +1404,13 @@ class _Bubble extends StatelessWidget {
               ? CrossAxisAlignment.end
               : CrossAxisAlignment.start,
           children: [
-            // Sender label
             if (senderLabel != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4, left: 42, right: 4),
                 child: Text(
                   senderLabel!,
-                  style: const TextStyle(
-                    color: _G.textMuted,
+                  style: TextStyle(
+                    color: isLight ? _GL.textMuted : _G.textMuted,
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1177,29 +1422,30 @@ class _Bubble extends StatelessWidget {
                   : MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Avatar — incoming only
                 if (!isRight) ...[
                   Container(
                     width: 34,
                     height: 34,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: _G.accentAmber.withValues(alpha: 0.12),
+                      color: isLight
+                          ? _GL.navyBlue.withValues(alpha: 0.10)
+                          : _G.accentAmber.withValues(alpha: 0.12),
                       border: Border.all(
-                        color: _G.accentAmber.withValues(alpha: 0.35),
+                        color: isLight
+                            ? _GL.navyBlue.withValues(alpha: 0.25)
+                            : _G.accentAmber.withValues(alpha: 0.35),
                         width: 1.2,
                       ),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.person_rounded,
-                      color: _G.accentAmber,
+                      color: isLight ? _GL.navyBlue : _G.accentAmber,
                       size: 16,
                     ),
                   ),
                   const SizedBox(width: 8),
                 ],
-
-                // Delete hint icon (outgoing only)
                 if (isMe && onDelete != null) ...[
                   GestureDetector(
                     onTap: onDelete,
@@ -1207,21 +1453,21 @@ class _Bubble extends StatelessWidget {
                       padding: const EdgeInsets.only(right: 6, bottom: 2),
                       child: Icon(
                         Icons.delete_outline_rounded,
-                        color: Colors.white.withValues(alpha: 0.22),
+                        color: isLight
+                            ? _GL.textMuted
+                            : Colors.white.withValues(alpha: 0.22),
                         size: 15,
                       ),
                     ),
                   ),
                 ],
-
-                // Bubble body
                 Flexible(
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxWidth: MediaQuery.of(context).size.width * 0.72,
                     ),
                     child: deleted
-                        ? _DeletedBubble(isRight: isRight)
+                        ? _DeletedBubble(isRight: isRight, isLight: isLight)
                         : (isRight
                               ? _MeBubble(
                                   text: text,
@@ -1229,6 +1475,7 @@ class _Bubble extends StatelessWidget {
                                   fileUrl: fileUrl,
                                   fileName: fileName,
                                   fileType: fileType,
+                                  isLight: isLight,
                                   onOpenUrl: _openUrl,
                                 )
                               : _ThemBubble(
@@ -1237,11 +1484,11 @@ class _Bubble extends StatelessWidget {
                                   fileUrl: fileUrl,
                                   fileName: fileName,
                                   fileType: fileType,
+                                  isLight: isLight,
                                   onOpenUrl: _openUrl,
                                 )),
                   ),
                 ),
-
                 if (isRight) const SizedBox(width: 4),
               ],
             ),
@@ -1252,17 +1499,20 @@ class _Bubble extends StatelessWidget {
   }
 }
 
-// Deleted message placeholder
+// ── Deleted placeholder ───────────────────────────────────────────────────────
 class _DeletedBubble extends StatelessWidget {
   final bool isRight;
-  const _DeletedBubble({required this.isRight});
+  final bool isLight;
+  const _DeletedBubble({required this.isRight, this.isLight = false});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: isLight
+            ? const Color(0xFFF0F1F4)
+            : Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(20),
           topRight: const Radius.circular(20),
@@ -1270,14 +1520,16 @@ class _DeletedBubble extends StatelessWidget {
           bottomRight: Radius.circular(isRight ? 4 : 20),
         ),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.10),
+          color: isLight
+              ? const Color(0xFFD8DCE4)
+              : Colors.white.withValues(alpha: 0.10),
           width: 1.0,
         ),
       ),
-      child: const Text(
+      child: Text(
         '[message deleted]',
         style: TextStyle(
-          color: _G.textMuted,
+          color: isLight ? _GL.textMuted : _G.textMuted,
           fontSize: 13,
           fontStyle: FontStyle.italic,
         ),
@@ -1286,15 +1538,17 @@ class _DeletedBubble extends StatelessWidget {
   }
 }
 
-// "My" outgoing bubble — solid amber
+// ── "My" outgoing bubble ──────────────────────────────────────────────────────
 class _MeBubble extends StatelessWidget {
   final String text, time;
   final String? fileUrl, fileName, fileType;
+  final bool isLight;
   final void Function(String) onOpenUrl;
 
   const _MeBubble({
     required this.text,
     required this.time,
+    required this.isLight,
     required this.onOpenUrl,
     this.fileUrl,
     this.fileName,
@@ -1303,10 +1557,19 @@ class _MeBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Embedded: navy dark pill; standalone: amber cream
+    final bgColor = isLight
+        ? _GL.navyBlue
+        : const Color(0xFFF5F0C0).withValues(alpha: 0.92);
+    final txtColor = isLight ? Colors.white : const Color(0xFF1A1200);
+    final timeColor = isLight
+        ? Colors.white.withValues(alpha: 0.55)
+        : const Color(0xFF1A1200).withValues(alpha: 0.50);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F0C0).withValues(alpha: 0.92),
+        color: bgColor,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
@@ -1315,7 +1578,9 @@ class _MeBubble extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFF5F0C0).withValues(alpha: 0.25),
+            color: isLight
+                ? _GL.navyBlue.withValues(alpha: 0.18)
+                : const Color(0xFFF5F0C0).withValues(alpha: 0.25),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1334,9 +1599,9 @@ class _MeBubble extends StatelessWidget {
                     fileUrl!,
                     width: 200,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(
+                    errorBuilder: (_, __, ___) => Icon(
                       Icons.broken_image_outlined,
-                      color: _G.textMuted,
+                      color: txtColor.withValues(alpha: 0.50),
                     ),
                   ),
                 ),
@@ -1347,17 +1612,17 @@ class _MeBubble extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.insert_drive_file_outlined,
-                      color: _G.activeBtnText,
+                      color: txtColor,
                       size: 18,
                     ),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
                         fileName ?? 'File',
-                        style: const TextStyle(
-                          color: _G.activeBtnText,
+                        style: TextStyle(
+                          color: txtColor,
                           fontSize: 13,
                           decoration: TextDecoration.underline,
                         ),
@@ -1372,36 +1637,32 @@ class _MeBubble extends StatelessWidget {
           if (text.isNotEmpty)
             Text(
               text,
-              style: const TextStyle(
-                color: _G.activeBtnText,
-                fontSize: 15,
+              style: TextStyle(
+                color: txtColor,
+                fontSize: 14,
                 height: 1.45,
                 fontWeight: FontWeight.w500,
               ),
             ),
           const SizedBox(height: 5),
-          Text(
-            time,
-            style: TextStyle(
-              color: _G.activeBtnText.withValues(alpha: 0.50),
-              fontSize: 11,
-            ),
-          ),
+          Text(time, style: TextStyle(color: timeColor, fontSize: 11)),
         ],
       ),
     );
   }
 }
 
-// Incoming bubble — frosted glass
+// ── Incoming bubble ───────────────────────────────────────────────────────────
 class _ThemBubble extends StatelessWidget {
   final String text, time;
   final String? fileUrl, fileName, fileType;
+  final bool isLight;
   final void Function(String) onOpenUrl;
 
   const _ThemBubble({
     required this.text,
     required this.time,
+    required this.isLight,
     required this.onOpenUrl,
     this.fileUrl,
     this.fileName,
@@ -1410,6 +1671,35 @@ class _ThemBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Embedded: plain white card; standalone: frosted glass
+    if (isLight) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+            bottomLeft: Radius.circular(4),
+            bottomRight: Radius.circular(20),
+          ),
+          border: Border.all(color: const Color(0xFFD8DCE4), width: 1.0),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x10000000),
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: _buildContent(
+          textColor: _GL.textPrimary,
+          timeColor: _GL.textMuted,
+          iconColor: _GL.navyBlue,
+        ),
+      );
+    }
+
     return ClipRRect(
       borderRadius: const BorderRadius.only(
         topLeft: Radius.circular(20),
@@ -1434,73 +1724,80 @@ class _ThemBubble extends StatelessWidget {
               width: 1.1,
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (fileUrl != null && fileUrl!.isNotEmpty) ...[
-                if (fileType == 'image')
-                  GestureDetector(
-                    onTap: () => onOpenUrl(fileUrl!),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        fileUrl!,
-                        width: 200,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(
-                          Icons.broken_image_outlined,
-                          color: _G.textMuted,
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  GestureDetector(
-                    onTap: () => onOpenUrl(fileUrl!),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.insert_drive_file_outlined,
-                          color: _G.accentAmber,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            fileName ?? 'File',
-                            style: const TextStyle(
-                              color: _G.accentAmber,
-                              fontSize: 13,
-                              decoration: TextDecoration.underline,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (text.isNotEmpty) const SizedBox(height: 6),
-              ],
-              if (text.isNotEmpty)
-                Text(
-                  text,
-                  style: const TextStyle(
-                    color: _G.textPrimary,
-                    fontSize: 15,
-                    height: 1.45,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              const SizedBox(height: 5),
-              Text(
-                time,
-                style: const TextStyle(color: _G.textMuted, fontSize: 11),
-              ),
-            ],
+          child: _buildContent(
+            textColor: _G.textPrimary,
+            timeColor: _G.textMuted,
+            iconColor: _G.accentAmber,
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildContent({
+    required Color textColor,
+    required Color timeColor,
+    required Color iconColor,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (fileUrl != null && fileUrl!.isNotEmpty) ...[
+          if (fileType == 'image')
+            GestureDetector(
+              onTap: () => onOpenUrl(fileUrl!),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  fileUrl!,
+                  width: 200,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      Icon(Icons.broken_image_outlined, color: timeColor),
+                ),
+              ),
+            )
+          else
+            GestureDetector(
+              onTap: () => onOpenUrl(fileUrl!),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.insert_drive_file_outlined,
+                    color: iconColor,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      fileName ?? 'File',
+                      style: TextStyle(
+                        color: iconColor,
+                        fontSize: 13,
+                        decoration: TextDecoration.underline,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (text.isNotEmpty) const SizedBox(height: 6),
+        ],
+        if (text.isNotEmpty)
+          Text(
+            text,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 14,
+              height: 1.45,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        const SizedBox(height: 5),
+        Text(time, style: TextStyle(color: timeColor, fontSize: 11)),
+      ],
     );
   }
 }
