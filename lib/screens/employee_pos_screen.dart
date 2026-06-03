@@ -265,26 +265,27 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
           // the value used for CREATE and FIND is guaranteed identical.
           final salesOrderId = orderData['order_id']?.toString() ?? orderId;
 
-          // Step 1 — downpayment (no prior payment exists):
-          //   Create exactly ONE record containing only order_id.
-          //   payment_type is set to 'downpayment'.
+          // Step 1 — first payment (no prior payment exists):
+          //   Create exactly ONE Sales_Record.
+          //   payment_type: 'full' if the entire order is settled in one go,
+          //                 'downpayment' if only a partial amount was paid.
           //
           // Step 2 — balance (prior payment already recorded):
           //   Query Sales_Records by order_id, find that one record,
-          //   and update payment_type from 'downpayment' to 'balance'.
+          //   and update payment_type to 'balance'.
           //   NEVER create a second record.
 
           if (prevPaid == 0) {
-            // ── Downpayment: create the single Sales_Record ───────────
+            // ── First payment: full upfront or partial downpayment ────
             await _db.collection('Sales_Records').add({
-              'order_id':      salesOrderId,
-              'customer_name': custName,
-              'customer_id':   custId,
-              'payment_type':  'downpayment',
+              'order_id':       salesOrderId,
+              'customer_name':  custName,
+              'customer_id':    custId,
+              'payment_type':   wasFullyPaid ? 'full' : 'downpayment',
               'payment_method': 'cash',
-              'sale_amount':   cashPaid,
-              'order_total':   total,
-              'sale_date':     FieldValue.serverTimestamp(),
+              'sale_amount':    cashPaid,
+              'order_total':    total,
+              'sale_date':      FieldValue.serverTimestamp(),
             });
           } else {
             // ── Balance: find the record by order_id and update it ────

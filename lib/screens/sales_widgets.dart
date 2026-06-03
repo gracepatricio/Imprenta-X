@@ -918,7 +918,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
       case 'balance':
         return 'Balance';
       case 'full':
-        return 'Full Payment';
+        return 'Upfront Payment';
       default:
         return (t != null && t.isNotEmpty) ? t : '—';
     }
@@ -1192,6 +1192,11 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((_, i) {
               final g = filtered[i];
+              // A 'balance' record where totalPaid >= orderTotal means
+              // the customer has now fully settled their order.
+              final isBalFully = g.paymentType == 'balance' &&
+                  g.orderTotal > 0 &&
+                  g.totalPaid >= g.orderTotal - 0.01;
               return _SalesRecordCard(
                 index: i,
                 orderId: g.orderId,
@@ -1202,10 +1207,18 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                 totalPaid: g.totalPaid,
                 orderTotal: g.orderTotal,
                 date: _fmt(g.latestDate),
-                typeFg: _typeFg(g.paymentType),
-                typeBg: _typeBg(g.paymentType),
-                typeBorder: _typeBorder(g.paymentType),
-                typeLabel: _typeLabel(g.paymentType),
+                typeFg: isBalFully
+                    ? const Color(0xFF15803D)
+                    : _typeFg(g.paymentType),
+                typeBg: isBalFully
+                    ? const Color(0xFFF0FDF4)
+                    : _typeBg(g.paymentType),
+                typeBorder: isBalFully
+                    ? const Color(0xFFBBF7D0)
+                    : _typeBorder(g.paymentType),
+                typeLabel: isBalFully
+                    ? 'Balance Fully Paid'
+                    : _typeLabel(g.paymentType),
                 methodLabel: _methodLabel(g.paymentMethod),
               );
             }, childCount: filtered.length),
@@ -1248,7 +1261,8 @@ class _SalesRecordCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isFullyPaid = type == 'full';
+    final isFullyPaid = type == 'full' ||
+        (orderTotal > 0 && totalPaid >= orderTotal - 0.01);
     final hasBalance = orderTotal > 0 && !isFullyPaid;
 
     return Container(
@@ -1479,7 +1493,7 @@ class _UnifiedFilterBar extends StatelessWidget {
     ('all', 'All Types', Color(0xFF374151)),
     ('downpayment', 'Downpayment', Color(0xFF1D4ED8)),
     ('balance', 'Balance', Color(0xFFB45309)),
-    ('full', 'Full', Color(0xFF6D28D9)),
+    ('full', 'Upfront', Color(0xFF6D28D9)),
   ];
 
   @override
@@ -1522,9 +1536,39 @@ class _UnifiedFilterBar extends StatelessWidget {
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: _DateFilterButton(
-                    selectedRange: selectedRange,
-                    onChanged: onDateChanged,
+                  child: Row(
+                    children: [
+                      _PresetChip(
+                        label: 'All time',
+                        active: selectedRange == null,
+                        onTap: () => onDateChanged(null),
+                      ),
+                      const SizedBox(width: 6),
+                      _PresetChip(
+                        label: 'Last 31 days',
+                        active: _rangesMatch(selectedRange, _pLast31()),
+                        onTap: () => onDateChanged(_pLast31()),
+                      ),
+                      const SizedBox(width: 6),
+                      _PresetChip(
+                        label: 'Last 6 months',
+                        active: _rangesMatch(selectedRange, _pLast180()),
+                        onTap: () => onDateChanged(_pLast180()),
+                      ),
+                      const SizedBox(width: 6),
+                      _PresetChip(
+                        label: 'This year',
+                        active: _rangesMatch(selectedRange, _pThisYear()),
+                        onTap: () => onDateChanged(_pThisYear()),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(width: 1, height: 28, color: _T.divider),
+                      const SizedBox(width: 10),
+                      _DateFilterButton(
+                        selectedRange: selectedRange,
+                        onChanged: onDateChanged,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1733,84 +1777,151 @@ class _H extends StatelessWidget {
   );
 }
 
-// ─ Month bucket ──────────────────────────────────────────────────────────────
-class _MonthBucket {
-  final DateTime month;
+// ─ Bucket types & granularity ────────────────────────────────────────────────
+enum _BucketType { daily, biweekly, triweekly, monthly }
+
+class _Bucket {
+  final DateTime start;
+  final DateTime end;
   final String label;
   double total;
-  _MonthBucket({required this.month, required this.label, required this.total});
+  _Bucket({
+    required this.start,
+    required this.end,
+    required this.label,
+    this.total = 0,
+  });
 }
 
-// ─ Shared bucket builder ─────────────────────────────────────────────────────
 String _shortMonth(int m) {
-  const names = [
+  const n = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ];
-  return names[m - 1];
+  return n[m - 1];
 }
 
-Map<String, _MonthBucket> _buildBucketMap(
-    List<QueryDocumentSnapshot> allDocs,
-    DateTimeRange? selectedRange,
-    ) {
-  final now = DateTime.now();
-  if (selectedRange != null) {
-    final map = <String, _MonthBucket>{};
-    var m = DateTime(selectedRange.start.year, selectedRange.start.month);
-    final end = DateTime(selectedRange.end.year, selectedRange.end.month);
-    while (!m.isAfter(end)) {
-      final key = '${m.year}-${m.month.toString().padLeft(2, '0')}';
-      map[key] = _MonthBucket(
-        month: m,
-        label: m.year == now.year
-            ? _shortMonth(m.month)
-            : '${_shortMonth(m.month)} \'${m.year.toString().substring(2)}',
-        total: 0,
-      );
-      m = DateTime(m.year, m.month + 1);
-    }
-    return map;
-  }
-
-  // All Time: derive buckets from every document
-  final map = <String, _MonthBucket>{};
-  for (final doc in allDocs) {
-    final d = doc.data() as Map<String, dynamic>;
-    final ts = d['sale_date'] as Timestamp?;
-    if (ts == null) continue;
-    final dt = ts.toDate();
-    final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
-    map.putIfAbsent(
-      key,
-          () => _MonthBucket(
-        month: DateTime(dt.year, dt.month),
-        label: '${_shortMonth(dt.month)} \'${dt.year.toString().substring(2)}',
-        total: 0,
-      ),
-    );
-  }
-  if (map.isEmpty) {
-    // Fallback if no dates at all
-    for (int i = 0; i < 6; i++) {
-      final m = DateTime(now.year, now.month - (5 - i));
-      final key = '${m.year}-${m.month.toString().padLeft(2, '0')}';
-      map[key] = _MonthBucket(month: m, label: _shortMonth(m.month), total: 0);
-    }
-  }
-  return map;
+_BucketType _decideBucketType(int days) {
+  if (days <= 31) return _BucketType.daily;
+  if (days <= 180) return _BucketType.biweekly;
+  if (days <= 330) return _BucketType.triweekly;
+  return _BucketType.monthly;
 }
 
-// AdminSalesReportView
-class AdminSalesReportView extends StatefulWidget {
-  const AdminSalesReportView({super.key});
+// Build dynamic bucket list. If range is null, derives span from data.
+List<_Bucket> _buildBuckets(
+  List<QueryDocumentSnapshot> allDocs,
+  DateTimeRange? range,
+) {
+  final now = _dateOnly(DateTime.now());
+
+  DateTime start, end;
+  if (range != null) {
+    start = _dateOnly(range.start);
+    end = _dateOnly(range.end);
+  } else {
+    DateTime? earliest, latest;
+    for (final doc in allDocs) {
+      final ts =
+          (doc.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
+      if (ts == null) continue;
+      final dt = _dateOnly(ts.toDate().toLocal());
+      if (earliest == null || dt.isBefore(earliest)) earliest = dt;
+      if (latest == null || dt.isAfter(latest)) latest = dt;
+    }
+    start = earliest ?? _dateOnly(DateTime(now.year, now.month - 5, 1));
+    end = latest ?? now;
+  }
+  if (end.isBefore(start)) end = start;
+
+  final days = end.difference(start).inDays + 1;
+  final type = _decideBucketType(days);
+  final buckets = <_Bucket>[];
+
+  if (type == _BucketType.monthly) {
+    var m = DateTime(start.year, start.month);
+    final endM = DateTime(end.year, end.month);
+    while (!m.isAfter(endM)) {
+      final nextM = DateTime(m.year, m.month + 1);
+      final bEnd = _dateOnly(nextM.subtract(const Duration(days: 1)));
+      final label = m.year == DateTime.now().year
+          ? _shortMonth(m.month)
+          : "${_shortMonth(m.month)}'${m.year.toString().substring(2)}";
+      buckets.add(_Bucket(start: m, end: bEnd, label: label));
+      m = nextM;
+    }
+  } else if (type == _BucketType.daily) {
+    var d = start;
+    while (!d.isAfter(end)) {
+      buckets.add(_Bucket(
+        start: d,
+        end: d,
+        label: '${_shortMonth(d.month)} ${d.day}',
+      ));
+      d = d.add(const Duration(days: 1));
+    }
+  } else {
+    final step = type == _BucketType.biweekly ? 14 : 21;
+    var s = start;
+    while (!s.isAfter(end)) {
+      final raw = s.add(Duration(days: step - 1));
+      final e = raw.isAfter(end) ? end : raw;
+      buckets.add(_Bucket(
+        start: s,
+        end: e,
+        label: '${_shortMonth(s.month)} ${s.day}',
+      ));
+      s = s.add(Duration(days: step));
+    }
+  }
+  return buckets;
+}
+
+String _granularityLabel(_BucketType type) {
+  switch (type) {
+    case _BucketType.daily:     return 'Daily Revenue';
+    case _BucketType.biweekly:  return 'Revenue per 2 weeks';
+    case _BucketType.triweekly: return 'Revenue per 3 weeks';
+    case _BucketType.monthly:   return 'Monthly Revenue';
+  }
+}
+
+// ─ Preset range helpers ───────────────────────────────────────────────────────
+DateTimeRange _pLast31() {
+  final now = _dateOnly(DateTime.now());
+  return DateTimeRange(start: now.subtract(const Duration(days: 30)), end: now);
+}
+
+DateTimeRange _pLast180() {
+  final now = _dateOnly(DateTime.now());
+  return DateTimeRange(
+      start: now.subtract(const Duration(days: 179)), end: now);
+}
+
+DateTimeRange _pThisYear() {
+  final now = _dateOnly(DateTime.now());
+  return DateTimeRange(start: DateTime(now.year, 1, 1), end: now);
+}
+
+bool _rangesMatch(DateTimeRange? a, DateTimeRange? b) {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return _dateOnly(a.start) == _dateOnly(b.start) &&
+      _dateOnly(a.end) == _dateOnly(b.end);
+}
+
+// =============================================================================
+// Shared Sales Report Content (used by both admin and employee)
+// =============================================================================
+class _SalesReportContent extends StatefulWidget {
+  const _SalesReportContent();
 
   @override
-  State<AdminSalesReportView> createState() => _AdminSalesReportViewState();
+  State<_SalesReportContent> createState() => _SalesReportContentState();
 }
 
-class _AdminSalesReportViewState extends State<AdminSalesReportView> {
-  DateTimeRange? _selectedRange;
+class _SalesReportContentState extends State<_SalesReportContent> {
+  DateTimeRange? _range;
 
   @override
   Widget build(BuildContext context) {
@@ -1820,7 +1931,7 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
           .orderBy('sale_date', descending: false)
           .snapshots(),
       builder: (context, salesSnap) {
-        if (salesSnap.connectionState == ConnectionState.waiting) {
+        if (!salesSnap.hasData) {
           return Center(
             child: CircularProgressIndicator(
               color: _T.textPrimary.withValues(alpha: 0.4),
@@ -1839,267 +1950,371 @@ class _AdminSalesReportViewState extends State<AdminSalesReportView> {
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('Orders')
-              .where(
-            'status',
-            whereIn: ['pending', 'in_production', 'ready', 'completed'],
-          )
+              .where('status', whereIn: [
+                'pending',
+                'in_production',
+                'ready',
+                'completed',
+              ])
               .snapshots(),
-          builder: (context, ordersSnap) {
-            double outstandingBalance = 0;
-            if (ordersSnap.hasData) {
-              for (final doc in ordersSnap.data!.docs) {
+          builder: (context, ordSnap) {
+            double outstanding = 0;
+            if (ordSnap.hasData) {
+              for (final doc in ordSnap.data!.docs) {
                 final d = doc.data() as Map<String, dynamic>;
-                final remaining = (d['remaining_balance'] as num?)?.toDouble();
-                if (remaining != null && remaining > 0.01) {
-                  outstandingBalance += remaining;
+                final rem = (d['remaining_balance'] as num?)?.toDouble();
+                if (rem != null && rem > 0.01) {
+                  outstanding += rem;
                 } else {
-                  final total = (d['total_price'] as num?)?.toDouble() ?? 0;
-                  final paid = (d['amount_paid'] as num?)?.toDouble() ?? 0;
-                  final diff = total - paid;
-                  if (diff > 0.01) outstandingBalance += diff;
+                  final diff =
+                      ((d['total_price'] as num?)?.toDouble() ?? 0) -
+                          ((d['amount_paid'] as num?)?.toDouble() ?? 0);
+                  if (diff > 0.01) outstanding += diff;
                 }
               }
             }
 
-            final allDocs = salesSnap.data?.docs ?? [];
+            final allDocs = salesSnap.data!.docs;
 
-            // Period-filtered docs
-            final docs = allDocs.where((doc) {
-              final d = doc.data() as Map<String, dynamic>;
-              final ts = d['sale_date'] as Timestamp?;
-              if (ts == null) return _selectedRange == null;
-              return _isWithinDateRange(ts.toDate().toLocal(), _selectedRange);
+            final filtered = allDocs.where((doc) {
+              final ts =
+                  (doc.data() as Map<String, dynamic>)['sale_date']
+                      as Timestamp?;
+              if (ts == null) return _range == null;
+              return _isWithinDateRange(ts.toDate().toLocal(), _range);
             }).toList();
 
-            // Build buckets
-            final bucketMap = _buildBucketMap(allDocs, _selectedRange);
-            final monthBuckets = bucketMap.values.toList()
-              ..sort((a, b) => a.month.compareTo(b.month));
-
-            double totalRevenue = 0;
-            double downpaymentTotal = 0;
-            double balanceTotal = 0;
-            final orderIds = <String>{};
-
-            for (final doc in docs) {
+            // Build buckets and fill with totals
+            final buckets = _buildBuckets(allDocs, _range);
+            for (final b in buckets) b.total = 0;
+            for (final doc in filtered) {
               final d = doc.data() as Map<String, dynamic>;
-              final amount = (d['sale_amount'] as num?)?.toDouble() ?? 0;
-              final type = d['payment_type']?.toString() ?? '';
-              final ordId = d['order_id']?.toString() ?? '';
-
-              totalRevenue += amount;
-              if (type == 'downpayment') downpaymentTotal += amount;
-              if (type == 'balance' || type == 'cash' || type == 'full')
-                balanceTotal += amount;
-              if (ordId.isNotEmpty) orderIds.add(ordId);
-
               final ts = d['sale_date'] as Timestamp?;
-              if (ts != null) {
-                final dt = ts.toDate();
-                final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
-                if (bucketMap.containsKey(key)) bucketMap[key]!.total += amount;
+              if (ts == null) continue;
+              final dt = _dateOnly(ts.toDate().toLocal());
+              final amt = (d['sale_amount'] as num?)?.toDouble() ?? 0;
+              for (final b in buckets) {
+                if (!dt.isBefore(b.start) && !dt.isAfter(b.end)) {
+                  b.total += amt;
+                  break;
+                }
               }
             }
 
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Sales Report',
-                        style: TextStyle(
-                          color: _T.textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Revenue breakdown and trends',
-                        style: TextStyle(color: _T.textMuted, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
+            // Summary stats
+            double totalRevenue = 0, dpTotal = 0, balTotal = 0, uptTotal = 0;
+            final orderIds = <String>{};
+            for (final doc in filtered) {
+              final d = doc.data() as Map<String, dynamic>;
+              final amt = (d['sale_amount'] as num?)?.toDouble() ?? 0;
+              final type = d['payment_type']?.toString() ?? '';
+              final oid = d['order_id']?.toString() ?? '';
+              totalRevenue += amt;
+              if (type == 'downpayment') dpTotal += amt;
+              if (type == 'balance' || type == 'cash') balTotal += amt;
+              if (type == 'full') uptTotal += amt;
+              if (oid.isNotEmpty) orderIds.add(oid);
+            }
 
-                  _DateFilterButton(
-                    selectedRange: _selectedRange,
-                    onChanged: (range) =>
-                        setState(() => _selectedRange = range),
-                  ),
-                  const SizedBox(height: 20),
+            final spanDays = _range != null
+                ? _range!.end.difference(_range!.start).inDays + 1
+                : (buckets.length > 1
+                    ? buckets.last.end
+                            .difference(buckets.first.start)
+                            .inDays +
+                        1
+                    : 31);
+            final granLabel =
+                _granularityLabel(_decideBucketType(spanDays));
 
-                  LayoutBuilder(
-                    builder: (_, constraints) {
-                      final narrow = constraints.maxWidth < 460;
-                      return Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _AdminReportCard(
-                            label: 'Total Revenue',
-                            value: '₱${totalRevenue.toStringAsFixed(2)}',
-                            color: _T.gold,
-                            bg: const Color(0xFFFFFBEB),
-                            border: const Color(0xFFFDE68A),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Orders',
-                            value: '${orderIds.length}',
-                            color: const Color(0xFF1D4ED8),
-                            bg: const Color(0xFFEFF6FF),
-                            border: const Color(0xFFBFDBFE),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Downpayments',
-                            value: '₱${downpaymentTotal.toStringAsFixed(2)}',
-                            color: const Color(0xFF6D28D9),
-                            bg: const Color(0xFFF5F3FF),
-                            border: const Color(0xFFDDD6FE),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Balance Collected',
-                            value: '₱${balanceTotal.toStringAsFixed(2)}',
-                            color: const Color(0xFF15803D),
-                            bg: const Color(0xFFF0FDF4),
-                            border: const Color(0xFFBBF7D0),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Balance to Collect',
-                            value: '₱${outstandingBalance.toStringAsFixed(2)}',
-                            color: const Color(0xFFDC2626),
-                            bg: const Color(0xFFFEF2F2),
-                            border: const Color(0xFFFECACA),
-                            narrow: narrow,
-                            tooltip:
-                            'Total remaining balance on non-cancelled orders',
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
-
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: _T.divider, width: 1),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x08000000),
-                          blurRadius: 8,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEFF6FF),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: const Color(0xFFBFDBFE),
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.bar_chart_rounded,
-                                color: Color(0xFF1D4ED8),
-                                size: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Monthly Revenue',
-                                  style: TextStyle(
-                                    color: _T.textPrimary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                Text(
-                                  _selectedRange == null
-                                      ? 'All time by month'
-                                      : 'Selected range by month',
-                                  style: const TextStyle(
-                                    color: _T.textMuted,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          height: 160,
-                          child: CustomPaint(
-                            painter: _AdminChartPainter(buckets: monthBuckets),
-                            child: Container(),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: monthBuckets
-                              .map(
-                                (b) => Column(
-                              children: [
-                                Text(
-                                  b.label,
-                                  style: const TextStyle(
-                                    color: _T.textMuted,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                                if (b.total > 0) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '₱${b.total >= 1000 ? '${(b.total / 1000).toStringAsFixed(1)}k' : b.total.toStringAsFixed(0)}',
-                                    style: const TextStyle(
-                                      color: _T.gold,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          )
-                              .toList(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            return _buildBody(
+              buckets: buckets,
+              granLabel: granLabel,
+              totalRevenue: totalRevenue,
+              orderCount: orderIds.length,
+              dpTotal: dpTotal,
+              balTotal: balTotal,
+              uptTotal: uptTotal,
+              outstanding: outstanding,
             );
           },
         );
       },
     );
   }
+
+  Widget _buildBody({
+    required List<_Bucket> buckets,
+    required String granLabel,
+    required double totalRevenue,
+    required int orderCount,
+    required double dpTotal,
+    required double balTotal,
+    required double uptTotal,
+    required double outstanding,
+  }) {
+    final l31  = _pLast31();
+    final l180 = _pLast180();
+    final tyr  = _pThisYear();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Sales Report',
+            style: TextStyle(
+              color: _T.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Revenue breakdown and trends',
+            style: TextStyle(color: _T.textMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+
+          // ── Quick presets + date picker ──────────────────────────────────
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _PresetChip(
+                  label: 'All time',
+                  active: _range == null,
+                  onTap: () => setState(() => _range = null),
+                ),
+                const SizedBox(width: 6),
+                _PresetChip(
+                  label: 'Last 31 days',
+                  active: _rangesMatch(_range, l31),
+                  onTap: () => setState(() => _range = l31),
+                ),
+                const SizedBox(width: 6),
+                _PresetChip(
+                  label: 'Last 6 months',
+                  active: _rangesMatch(_range, l180),
+                  onTap: () => setState(() => _range = l180),
+                ),
+                const SizedBox(width: 6),
+                _PresetChip(
+                  label: 'This year',
+                  active: _rangesMatch(_range, tyr),
+                  onTap: () => setState(() => _range = tyr),
+                ),
+                const SizedBox(width: 10),
+                Container(width: 1, height: 28, color: _T.divider),
+                const SizedBox(width: 10),
+                _DateFilterButton(
+                  selectedRange: _range,
+                  onChanged: (r) => setState(() => _range = r),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Summary cards ────────────────────────────────────────────────
+          LayoutBuilder(builder: (_, c) {
+            final narrow = c.maxWidth < 460;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _AdminReportCard(
+                  label: 'Total Revenue',
+                  value: '₱${totalRevenue.toStringAsFixed(2)}',
+                  color: _T.gold,
+                  bg: const Color(0xFFFFFBEB),
+                  border: const Color(0xFFFDE68A),
+                  narrow: narrow,
+                ),
+                _AdminReportCard(
+                  label: 'Orders',
+                  value: '$orderCount',
+                  color: const Color(0xFF1D4ED8),
+                  bg: const Color(0xFFEFF6FF),
+                  border: const Color(0xFFBFDBFE),
+                  narrow: narrow,
+                ),
+                _AdminReportCard(
+                  label: 'Downpayments',
+                  value: '₱${dpTotal.toStringAsFixed(2)}',
+                  color: const Color(0xFF1D4ED8),
+                  bg: const Color(0xFFEFF6FF),
+                  border: const Color(0xFFBFDBFE),
+                  narrow: narrow,
+                  tooltip: 'Partial first payments (At least 50% deposits)',
+                ),
+                _AdminReportCard(
+                  label: 'Balance Collected',
+                  value: '₱${balTotal.toStringAsFixed(2)}',
+                  color: const Color(0xFFB45309),
+                  bg: const Color(0xFFFFFBEB),
+                  border: const Color(0xFFFDE68A),
+                  narrow: narrow,
+                  tooltip: 'Remaining balance payments collected',
+                ),
+                _AdminReportCard(
+                  label: 'Upfront Payments',
+                  value: '₱${uptTotal.toStringAsFixed(2)}',
+                  color: const Color(0xFF6D28D9),
+                  bg: const Color(0xFFF5F3FF),
+                  border: const Color(0xFFDDD6FE),
+                  narrow: narrow,
+                  tooltip: 'Orders paid 100% at the time of ordering',
+                ),
+                _AdminReportCard(
+                  label: 'Balance to Collect',
+                  value: '₱${outstanding.toStringAsFixed(2)}',
+                  color: const Color(0xFFDC2626),
+                  bg: const Color(0xFFFEF2F2),
+                  border: const Color(0xFFFECACA),
+                  narrow: narrow,
+                  tooltip: 'Total remaining balance on non-cancelled orders',
+                ),
+              ],
+            );
+          }),
+          const SizedBox(height: 24),
+
+          // ── Chart card ───────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _T.divider),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x08000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border:
+                          Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    child: const Icon(Icons.bar_chart_rounded,
+                        color: Color(0xFF1D4ED8), size: 16),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          granLabel,
+                          style: const TextStyle(
+                            color: _T.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          _range == null
+                              ? 'All time'
+                              : '${_formatDateLabel(_range!.start)} – '
+                                  '${_formatDateLabel(_range!.end)}',
+                          style: const TextStyle(
+                              color: _T.textMuted, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                if (buckets.isEmpty)
+                  const SizedBox(
+                    height: 80,
+                    child: Center(
+                      child: Text('No data for this period',
+                          style: TextStyle(
+                              color: _T.textMuted, fontSize: 13)),
+                    ),
+                  )
+                else
+                  _InteractiveChart(buckets: buckets),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
+// ─ Preset pill chip ───────────────────────────────────────────────────────────
+class _PresetChip extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _PresetChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? _T.navy : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: active ? _T.navy : _T.divider),
+          boxShadow: active
+              ? const [
+                  BoxShadow(
+                    color: Color(0x22000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
+                  )
+                ]
+              : [],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? Colors.white : _T.textSecondary,
+            fontSize: 12,
+            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Admin Sales Report View
+// =============================================================================
+class AdminSalesReportView extends StatelessWidget {
+  const AdminSalesReportView({super.key});
+
+  @override
+  Widget build(BuildContext context) => const _SalesReportContent();
+}
+
+// ─ Report summary card ────────────────────────────────────────────────────────
 class _AdminReportCard extends StatelessWidget {
   final String label, value;
   final Color color, bg, border;
@@ -2124,34 +2339,29 @@ class _AdminReportCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border, width: 1),
+        border: Border.all(color: border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: color.withValues(alpha: 0.7),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
+          Row(children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: color.withValues(alpha: 0.7),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
               ),
-              if (tooltip != null) ...[
-                const SizedBox(width: 4),
-                Tooltip(
-                  message: tooltip!,
-                  child: Icon(
-                    Icons.info_outline_rounded,
-                    size: 12,
-                    color: color.withValues(alpha: 0.5),
-                  ),
-                ),
-              ],
+            ),
+            if (tooltip != null) ...[
+              const SizedBox(width: 4),
+              Tooltip(
+                message: tooltip!,
+                child: Icon(Icons.info_outline_rounded,
+                    size: 12, color: color.withValues(alpha: 0.5)),
+              ),
             ],
-          ),
+          ]),
           const SizedBox(height: 5),
           Text(
             value,
@@ -2167,62 +2377,223 @@ class _AdminReportCard extends StatelessWidget {
   }
 }
 
-class _AdminChartPainter extends CustomPainter {
-  final List<_MonthBucket> buckets;
-  _AdminChartPainter({required this.buckets});
+// =============================================================================
+// Interactive Chart
+// =============================================================================
+class _InteractiveChart extends StatefulWidget {
+  final List<_Bucket> buckets;
+  const _InteractiveChart({required this.buckets});
+
+  @override
+  State<_InteractiveChart> createState() => _InteractiveChartState();
+}
+
+class _InteractiveChartState extends State<_InteractiveChart> {
+  int? _hoverIdx;
+
+  void _updateHover(double dx, double width) {
+    final n = widget.buckets.length;
+    if (n == 0) return;
+    final idx = n == 1
+        ? 0
+        : (dx / (width / (n - 1))).round().clamp(0, n - 1);
+    if (idx != _hoverIdx) setState(() => _hoverIdx = idx);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (_, c) {
+      final width = c.maxWidth;
+      final n = widget.buckets.length;
+
+      _Bucket? hov;
+      double? hovX;
+      if (_hoverIdx != null && _hoverIdx! < n) {
+        hov = widget.buckets[_hoverIdx!];
+        hovX = n <= 1 ? width / 2 : (_hoverIdx! * width / (n - 1));
+      }
+
+      // Show at most 8 x-axis labels to avoid crowding
+      final stride = n <= 8 ? 1 : (n / 8).ceil();
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          MouseRegion(
+            onHover: (e) => _updateHover(e.localPosition.dx, width),
+            onExit: (_) => setState(() => _hoverIdx = null),
+            child: GestureDetector(
+              onTapDown: (d) => _updateHover(d.localPosition.dx, width),
+              onPanUpdate: (d) => _updateHover(d.localPosition.dx, width),
+              child: SizedBox(
+                height: 160,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    CustomPaint(
+                      size: Size(width, 160),
+                      painter: _ChartPainter(
+                        buckets: widget.buckets,
+                        hoverIndex: _hoverIdx,
+                      ),
+                    ),
+                    if (hov != null && hovX != null)
+                      _buildTooltip(hov, hovX, width),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // X-axis labels
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(n, (i) {
+              final show = i % stride == 0 || i == n - 1;
+              final isH = i == _hoverIdx;
+              return Expanded(
+                child: show
+                    ? Text(
+                        widget.buckets[i].label,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isH ? _T.textPrimary : _T.textMuted,
+                          fontSize: 9,
+                          fontWeight:
+                              isH ? FontWeight.w700 : FontWeight.normal,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              );
+            }),
+          ),
+        ],
+      );
+    });
+  }
+
+  Widget _buildTooltip(_Bucket b, double x, double width) {
+    const tw = 140.0;
+    var left = x - tw / 2;
+    if (left < 0) left = 0;
+    if (left + tw > width) left = width - tw;
+
+    final sameDay = b.start == b.end;
+    final dateStr = sameDay
+        ? '${_shortMonth(b.start.month)} ${b.start.day}'
+        : '${_shortMonth(b.start.month)} ${b.start.day}'
+            ' – '
+            '${_shortMonth(b.end.month)} ${b.end.day}';
+
+    return Positioned(
+      left: left,
+      top: -6,
+      child: Container(
+        width: tw,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F1A2E),
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: const [
+            BoxShadow(color: Color(0x40000000), blurRadius: 10),
+          ],
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(
+            b.total == 0
+                ? 'No sales'
+                : '₱${b.total >= 1000 ? '${(b.total / 1000).toStringAsFixed(1)}k' : b.total.toStringAsFixed(2)}',
+            style: const TextStyle(
+              color: AppTheme.gold,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            dateStr,
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
+            textAlign: TextAlign.center,
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─ Chart painter ──────────────────────────────────────────────────────────────
+class _ChartPainter extends CustomPainter {
+  final List<_Bucket> buckets;
+  final int? hoverIndex;
+  _ChartPainter({required this.buckets, this.hoverIndex});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (buckets.isEmpty) return;
-    final maxVal = buckets.map((b) => b.total).reduce((a, b) => a > b ? a : b);
-    final effectiveMax = maxVal == 0 ? 1.0 : maxVal;
+    final maxVal =
+        buckets.map((b) => b.total).reduce((a, b) => a > b ? a : b);
+    final effMax = maxVal == 0 ? 1.0 : maxVal;
     final n = buckets.length;
-    final stepX = n <= 1 ? size.width : size.width / (n - 1);
+    final stepX = n <= 1 ? size.width / 2 : size.width / (n - 1);
 
-    final gridPaint = Paint()
+    // Horizontal grid lines
+    final gPaint = Paint()
       ..color = const Color(0xFFE5E7EB)
       ..strokeWidth = 1;
     for (int i = 0; i <= 3; i++) {
       final y = size.height * i / 3;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gPaint);
     }
 
-    final points = List.generate(
-      n,
-          (i) => Offset(
-        i * stepX,
-        size.height - (buckets[i].total / effectiveMax) * size.height * 0.85,
-      ),
-    );
+    // Compute data points
+    final pts = List.generate(n, (i) {
+      final x = n == 1 ? size.width / 2 : i * stepX;
+      return Offset(
+        x,
+        size.height -
+            (buckets[i].total / effMax) * size.height * 0.85,
+      );
+    });
 
-    final fillPath = Path()..moveTo(points.first.dx, size.height);
-    for (final p in points) fillPath.lineTo(p.dx, p.dy);
-    fillPath.lineTo(points.last.dx, size.height);
-    fillPath.close();
+    // Filled area under line
+    final fillPath = Path()..moveTo(pts.first.dx, size.height);
+    for (final p in pts) fillPath.lineTo(p.dx, p.dy);
+    fillPath
+      ..lineTo(pts.last.dx, size.height)
+      ..close();
     canvas.drawPath(
       fillPath,
       Paint()
-        ..shader = LinearGradient(
+        ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF1D4ED8).withValues(alpha: 0.15),
-            const Color(0xFF1D4ED8).withValues(alpha: 0.0),
-          ],
+          colors: [Color(0x261D4ED8), Color(0x001D4ED8)],
         ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
     );
 
-    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
-    for (int i = 1; i < points.length; i++) {
-      final prev = points[i - 1];
-      final curr = points[i];
+    // Hover vertical guide line
+    if (hoverIndex != null && hoverIndex! < pts.length) {
+      final hx = pts[hoverIndex!].dx;
+      canvas.drawLine(
+        Offset(hx, 0),
+        Offset(hx, size.height),
+        Paint()
+          ..color = const Color(0x401D4ED8)
+          ..strokeWidth = 1.5,
+      );
+    }
+
+    // Smooth cubic bezier line
+    final linePath = Path()..moveTo(pts.first.dx, pts.first.dy);
+    for (int i = 1; i < pts.length; i++) {
+      final prev = pts[i - 1];
+      final curr = pts[i];
       linePath.cubicTo(
-        (prev.dx + curr.dx) / 2,
-        prev.dy,
-        (prev.dx + curr.dx) / 2,
-        curr.dy,
-        curr.dx,
-        curr.dy,
+        (prev.dx + curr.dx) / 2, prev.dy,
+        (prev.dx + curr.dx) / 2, curr.dy,
+        curr.dx, curr.dy,
       );
     }
     canvas.drawPath(
@@ -2233,314 +2604,27 @@ class _AdminChartPainter extends CustomPainter {
         ..style = PaintingStyle.stroke,
     );
 
-    for (final p in points) {
-      canvas.drawCircle(p, 5, Paint()..color = Colors.white);
-      canvas.drawCircle(p, 4, Paint()..color = const Color(0xFF1D4ED8));
+    // Data point dots
+    for (int i = 0; i < pts.length; i++) {
+      final p = pts[i];
+      final isH = i == hoverIndex;
+      canvas.drawCircle(p, isH ? 7 : 5, Paint()..color = Colors.white);
+      canvas.drawCircle(
+          p, isH ? 5 : 3.5, Paint()..color = const Color(0xFF1D4ED8));
     }
   }
 
   @override
-  bool shouldRepaint(_AdminChartPainter old) => old.buckets != buckets;
+  bool shouldRepaint(_ChartPainter o) =>
+      o.buckets != buckets || o.hoverIndex != hoverIndex;
 }
 
-// SalesReportView
 // =============================================================================
-// Employee Sales Report — mirrors AdminSalesReportView
+// Employee Sales Report View  (same content as admin)
 // =============================================================================
-class SalesReportView extends StatefulWidget {
+class SalesReportView extends StatelessWidget {
   const SalesReportView({super.key});
 
   @override
-  State<SalesReportView> createState() => _SalesReportViewState();
-}
-
-class _SalesReportViewState extends State<SalesReportView> {
-  DateTimeRange? _selectedRange;
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('Sales_Records')
-          .orderBy('sale_date', descending: false)
-          .snapshots(),
-      builder: (context, salesSnap) {
-        if (salesSnap.connectionState == ConnectionState.waiting) {
-          return Center(
-            child: CircularProgressIndicator(
-              color: _T.textPrimary.withValues(alpha: 0.4),
-            ),
-          );
-        }
-        if (salesSnap.hasError) {
-          return Center(
-            child: Text(
-              'Error: ${salesSnap.error}',
-              style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13),
-            ),
-          );
-        }
-
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('Orders')
-              .where(
-            'status',
-            whereIn: ['pending', 'in_production', 'ready', 'completed'],
-          )
-              .snapshots(),
-          builder: (context, ordersSnap) {
-            double outstandingBalance = 0;
-            if (ordersSnap.hasData) {
-              for (final doc in ordersSnap.data!.docs) {
-                final d = doc.data() as Map<String, dynamic>;
-                final remaining = (d['remaining_balance'] as num?)?.toDouble();
-                if (remaining != null && remaining > 0.01) {
-                  outstandingBalance += remaining;
-                } else {
-                  final total = (d['total_price'] as num?)?.toDouble() ?? 0;
-                  final paid = (d['amount_paid'] as num?)?.toDouble() ?? 0;
-                  final diff = total - paid;
-                  if (diff > 0.01) outstandingBalance += diff;
-                }
-              }
-            }
-
-            final allDocs = salesSnap.data?.docs ?? [];
-
-            // Period-filtered docs
-            final docs = allDocs.where((doc) {
-              final d = doc.data() as Map<String, dynamic>;
-              final ts = d['sale_date'] as Timestamp?;
-              if (ts == null) return _selectedRange == null;
-              return _isWithinDateRange(ts.toDate().toLocal(), _selectedRange);
-            }).toList();
-
-            // Build buckets
-            final bucketMap = _buildBucketMap(allDocs, _selectedRange);
-            final monthBuckets = bucketMap.values.toList()
-              ..sort((a, b) => a.month.compareTo(b.month));
-
-            double totalRevenue = 0;
-            double downpaymentTotal = 0;
-            double balanceTotal = 0;
-            final orderIds = <String>{};
-
-            for (final doc in docs) {
-              final d = doc.data() as Map<String, dynamic>;
-              final amount = (d['sale_amount'] as num?)?.toDouble() ?? 0;
-              final type = d['payment_type']?.toString() ?? '';
-              final ordId = d['order_id']?.toString() ?? '';
-
-              totalRevenue += amount;
-              if (type == 'downpayment') downpaymentTotal += amount;
-              if (type == 'balance' || type == 'cash' || type == 'full')
-                balanceTotal += amount;
-              if (ordId.isNotEmpty) orderIds.add(ordId);
-
-              final ts = d['sale_date'] as Timestamp?;
-              if (ts != null) {
-                final dt = ts.toDate();
-                final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
-                if (bucketMap.containsKey(key)) bucketMap[key]!.total += amount;
-              }
-            }
-
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Sales Report',
-                        style: TextStyle(
-                          color: _T.textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Revenue breakdown and trends',
-                        style: TextStyle(color: _T.textMuted, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  _DateFilterButton(
-                    selectedRange: _selectedRange,
-                    onChanged: (range) =>
-                        setState(() => _selectedRange = range),
-                  ),
-                  const SizedBox(height: 20),
-
-                  LayoutBuilder(
-                    builder: (_, constraints) {
-                      final narrow = constraints.maxWidth < 460;
-                      return Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _AdminReportCard(
-                            label: 'Total Revenue',
-                            value: '₱${totalRevenue.toStringAsFixed(2)}',
-                            color: _T.gold,
-                            bg: const Color(0xFFFFFBEB),
-                            border: const Color(0xFFFDE68A),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Orders',
-                            value: '${orderIds.length}',
-                            color: const Color(0xFF1D4ED8),
-                            bg: const Color(0xFFEFF6FF),
-                            border: const Color(0xFFBFDBFE),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Downpayments',
-                            value: '₱${downpaymentTotal.toStringAsFixed(2)}',
-                            color: const Color(0xFF6D28D9),
-                            bg: const Color(0xFFF5F3FF),
-                            border: const Color(0xFFDDD6FE),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Balance Collected',
-                            value: '₱${balanceTotal.toStringAsFixed(2)}',
-                            color: const Color(0xFF15803D),
-                            bg: const Color(0xFFF0FDF4),
-                            border: const Color(0xFFBBF7D0),
-                            narrow: narrow,
-                          ),
-                          _AdminReportCard(
-                            label: 'Balance to Collect',
-                            value: '₱${outstandingBalance.toStringAsFixed(2)}',
-                            color: const Color(0xFFDC2626),
-                            bg: const Color(0xFFFEF2F2),
-                            border: const Color(0xFFFECACA),
-                            narrow: narrow,
-                            tooltip:
-                            'Total remaining balance on non-cancelled orders',
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
-
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: _T.divider, width: 1),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x08000000),
-                          blurRadius: 8,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEFF6FF),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: const Color(0xFFBFDBFE),
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.bar_chart_rounded,
-                                color: Color(0xFF1D4ED8),
-                                size: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Monthly Revenue',
-                                  style: TextStyle(
-                                    color: _T.textPrimary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                Text(
-                                  _selectedRange == null
-                                      ? 'All time by month'
-                                      : 'Selected range by month',
-                                  style: const TextStyle(
-                                    color: _T.textMuted,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          height: 160,
-                          child: CustomPaint(
-                            painter: _AdminChartPainter(buckets: monthBuckets),
-                            child: Container(),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: monthBuckets
-                              .map(
-                                (b) => Column(
-                              children: [
-                                Text(
-                                  b.label,
-                                  style: const TextStyle(
-                                    color: _T.textMuted,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                                if (b.total > 0) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '₱${b.total >= 1000 ? '${(b.total / 1000).toStringAsFixed(1)}k' : b.total.toStringAsFixed(0)}',
-                                    style: const TextStyle(
-                                      color: _T.gold,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          )
-                              .toList(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) => const _SalesReportContent();
 }

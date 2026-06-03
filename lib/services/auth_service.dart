@@ -757,11 +757,26 @@ class AuthService {
 
   // ── User management (admin) ───────────────────────────────────────────────
 
+  // Deletes a list of document references in Firestore-safe chunks of 400.
+  Future<void> _deleteDocsBatch(List<DocumentReference> refs) async {
+    const chunkSize = 400;
+    for (var i = 0; i < refs.length; i += chunkSize) {
+      final end = (i + chunkSize).clamp(0, refs.length);
+      final b = _firestore.batch();
+      for (final r in refs.sublist(i, end)) {
+        b.delete(r);
+      }
+      await b.commit();
+    }
+  }
+
   Future<String?> deleteUser(String uid) async {
     try {
+      // ── 1. Read user data ────────────────────────────────────────────────
       final userDoc = await _firestore.collection('User').doc(uid).get();
       final email = userDoc.data()?['email'] as String?;
 
+      // ── 2. Free the email so it can be reused for registration ───────────
       if (email != null && email.isNotEmpty) {
         await _firestore.collection('FreedEmails').doc(email).set({
           'uid': uid,
@@ -769,6 +784,8 @@ class AuthService {
         });
       }
 
+      // ── 3. Delete Firebase Auth account via Cloud Function ───────────────
+      // Silently continues if the account doesn't exist (e.g. seed accounts).
       try {
         final idToken = await _auth.currentUser?.getIdToken();
         if (idToken != null) {
@@ -783,11 +800,123 @@ class AuthService {
         }
       } catch (_) {}
 
-      final batch = _firestore.batch();
-      batch.delete(_firestore.collection('User').doc(uid));
-      batch.delete(_firestore.collection('AuthIndex').doc(uid));
-      await batch.commit();
+      // ── 4. Separate completed orders from non-completed ──────────────────
+      // Completed orders stay in the system with their customer name and
+      // contribute to sales totals. Everything else is removed.
+      final ordersSnap = await _firestore
+          .collection('Orders')
+          .where('customer_uid', isEqualTo: uid)
+          .get();
 
+      final toDelete   = <String>[];   // order IDs to delete
+      final toKeep     = <String>[];   // completed order IDs
+
+      for (final doc in ordersSnap.docs) {
+        final status = doc.data()['status'] as String? ?? '';
+        if (status == 'completed') {
+          toKeep.add(doc.id);
+        } else {
+          toDelete.add(doc.id);
+        }
+      }
+
+      // ── 5. Delete non-completed orders ───────────────────────────────────
+      if (toDelete.isNotEmpty) {
+        await _deleteDocsBatch(
+          toDelete.map((id) => _firestore.collection('Orders').doc(id)).toList(),
+        );
+      }
+
+      // ── 6. Delete invoices for non-completed orders ──────────────────────
+      // invoice_id is stored directly on each order document.
+      final invoiceIdsToDelete = ordersSnap.docs
+          .where((d) => toDelete.contains(d.id))
+          .map((d) => d.data()['invoice_id'] as String?)
+          .where((id) => id != null && id.isNotEmpty)
+          .cast<String>()
+          .toList();
+
+      if (invoiceIdsToDelete.isNotEmpty) {
+        await _deleteDocsBatch(
+          invoiceIdsToDelete
+              .map((id) => _firestore.collection('Invoices').doc(id))
+              .toList(),
+        );
+      }
+
+      // ── 7. Delete Order_Queue entries for non-completed orders ────────────
+      try {
+        final queueSnap = await _firestore
+            .collection('Order_Queue')
+            .where('customer_uid', isEqualTo: uid)
+            .get();
+        final queueRefs = queueSnap.docs
+            .where((d) {
+              final orderId = d.data()['order_id'] as String? ?? '';
+              return toDelete.contains(orderId);
+            })
+            .map((d) => d.reference)
+            .toList();
+        if (queueRefs.isNotEmpty) await _deleteDocsBatch(queueRefs);
+      } catch (_) {}
+
+      // ── 8. Delete OrderReviews ───────────────────────────────────────────
+      try {
+        final reviewsSnap = await _firestore
+            .collection('OrderReviews')
+            .where('customer_uid', isEqualTo: uid)
+            .get();
+        if (reviewsSnap.docs.isNotEmpty) {
+          await _deleteDocsBatch(
+              reviewsSnap.docs.map((d) => d.reference).toList());
+        }
+      } catch (_) {}
+
+      // ── 9. Delete Cart ───────────────────────────────────────────────────
+      await _firestore
+          .collection('Carts')
+          .doc(uid)
+          .delete()
+          .catchError((_) {});
+
+      // ── 10. Delete Messages thread + subcollection ───────────────────────
+      try {
+        final chatDocId = 'chat_$uid';
+        final msgsSnap = await _firestore
+            .collection('Messages')
+            .doc(chatDocId)
+            .collection('chat')
+            .get();
+        if (msgsSnap.docs.isNotEmpty) {
+          await _deleteDocsBatch(
+              msgsSnap.docs.map((d) => d.reference).toList());
+        }
+        await _firestore
+            .collection('Messages')
+            .doc(chatDocId)
+            .delete()
+            .catchError((_) {});
+      } catch (_) {}
+
+      // ── 11. Delete Conversations entry ───────────────────────────────────
+      try {
+        final convoSnap = await _firestore
+            .collection('Conversations')
+            .where('customer_id', isEqualTo: uid)
+            .get();
+        if (convoSnap.docs.isNotEmpty) {
+          await _deleteDocsBatch(
+              convoSnap.docs.map((d) => d.reference).toList());
+        }
+      } catch (_) {}
+
+      // ── 12. Delete core profile documents ────────────────────────────────
+      final coreBatch = _firestore.batch();
+      coreBatch.delete(_firestore.collection('User').doc(uid));
+      coreBatch.delete(_firestore.collection('AuthIndex').doc(uid));
+      await coreBatch.commit();
+
+      // ── 13. Cleanup auxiliary collections ────────────────────────────────
       await Future.wait([
         if (email != null && email.isNotEmpty)
           _firestore
@@ -801,20 +930,6 @@ class AuthService {
             .delete()
             .catchError((_) {}),
       ]);
-
-      try {
-        final ordersSnap = await _firestore
-            .collection('Orders')
-            .where('uid', isEqualTo: uid)
-            .get();
-        if (ordersSnap.docs.isNotEmpty) {
-          final ob = _firestore.batch();
-          for (final d in ordersSnap.docs) {
-            ob.delete(d.reference);
-          }
-          await ob.commit();
-        }
-      } catch (_) {}
 
       return 'success';
     } catch (e) {

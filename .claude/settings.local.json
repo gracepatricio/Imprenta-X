@@ -39,7 +39,9 @@
       "PowerShell(node -e \"const p = require\\('path'\\); const os = require\\('os'\\); console.log\\(p.join\\(os.homedir\\(\\), '.config', 'configstore', 'firebase-tools.json'\\)\\)\" 2>&1)",
       "PowerShell(npm list *)",
       "Bash(Find C:\\\\Users\\\\ADMIN\\\\AndroidStudioProjects\\\\Imprenta-X-main\\\\lib\\\\screens *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(findstr /R \"collection\\\\\\(\" lib\\\\*.dart lib\\\\screens\\\\*.dart lib\\\\services\\\\*.dart)",
+      "Bash(findstr /V \"^\\\\s*//\")"
     ]
   }
 }
