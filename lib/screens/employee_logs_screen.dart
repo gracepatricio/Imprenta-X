@@ -7,6 +7,7 @@ import 'sales_widgets.dart';
 import 'employee_pos_screen.dart';
 import 'invoice_screen.dart';
 import 'design_file_viewer.dart';
+import 'chat_screen.dart';
 import '../services/inventory_service.dart';
 import '../services/turnaround_service.dart';
 
@@ -1120,7 +1121,7 @@ class _OrderHistoryCard extends StatelessWidget {
                     statusLabel,
                     style: TextStyle(
                       color: statusColor,
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -3011,6 +3012,69 @@ class _ReadyOrderCard extends StatelessWidget {
     }
   }
 
+  Future<void> _openChat(BuildContext context) async {
+    final customerUid  = data['customer_uid']?.toString() ?? '';
+    final customerName = data['customer_name']?.toString() ?? 'Customer';
+    if (customerUid.isEmpty) return;
+
+    final orderLabel = data['order_id']?.toString() ?? orderId;
+    final products   = (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final productSummary = products.isNotEmpty
+        ? products.map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}').join(', ')
+        : '—';
+    final total = (data['total_price'] as num?)?.toDouble() ?? 0;
+
+    final user = FirebaseAuth.instance.currentUser;
+    String employeeName = user?.displayName ?? 'Employee';
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('User').doc(user.uid).get();
+        employeeName = doc.data()?['full_name'] ?? employeeName;
+      } catch (_) {}
+    }
+
+    final threadRef = FirebaseFirestore.instance
+        .collection('Messages').doc('chat_$customerUid');
+
+    final msgText = 'Regarding Order: $orderLabel\n'
+        'Items: $productSummary\n'
+        'Status: Ready for Pickup\n'
+        'Total: ₱${total.toStringAsFixed(2)}';
+
+    await threadRef.collection('chat').add({
+      'sender_uid':  user?.uid ?? 'employee',
+      'sender_name': employeeName,
+      'sender_role': 'employee',
+      'text':        msgText,
+      'timestamp':   FieldValue.serverTimestamp(),
+    });
+    await threadRef.set({
+      'customer_uid':   customerUid,
+      'customer_name':  customerName,
+      'last_message':   'Re: $orderLabel — Ready for Pickup',
+      'last_updated':   FieldValue.serverTimestamp(),
+      'unread_customer': FieldValue.increment(1),
+    }, SetOptions(merge: true));
+
+    if (context.mounted) {
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (ctx) => Scaffold(
+          backgroundColor: const Color(0xFFF7F8FA),
+          body: SafeArea(
+            child: ChatScreen(
+              customerUid:  customerUid,
+              customerName: customerName,
+              isEmployee:   true,
+              embedded:     true,
+              onClose:      () => Navigator.pop(ctx),
+            ),
+          ),
+        ),
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final orderLabel = data['order_id']?.toString() ?? orderId;
@@ -3149,6 +3213,23 @@ class _ReadyOrderCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
+                // Message button
+                GestureDetector(
+                  onTap: () => _openChat(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: _Glass.glass(radius: 10),
+                    child: const Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      size: 18,
+                      color: _Glass.textSecondary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 if (!fullyPaid)
                   Expanded(
                     child: Container(
@@ -3174,7 +3255,7 @@ class _ReadyOrderCard extends StatelessWidget {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              'Collect ₱${remaining.toStringAsFixed(2)} via POS before release',
+                              '₱${remaining.toStringAsFixed(2)} balance due — via POS or app payment',
                               style: const TextStyle(
                                 color: _Glass.accentAmber,
                                 fontSize: 11,
@@ -3527,6 +3608,71 @@ class _QueueCard extends StatelessWidget {
     }
   }
 
+  Future<void> _openChat(BuildContext context) async {
+    final customerUid  = data['customer_uid']?.toString() ?? '';
+    final customerName = data['customer_name']?.toString() ?? 'Customer';
+    if (customerUid.isEmpty) return;
+
+    final orderId = data['order_id']?.toString() ?? queueDocId;
+    final products = (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final productSummary = products.isNotEmpty
+        ? products.map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}').join(', ')
+        : '—';
+    final total    = (data['total_price'] as num?)?.toDouble() ?? 0;
+    final jobStatus = data['job_status']?.toString() ?? 'pending';
+    final statusLabel = jobStatus == 'active' ? 'In Production' : 'Pending';
+
+    final user = FirebaseAuth.instance.currentUser;
+    String employeeName = user?.displayName ?? 'Employee';
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('User').doc(user.uid).get();
+        employeeName = doc.data()?['full_name'] ?? employeeName;
+      } catch (_) {}
+    }
+
+    final threadRef = FirebaseFirestore.instance
+        .collection('Messages').doc('chat_$customerUid');
+
+    final msgText = 'Regarding Order: $orderId\n'
+        'Items: $productSummary\n'
+        'Status: $statusLabel\n'
+        'Total: ₱${total.toStringAsFixed(2)}';
+
+    await threadRef.collection('chat').add({
+      'sender_uid':  user?.uid ?? 'employee',
+      'sender_name': employeeName,
+      'sender_role': 'employee',
+      'text':        msgText,
+      'timestamp':   FieldValue.serverTimestamp(),
+    });
+    await threadRef.set({
+      'customer_uid':    customerUid,
+      'customer_name':   customerName,
+      'last_message':    'Re: $orderId — $statusLabel',
+      'last_updated':    FieldValue.serverTimestamp(),
+      'unread_customer': FieldValue.increment(1),
+    }, SetOptions(merge: true));
+
+    if (context.mounted) {
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (ctx) => Scaffold(
+          backgroundColor: const Color(0xFFF7F8FA),
+          body: SafeArea(
+            child: ChatScreen(
+              customerUid:  customerUid,
+              customerName: customerName,
+              isEmployee:   true,
+              embedded:     true,
+              onClose:      () => Navigator.pop(ctx),
+            ),
+          ),
+        ),
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final orderId = data['order_id']?.toString() ?? '—';
@@ -3547,9 +3693,6 @@ class _QueueCard extends StatelessWidget {
       if (created == null || ta == null) return null;
       return created.add(Duration(days: ta));
     })();
-
-    final isCompleted =
-        data['is_completed'] as bool? ?? (jobStatus == 'completed');
 
     final statusColor = jobStatus == 'active'
         ? _Glass.accentBlue
@@ -3600,60 +3743,14 @@ class _QueueCard extends StatelessWidget {
                         style: const TextStyle(
                           color: _Glass.textPrimary,
                           fontWeight: FontWeight.w800,
-                          fontSize: 14,
+                          fontSize: 16,
                         ),
                       ),
                       Text(
                         customerName,
                         style: const TextStyle(
                           color: _Glass.textMuted,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Completed badge
-                Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isCompleted
-                        ? _Glass.accentEmerald.withValues(alpha: 0.10)
-                        : _Glass.surfaceThin,
-                    borderRadius: BorderRadius.circular(99),
-                    border: Border.all(
-                      color: isCompleted
-                          ? _Glass.accentEmerald.withValues(alpha: 0.35)
-                          : _Glass.borderMid,
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isCompleted
-                            ? Icons.check_circle_rounded
-                            : Icons.radio_button_unchecked_rounded,
-                        size: 11,
-                        color: isCompleted
-                            ? _Glass.accentEmerald
-                            : _Glass.textMuted,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        isCompleted ? 'Completed' : 'Pending',
-                        style: TextStyle(
-                          color: isCompleted
-                              ? _Glass.accentEmerald
-                              : _Glass.textMuted,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
                         ),
                       ),
                     ],
@@ -3682,7 +3779,7 @@ class _QueueCard extends StatelessWidget {
                         : 'Pending',
                     style: TextStyle(
                       color: statusColor,
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -3698,7 +3795,7 @@ class _QueueCard extends StatelessWidget {
                     .join(', '),
                 style: const TextStyle(
                   color: _Glass.textSecondary,
-                  fontSize: 12,
+                  fontSize: 14,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -3709,23 +3806,23 @@ class _QueueCard extends StatelessWidget {
 
             Row(
               children: [
-                Icon(Icons.schedule, size: 13, color: _Glass.textMuted),
+                Icon(Icons.schedule, size: 15, color: _Glass.textMuted),
                 const SizedBox(width: 4),
                 Text(
                   turnaround != null
                       ? 'Est. $turnaround day${turnaround == 1 ? '' : 's'}'
                       : 'Turnaround TBD',
-                  style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                  style: const TextStyle(color: _Glass.textMuted, fontSize: 13),
                 ),
                 const SizedBox(width: 12),
-                Icon(Icons.calendar_today, size: 13, color: _Glass.textMuted),
+                Icon(Icons.calendar_today, size: 15, color: _Glass.textMuted),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     dateStr,
                     style: const TextStyle(
                       color: _Glass.textMuted,
-                      fontSize: 11,
+                      fontSize: 13,
                     ),
                   ),
                 ),
@@ -3734,7 +3831,7 @@ class _QueueCard extends StatelessWidget {
                   style: const TextStyle(
                     color: _Glass.textPrimary,
                     fontWeight: FontWeight.w800,
-                    fontSize: 13,
+                    fontSize: 15,
                   ),
                 ),
               ],
@@ -3858,6 +3955,23 @@ class _QueueCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  // Message button
+                  GestureDetector(
+                    onTap: () => _openChat(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                      decoration: _Glass.glass(radius: 99),
+                      child: const Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 18,
+                        color: _Glass.textSecondary,
+                      ),
+                    ),
+                  ),
                 ],
               ),
           ],
@@ -3900,13 +4014,13 @@ class _DueDateRow extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(Icons.flag_rounded, size: 12, color: color.withValues(alpha: 0.85)),
+        Icon(Icons.flag_rounded, size: 14, color: color.withValues(alpha: 0.85)),
         const SizedBox(width: 5),
         Text(
           label,
           style: TextStyle(
             color: color,
-            fontSize: 11,
+            fontSize: 13,
             fontWeight: diff <= 0 ? FontWeight.w700 : FontWeight.w500,
           ),
         ),

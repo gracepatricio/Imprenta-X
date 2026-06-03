@@ -1058,10 +1058,17 @@ class _EmployeeDashboardContent extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              customerUid: customerUid,
-                              customerName: customerName,
-                              isEmployee: true,
+                            builder: (ctx) => Scaffold(
+                              backgroundColor: const Color(0xFFF7F8FA),
+                              body: SafeArea(
+                                child: ChatScreen(
+                                  customerUid: customerUid,
+                                  customerName: customerName,
+                                  isEmployee: true,
+                                  embedded: true,
+                                  onClose: () => Navigator.pop(ctx),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -1262,6 +1269,14 @@ class _EmployeeMessagesContent extends StatefulWidget {
 class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
   String? _selectedUid;
   String _selectedName = '';
+  String _search = '';
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   Widget _buildList(BuildContext context, {required bool splitMode}) {
     return Padding(
@@ -1285,7 +1300,45 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
             'Customer conversations',
             style: TextStyle(color: _G.textMuted, fontSize: 12),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
+          // ── Search ─────────────────────────────────────────────────────────
+          TextField(
+            controller: _searchCtrl,
+            onChanged: (v) => setState(() => _search = v.trim().toLowerCase()),
+            style: const TextStyle(color: _G.textPrimary, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Search customer…',
+              hintStyle: TextStyle(
+                  color: _G.textMuted.withValues(alpha: 0.6), fontSize: 13),
+              prefixIcon:
+                  const Icon(Icons.search_rounded, color: _G.textMuted, size: 18),
+              suffixIcon: _search.isNotEmpty
+                  ? GestureDetector(
+                      onTap: () {
+                        _searchCtrl.clear();
+                        setState(() => _search = '');
+                      },
+                      child: const Icon(Icons.close_rounded,
+                          color: _G.textMuted, size: 16),
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.06),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.12), width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                    color: _G.navyBlue.withValues(alpha: 0.6), width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -1298,13 +1351,22 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
                     child: CircularProgressIndicator(color: _G.navyBlue),
                   );
                 }
-                final docs = List.from(snap.data?.docs ?? [])
+                final allDocs = List.from(snap.data?.docs ?? [])
                   ..sort((a, b) {
                     final at = (a.data() as Map)['last_updated'];
                     final bt = (b.data() as Map)['last_updated'];
                     if (at == null || bt == null) return 0;
                     return (bt as dynamic).compareTo(at);
                   });
+                final docs = _search.isEmpty
+                    ? allDocs
+                    : allDocs.where((doc) {
+                        final name = ((doc.data() as Map)['customer_name']
+                                    ?.toString() ??
+                                '')
+                            .toLowerCase();
+                        return name.contains(_search);
+                      }).toList();
                 if (docs.isEmpty) {
                   return Center(
                     child: Column(

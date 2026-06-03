@@ -12,7 +12,12 @@ void clearPendingPayment() {}
 Future<void> downloadBytes(Uint8List bytes, String mimeType, String filename) async {}
 
 void openUrlSync(String url) {
-  launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  final uri = Uri.parse(url);
+  launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
+    // Fallback to platform default if external browser launch fails
+    launchUrl(uri, mode: LaunchMode.platformDefault).catchError((_) {});
+    return false;
+  });
 }
 
 Future<void> openFileInNewTab(String url) async {

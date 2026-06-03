@@ -46,6 +46,11 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startPolling();
+    // On web: auto-open the payment page in a new tab immediately so the user
+    // doesn't need to manually click the button.
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openPaymentUrl());
+    }
   }
 
   @override
@@ -213,8 +218,12 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
                       _Step(
                         number: '1',
                         text: _opened
-                            ? 'PayMongo checkout opened in your browser'
-                            : 'Tap "Open Payment Page" below to start',
+                            ? kIsWeb
+                                ? 'Payment page opened in a new tab'
+                                : 'PayMongo checkout opened in your browser'
+                            : kIsWeb
+                                ? 'Opening payment page in a new tab…'
+                                : 'Tap "Open Payment Page" below to start',
                         done: _opened,
                       ),
                       const SizedBox(height: 12),
@@ -224,10 +233,13 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
                             '(scan the QR or enter details)',
                       ),
                       const SizedBox(height: 12),
-                      const _Step(
+                      _Step(
                         number: '3',
-                        text: 'After paying, return to this screen — '
-                            'your order will be confirmed automatically',
+                        text: kIsWeb
+                            ? 'After paying, come back to this tab — '
+                                'your order confirms automatically'
+                            : 'After paying, return to this screen — '
+                                'your order will be confirmed automatically',
                       ),
                     ],
                   ),
