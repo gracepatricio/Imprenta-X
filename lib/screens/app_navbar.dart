@@ -29,14 +29,16 @@ class AppNavBar extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10), // ← original
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A2E).withValues(alpha: 0.82),
+              color: const Color(
+                0xFF1A1A2E,
+              ).withValues(alpha: 0.82), // ← original
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.14),
+                color: Colors.white.withValues(alpha: 0.14), // ← original
                 width: 1,
               ),
               boxShadow: [
@@ -171,31 +173,40 @@ class _NavItemState extends State<_NavItem> {
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
           decoration: BoxDecoration(
             color: widget.isActive
-                ? AppTheme.gold
+                ? const Color(0xFFF5F0C0)
                 : _hovered
                 ? Colors.white.withValues(alpha: 0.08)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
               color: widget.isActive
-                  ? const Color(0xFFB48200).withValues(alpha: 0.30)
+                  ? const Color(0xFFF5F0C0).withValues(alpha: 0.40)
                   : _hovered
                   ? Colors.white.withValues(alpha: 0.10)
                   : Colors.transparent,
               width: 1,
             ),
+            boxShadow: widget.isActive
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFFF5F0C0).withValues(alpha: 0.30),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : [],
           ),
           child: Text(
             widget.label,
             style: TextStyle(
               color: widget.isActive
-                  ? const Color(0xFF1A1A2E)
+                  ? const Color(0xFF1A1200)
                   : _hovered
                   ? Colors.white
-                  : Colors.white.withValues(alpha: 0.50),
+                  : Colors.white.withValues(alpha: 0.60),
               fontSize: 14,
               fontWeight: widget.isActive || _hovered
-                  ? FontWeight.w600
+                  ? FontWeight.w700
                   : FontWeight.w400,
               letterSpacing: 0.1,
             ),
@@ -223,10 +234,12 @@ class _CompactMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
       onSelected: onTap,
-      color: const Color(0xFF1E1E30),
+      color: const Color(0xFF1E1E30), // ← original
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        side: BorderSide(
+          color: Colors.white.withValues(alpha: 0.08),
+        ), // ← original
       ),
       icon: Container(
         padding: const EdgeInsets.all(6),
@@ -249,10 +262,10 @@ class _CompactMenu extends StatelessWidget {
                 item,
                 style: TextStyle(
                   color: item == activeItem
-                      ? AppTheme.gold
+                      ? const Color(0xFFF5F0C0)
                       : Colors.white.withValues(alpha: 0.75),
                   fontWeight: item == activeItem
-                      ? FontWeight.bold
+                      ? FontWeight.w700
                       : FontWeight.normal,
                   fontSize: 14,
                 ),

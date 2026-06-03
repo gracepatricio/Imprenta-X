@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,6 +9,157 @@ import 'customer_orders_screen.dart';
 import 'invoice_screen.dart';
 import 'payment_webview_screen.dart';
 import '../services/paymongo_service.dart';
+
+// =============================================================================
+// Design Tokens — Dark Frosted Glass (mirrors admin + product section accents)
+// =============================================================================
+class _G {
+  // Background / surface
+  static const Color navyBlue = Color(0xFF0F1A2E);
+  static const Color darkBase = Color(0xFF0C091F); // deep dark bg
+
+  // Frosted glass surfaces (dark-tinted)
+  static const Color glassDark = Color(0x66080616); // 40% dark glass
+  static const Color glassMid = Color(0x44080616); // lighter glass panel
+  static const Color glassThin = Color(0x28080616);
+  static const Color glassBorder = Color(0x4DFFFFFF); // white border 30%
+  static const Color glassBorderDim = Color(0x1AFFFFFF); // white border 10%
+
+  // Active button: light yellow (matches product filter "All" button)
+  static const Color activeBtn = Color(0xFFF5F0C0); // light yellow/cream
+  static const Color activeBtnText = Color(0xFF1A1200); // dark text on yellow
+
+  // Text
+  static const Color textPrimary = Color(0xFFEFF0F6);
+  static const Color textSecondary = Color(0xCCEFF0F6);
+  static const Color textMuted = Color(0x88EFF0F6);
+
+  // Accents
+  static const Color accentBlue = Color(0xFF3B82F6);
+  static const Color accentViolet = Color(0xFF8B5CF6);
+  static const Color accentEmerald = Color(0xFF10B981);
+  static const Color accentAmber = Color(0xFFF59E0B);
+  static const Color accentRose = Color(0xFFEF4444);
+  static const Color accentGold = Color(0xFFD97706);
+
+  // Shadows
+  static const BoxShadow elevatedShadow = BoxShadow(
+    color: Color(0x55000000),
+    blurRadius: 32,
+    spreadRadius: -4,
+    offset: Offset(0, 8),
+  );
+  static const BoxShadow rowShadow = BoxShadow(
+    color: Color(0x33000000),
+    blurRadius: 12,
+    offset: Offset(0, 4),
+  );
+
+  // Dark frosted glass card
+  static BoxDecoration glassCard({
+    double radius = 18,
+    bool elevated = false,
+    Color? tintBorder,
+  }) => BoxDecoration(
+    color: glassDark,
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: tintBorder ?? glassBorder, width: 1.2),
+    boxShadow: [elevated ? elevatedShadow : rowShadow],
+  );
+
+  // Pill decoration for inactive chips
+  static BoxDecoration pill({Color? tint}) => BoxDecoration(
+    color: tint != null ? tint.withValues(alpha: 0.18) : glassThin,
+    borderRadius: BorderRadius.circular(99),
+    border: Border.all(
+      color: tint != null ? tint.withValues(alpha: 0.45) : glassBorder,
+      width: 0.9,
+    ),
+  );
+
+  // Active pill (light yellow)
+  static BoxDecoration activePill() =>
+      BoxDecoration(color: activeBtn, borderRadius: BorderRadius.circular(99));
+}
+
+// Radius helper since const requires it
+extension _RadiusHelper on BoxDecoration {
+  static BoxDecoration activePill() => BoxDecoration(
+    color: _G.activeBtn,
+    borderRadius: BorderRadius.circular(99),
+    boxShadow: [
+      BoxShadow(
+        color: _G.activeBtn.withValues(alpha: 0.45),
+        blurRadius: 12,
+        offset: const Offset(0, 3),
+      ),
+    ],
+  );
+}
+
+// Blur + dark glass wrapper
+class _GlassCard extends StatelessWidget {
+  final Widget child;
+  final double borderRadius;
+  final EdgeInsetsGeometry? padding;
+  final Color? borderColor;
+  final bool elevated;
+
+  const _GlassCard({
+    required this.child,
+    this.borderRadius = 20,
+    this.padding,
+    this.borderColor,
+    this.elevated = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
+            borderRadius: BorderRadius.circular(borderRadius),
+            border: Border.all(
+              color: borderColor ?? Colors.white.withValues(alpha: 0.30),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 32,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+// Active pill widget helper
+Widget _activePillDecoration({required Widget child}) {
+  return Container(
+    decoration: BoxDecoration(
+      color: _G.activeBtn,
+      borderRadius: BorderRadius.circular(99),
+      boxShadow: [
+        BoxShadow(
+          color: _G.activeBtn.withValues(alpha: 0.45),
+          blurRadius: 12,
+          offset: const Offset(0, 3),
+        ),
+      ],
+    ),
+    child: child,
+  );
+}
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
@@ -20,18 +172,17 @@ class CustomerAccountScreen extends StatefulWidget {
 
 class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
   String _menu = 'dashboard';
-  String _ordersFilter =
-      'pending'; // pre-selected when navigating from dashboard
+  String _ordersFilter = 'all';
   String fullName = '';
   String email = '';
   String customerId = '';
 
   static const _menus = [
-    ('dashboard', 'Dashboard', Icons.dashboard_outlined),
-    ('orders', 'Orders', Icons.receipt_long_outlined),
-    ('messages', 'Messages', Icons.chat_bubble_outline),
-    ('manage', 'Profile', Icons.manage_accounts_outlined),
-    ('feedback', 'Feedback', Icons.star_outline),
+    ('dashboard', 'Dashboard', Icons.dashboard_rounded),
+    ('orders', 'Orders', Icons.receipt_long_rounded),
+    ('messages', 'Messages', Icons.chat_bubble_rounded),
+    ('manage', 'Profile', Icons.manage_accounts_rounded),
+    ('feedback', 'Feedback', Icons.star_rounded),
   ];
 
   @override
@@ -84,7 +235,7 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
       default:
         return _DashboardContent(
           uid: uid,
-          onViewOrders: () => _goToOrders('pending'),
+          onViewOrders: () => _goToOrders('all'),
           onViewMessages: () => setState(() => _menu = 'messages'),
           onViewOrdersFiltered: _goToOrders,
         );
@@ -96,7 +247,7 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 680;
-        return isWide ? _wideLayout() : _narrowLayout();
+        return isWide ? _wideLayout() : _narrowLayout(constraints);
       },
     );
   }
@@ -106,117 +257,260 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
   Widget _wideLayout() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: 220,
+              child: _GlassCard(
+                borderRadius: 22,
+                elevated: true,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 26,
+                  horizontal: 16,
+                ),
+                child: Column(
+                  children: [
+                    _buildAvatarSection(),
+                    const SizedBox(height: 20),
+                    ..._menus.map(
+                      (m) => _SidebarBtn(
+                        label: m.$2,
+                        icon: m.$3,
+                        isActive: _menu == m.$1,
+                        onTap: () => setState(() => _menu = m.$1),
+                      ),
+                    ),
+                    const Spacer(),
+                    _LogoutButton(onLogout: _logout),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _GlassCard(
+                borderRadius: 22,
+                elevated: true,
+                padding: const EdgeInsets.all(28),
+                child: _content(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Narrow layout ───────────────────────────────────────────────────────────
+
+  Widget _narrowLayout(BoxConstraints constraints) {
+    final needsDirectHeight =
+        _menu == 'orders' || _menu == 'messages' || _menu == 'feedback';
+
+    return SizedBox(
+      height: constraints.maxHeight,
+      child: Column(
         children: [
-          // Sidebar
-          Container(
-            width: 220,
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-            decoration: AppTheme.glassCard(opacity: 0.18),
-            child: Column(
-              children: [
-                // Avatar + name
-                Container(
-                  width: 68,
-                  height: 68,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.15),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.3),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.person,
-                    size: 36,
-                    color: Colors.white70,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  fullName.isNotEmpty ? fullName : 'Customer',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (email.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    email,
-                    style: const TextStyle(color: Colors.white70, fontSize: 11),
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-                if (customerId.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.18),
+          // Header card
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: _GlassCard(
+              borderRadius: 20,
+              padding: EdgeInsets.zero,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Avatar row
+                      Row(
+                        children: [
+                          _buildAvatar(40, 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  fullName.isNotEmpty ? fullName : 'Customer',
+                                  style: const TextStyle(
+                                    color: _G.textPrimary,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (email.isNotEmpty)
+                                  Text(
+                                    email,
+                                    style: const TextStyle(
+                                      color: _G.textSecondary,
+                                      fontSize: 11,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                if (customerId.isNotEmpty) ...[
+                                  const SizedBox(height: 3),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.10,
+                                      ),
+                                      borderRadius: BorderRadius.circular(99),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.25,
+                                        ),
+                                        width: 0.9,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'ID: $customerId',
+                                      style: const TextStyle(
+                                        color: _G.textSecondary,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.4,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          // Logout pill
+                          GestureDetector(
+                            onTap: _logout,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _G.accentRose,
+                                borderRadius: BorderRadius.circular(99),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _G.accentRose.withValues(
+                                      alpha: 0.35,
+                                    ),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(
+                                    Icons.logout_rounded,
+                                    size: 12,
+                                    color: Colors.white,
+                                  ),
+                                  SizedBox(width: 5),
+                                  Text(
+                                    'Logout',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    child: Text(
-                      'ID: $customerId',
-                      style: const TextStyle(
-                        color: Colors.white60,
-                        fontSize: 10,
-                        letterSpacing: 0.5,
+                      const SizedBox(height: 12),
+                      // Tab chips
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: _menus.map((m) {
+                            final active = _menu == m.$1;
+                            return GestureDetector(
+                              onTap: () => setState(() => _menu = m.$1),
+                              child: Container(
+                                margin: const EdgeInsets.only(
+                                  right: 10,
+                                  bottom: 14,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 8,
+                                ),
+                                decoration: active
+                                    ? BoxDecoration(
+                                        color: _G.activeBtn,
+                                        borderRadius: BorderRadius.circular(99),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: _G.activeBtn.withValues(
+                                              alpha: 0.40,
+                                            ),
+                                            blurRadius: 10,
+                                            offset: const Offset(0, 3),
+                                          ),
+                                        ],
+                                      )
+                                    : _G.pill(),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      m.$3,
+                                      size: 13,
+                                      color: active
+                                          ? _G.activeBtnText
+                                          : _G.textMuted,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      m.$2,
+                                      style: TextStyle(
+                                        color: active
+                                            ? _G.activeBtnText
+                                            : _G.textSecondary,
+                                        fontSize: 11.5,
+                                        fontWeight: active
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                ..._menus.map(
-                  (m) => _SidebarBtn(
-                    label: m.$2,
-                    icon: m.$3,
-                    isActive: _menu == m.$1,
-                    onTap: () => setState(() => _menu = m.$1),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _logout,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 11),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                    ),
-                    icon: const Icon(Icons.logout, size: 15),
-                    label: const Text('Logout', style: TextStyle(fontSize: 13)),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-          const SizedBox(width: 16),
-          // Content
+
+          // Content area
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: AppTheme.glassCard(opacity: 0.15),
-              child: _content(),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+              child: _GlassCard(
+                borderRadius: 20,
+                padding: const EdgeInsets.all(16),
+                child: needsDirectHeight
+                    ? _content()
+                    : SingleChildScrollView(child: _content()),
+              ),
             ),
           ),
         ],
@@ -224,146 +518,91 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
     );
   }
 
-  // ── Narrow layout ───────────────────────────────────────────────────────────
+  // ── Avatar helpers ──────────────────────────────────────────────────────────
 
-  Widget _narrowLayout() {
+  Widget _buildAvatarSection() {
     return Column(
       children: [
-        // Compact header
         Container(
-          color: Colors.white.withValues(alpha: 0.04),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.15),
-                    ),
-                    child: const Icon(
-                      Icons.person,
-                      color: Colors.white60,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          fullName.isNotEmpty ? fullName : 'Customer',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (email.isNotEmpty)
-                          Text(
-                            email,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 11,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        if (customerId.isNotEmpty)
-                          Text(
-                            'ID: $customerId',
-                            style: const TextStyle(
-                              color: Colors.white38,
-                              fontSize: 10,
-                              letterSpacing: 0.4,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _logout,
-                    child: const Text(
-                      'Logout',
-                      style: TextStyle(color: Colors.red, fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              // Horizontal scrollable tabs
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _menus.map((m) {
-                    final active = _menu == m.$1;
-                    return GestureDetector(
-                      onTap: () => setState(() => _menu = m.$1),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: active
-                              ? AppTheme.gold.withValues(alpha: 0.2)
-                              : Colors.white.withValues(alpha: 0.07),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: active
-                                ? AppTheme.gold.withValues(alpha: 0.5)
-                                : Colors.white.withValues(alpha: 0.12),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              m.$3,
-                              size: 14,
-                              color: active ? AppTheme.gold : Colors.white60,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              m.$2,
-                              style: TextStyle(
-                                color: active ? AppTheme.gold : Colors.white70,
-                                fontSize: 12,
-                                fontWeight: active
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.10),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.30),
+              width: 1.5,
+            ),
+            boxShadow: const [_G.rowShadow],
+          ),
+          child: const Icon(
+            Icons.person_rounded,
+            size: 36,
+            color: _G.textPrimary,
           ),
         ),
-        // Content — reduced padding for narrow screens
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: AppTheme.glassCard(opacity: 0.15),
-              child: _content(),
+        const SizedBox(height: 10),
+        Text(
+          fullName.isNotEmpty ? fullName : 'Customer',
+          style: const TextStyle(
+            color: _G.textPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (email.isNotEmpty) ...[
+          const SizedBox(height: 3),
+          Text(
+            email,
+            style: const TextStyle(color: _G.textMuted, fontSize: 11),
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+        if (customerId.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(99),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.25),
+                width: 0.9,
+              ),
+            ),
+            child: Text(
+              'ID: $customerId',
+              style: const TextStyle(
+                color: _G.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+              textAlign: TextAlign.center,
             ),
           ),
-        ),
+        ],
       ],
+    );
+  }
+
+  Widget _buildAvatar(double size, double iconSize) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white.withValues(alpha: 0.10),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.25),
+          width: 1.5,
+        ),
+      ),
+      child: Icon(Icons.person_rounded, size: iconSize, color: _G.textPrimary),
     );
   }
 }
@@ -385,30 +624,98 @@ class _SidebarBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          onPressed: onTap,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: isActive
-                ? AppTheme.gold
-                : Colors.white.withValues(alpha: 0.1),
-            foregroundColor: isActive ? Colors.black : Colors.white,
-            elevation: 0,
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(30),
-            ),
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+          decoration: isActive
+              ? BoxDecoration(
+                  color: _G.activeBtn,
+                  borderRadius: BorderRadius.circular(99),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _G.activeBtn.withValues(alpha: 0.40),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                )
+              : BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    width: 0.9,
+                  ),
+                ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isActive ? _G.activeBtnText : _G.textMuted,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive ? _G.activeBtnText : _G.textSecondary,
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-          icon: Icon(icon, size: 16),
-          label: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              overflow: TextOverflow.ellipsis,
-            ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Logout button ─────────────────────────────────────────────────────────────
+
+class _LogoutButton extends StatelessWidget {
+  final VoidCallback onLogout;
+  const _LogoutButton({required this.onLogout});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: GestureDetector(
+        onTap: onLogout,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+          decoration: BoxDecoration(
+            color: _G.accentRose,
+            borderRadius: BorderRadius.circular(99),
+            boxShadow: [
+              BoxShadow(
+                color: _G.accentRose.withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.logout_rounded, size: 15, color: Colors.white),
+              SizedBox(width: 8),
+              Text(
+                'Logout',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -444,19 +751,40 @@ class _DashboardContent extends StatelessWidget {
               Text(
                 'Dashboard',
                 style: TextStyle(
-                  color: Colors.white,
-                  fontSize: isNarrow ? 17 : 20,
-                  fontWeight: FontWeight.bold,
+                  color: _G.textPrimary,
+                  fontSize: isNarrow ? 17 : 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
                 ),
               ),
-              SizedBox(height: isNarrow ? 12 : 16),
+              SizedBox(height: isNarrow ? 12 : 18),
+              const _SectionLabel(label: 'ORDER STATUS'),
+              SizedBox(height: isNarrow ? 8 : 10),
               _OrderStatsRow(uid: uid, onFilter: onViewOrdersFiltered),
-              SizedBox(height: isNarrow ? 16 : 24),
+              SizedBox(height: isNarrow ? 16 : 28),
               _UnreadMessagesPreview(uid: uid, onViewAll: onViewMessages),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  const _SectionLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: const TextStyle(
+        color: _G.textMuted,
+        fontSize: 10.5,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.0,
+      ),
     );
   }
 }
@@ -493,32 +821,32 @@ class _OrderStatsRow extends StatelessWidget {
                 children: [
                   Expanded(
                     child: _StatCard(
-                      'Pending\nOrders',
-                      pending,
-                      Icons.sync,
-                      Colors.red,
+                      label: 'Pending\nOrders',
+                      count: pending,
+                      icon: Icons.sync_rounded,
+                      color: _G.accentRose,
                       compact: compact,
                       onTap: () => onFilter('pending'),
                     ),
                   ),
-                  SizedBox(width: compact ? 4 : 8),
+                  SizedBox(width: compact ? 6 : 10),
                   Expanded(
                     child: _StatCard(
-                      'Active\nOrders',
-                      active,
-                      Icons.inventory_2_outlined,
-                      Colors.orange,
+                      label: 'Active\nOrders',
+                      count: active,
+                      icon: Icons.precision_manufacturing_rounded,
+                      color: _G.accentAmber,
                       compact: compact,
                       onTap: () => onFilter('in_production'),
                     ),
                   ),
-                  SizedBox(width: compact ? 4 : 8),
+                  SizedBox(width: compact ? 6 : 10),
                   Expanded(
                     child: _StatCard(
-                      'Ready for\nPickup',
-                      ready,
-                      Icons.check_circle,
-                      Colors.green,
+                      label: 'Ready for\nPickup',
+                      count: ready,
+                      icon: Icons.check_circle_rounded,
+                      color: _G.accentEmerald,
                       compact: compact,
                       onTap: () => onFilter('ready'),
                     ),
@@ -540,11 +868,11 @@ class _StatCard extends StatelessWidget {
   final Color color;
   final bool compact;
   final VoidCallback? onTap;
-  const _StatCard(
-    this.label,
-    this.count,
-    this.icon,
-    this.color, {
+  const _StatCard({
+    required this.label,
+    required this.count,
+    required this.icon,
+    required this.color,
     this.compact = false,
     this.onTap,
   });
@@ -554,28 +882,42 @@ class _StatCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: EdgeInsets.all(compact ? 10 : 16),
-        decoration: AppTheme.glassCard(opacity: 0.12, radius: 16),
+        padding: EdgeInsets.all(compact ? 12 : 16),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.30), width: 1.0),
+          boxShadow: const [_G.rowShadow],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: color, size: compact ? 20 : 28),
-            SizedBox(height: compact ? 6 : 10),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: compact ? 18 : 22),
+            ),
+            SizedBox(height: compact ? 8 : 12),
             Text(
               '$count',
               style: TextStyle(
                 color: color,
-                fontSize: compact ? 20 : 26,
-                fontWeight: FontWeight.bold,
+                fontSize: compact ? 22 : 28,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -1,
               ),
             ),
             SizedBox(height: compact ? 2 : 4),
             Text(
               label,
               style: TextStyle(
-                color: Colors.white60,
-                fontSize: compact ? 10 : 12,
+                color: _G.textMuted,
+                fontSize: compact ? 10.5 : 12,
+                height: 1.3,
               ),
             ),
             if (onTap != null) ...[
@@ -583,7 +925,7 @@ class _StatCard extends StatelessWidget {
               Icon(
                 Icons.arrow_forward_ios_rounded,
                 size: 10,
-                color: Colors.white.withValues(alpha: 0.3),
+                color: _G.textMuted,
               ),
             ],
           ],
@@ -628,35 +970,32 @@ class _UnreadMessagesPreview extends StatelessWidget {
                   const Text(
                     'Unread Messages',
                     style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+                      color: _G.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   if (totalUnread > 0) ...[
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
+                        horizontal: 9,
+                        vertical: 3,
                       ),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      decoration: _G.pill(tint: _G.accentRose),
                       child: Text(
                         '$totalUnread',
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: _G.accentRose,
                           fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
                     const SizedBox(width: 4),
                     const Icon(
                       Icons.chevron_right,
-                      color: Colors.white54,
+                      color: _G.textMuted,
                       size: 16,
                     ),
                   ],
@@ -667,11 +1006,11 @@ class _UnreadMessagesPreview extends StatelessWidget {
             if (docs.isEmpty)
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: AppTheme.glassCard(opacity: 0.1),
+                decoration: _G.glassCard(radius: 14),
                 child: const Center(
                   child: Text(
                     'No unread messages',
-                    style: TextStyle(color: Colors.white38, fontSize: 13),
+                    style: TextStyle(color: _G.textMuted, fontSize: 13),
                   ),
                 ),
               )
@@ -723,7 +1062,7 @@ class _UnreadMessageCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
-      decoration: AppTheme.glassCard(opacity: 0.12, radius: 12),
+      decoration: _G.glassCard(radius: 14),
       child: Row(
         children: [
           Expanded(
@@ -733,8 +1072,8 @@ class _UnreadMessageCard extends StatelessWidget {
                 Text(
                   orderDisplay,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
+                    color: _G.textPrimary,
+                    fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
                 ),
@@ -742,7 +1081,7 @@ class _UnreadMessageCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     lastMsg,
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    style: const TextStyle(color: _G.textMuted, fontSize: 12),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -752,33 +1091,41 @@ class _UnreadMessageCard extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: Colors.redAccent.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(10),
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+            decoration: _G.pill(tint: _G.accentRose),
             child: Text(
               '$unread new',
-              style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+              style: const TextStyle(
+                color: _G.accentRose,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: onTap,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.gold,
-              foregroundColor: Colors.black,
-              elevation: 0,
+          GestureDetector(
+            onTap: onTap,
+            child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+              decoration: BoxDecoration(
+                color: _G.activeBtn,
+                borderRadius: BorderRadius.circular(99),
+                boxShadow: [
+                  BoxShadow(
+                    color: _G.activeBtn.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-            ),
-            child: const Text(
-              'View',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              child: const Text(
+                'View',
+                style: TextStyle(
+                  color: _G.activeBtnText,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
         ],
@@ -788,13 +1135,13 @@ class _UnreadMessageCard extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Orders
+// Orders — now with ALL filter
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _OrdersContent extends StatefulWidget {
   final String uid;
   final String initialFilter;
-  const _OrdersContent({required this.uid, this.initialFilter = 'pending'});
+  const _OrdersContent({required this.uid, this.initialFilter = 'all'});
 
   @override
   State<_OrdersContent> createState() => _OrdersContentState();
@@ -804,11 +1151,12 @@ class _OrdersContentState extends State<_OrdersContent> {
   late String _filter = widget.initialFilter;
 
   static const _filters = [
+    ('all', 'All'),
     ('pending', 'Pending'),
     ('in_production', 'Active'),
-    ('ready', 'Ready'), // was 'ready_for_pickup' — fixed
+    ('ready', 'Ready'),
+    ('completed', 'Completed'),
     ('cancelled', 'Cancelled'),
-    ('completed', 'History'),
   ];
 
   @override
@@ -819,12 +1167,13 @@ class _OrdersContentState extends State<_OrdersContent> {
         const Text(
           'Orders',
           style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+            color: _G.textPrimary,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         // Filter tabs
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -837,25 +1186,27 @@ class _OrdersContentState extends State<_OrdersContent> {
                   margin: const EdgeInsets.only(right: 8),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
-                    vertical: 7,
+                    vertical: 8,
                   ),
-                  decoration: BoxDecoration(
-                    color: active
-                        ? AppTheme.gold.withValues(alpha: 0.2)
-                        : Colors.white.withValues(alpha: 0.07),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: active
-                          ? AppTheme.gold.withValues(alpha: 0.5)
-                          : Colors.white.withValues(alpha: 0.12),
-                    ),
-                  ),
+                  decoration: active
+                      ? BoxDecoration(
+                          color: _G.activeBtn,
+                          borderRadius: BorderRadius.circular(99),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _G.activeBtn.withValues(alpha: 0.40),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        )
+                      : _G.pill(),
                   child: Text(
                     f.$2,
                     style: TextStyle(
-                      color: active ? AppTheme.gold : Colors.white70,
+                      color: active ? _G.activeBtnText : _G.textSecondary,
                       fontSize: 12,
-                      fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
                 ),
@@ -865,62 +1216,80 @@ class _OrdersContentState extends State<_OrdersContent> {
         ),
         const SizedBox(height: 14),
         Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            // No orderBy here — avoids the composite-index requirement.
-            // We sort client-side after fetching.
-            stream: FirebaseFirestore.instance
-                .collection('Orders')
-                .where('customer_uid', isEqualTo: widget.uid)
-                .where('status', isEqualTo: _filter)
-                .snapshots(),
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting &&
-                  !snap.hasData) {
-                return const Center(
-                  child: CircularProgressIndicator(color: Colors.white38),
-                );
-              }
-              if (snap.hasError) {
-                return Center(
-                  child: Text(
-                    'Could not load orders.\nCheck your connection.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white38, fontSize: 13),
-                  ),
-                );
-              }
-              // Sort newest-first client-side
-              final docs = List.from(snap.data?.docs ?? [])
-                ..sort((a, b) {
-                  final aTs = (a.data() as Map)['created_at'];
-                  final bTs = (b.data() as Map)['created_at'];
-                  if (aTs == null || bTs == null) return 0;
-                  return (bTs as dynamic).compareTo(aTs);
-                });
-              if (docs.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No ${_filters.firstWhere((f) => f.$1 == _filter).$2.toLowerCase()} orders',
-                    style: const TextStyle(color: Colors.white38, fontSize: 13),
-                  ),
-                );
-              }
-              return ListView.separated(
-                itemCount: docs.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (_, i) {
-                  final d = docs[i].data() as Map<String, dynamic>;
-                  return _OrderCard(
-                    orderId: d['order_id']?.toString() ?? docs[i].id,
-                    data: d,
-                    showMessage: _filter != 'cancelled',
-                  );
-                },
-              );
-            },
-          ),
+          child: _filter == 'all'
+              ? _buildAllOrders()
+              : _buildFilteredOrders(_filter),
         ),
       ],
+    );
+  }
+
+  Widget _buildAllOrders() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('Orders')
+          .where('customer_uid', isEqualTo: widget.uid)
+          .snapshots(),
+      builder: (context, snap) => _orderList(snap, 'all'),
+    );
+  }
+
+  Widget _buildFilteredOrders(String status) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('Orders')
+          .where('customer_uid', isEqualTo: widget.uid)
+          .where('status', isEqualTo: status)
+          .snapshots(),
+      builder: (context, snap) => _orderList(snap, status),
+    );
+  }
+
+  Widget _orderList(AsyncSnapshot<QuerySnapshot> snap, String filter) {
+    if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+      return const Center(
+        child: CircularProgressIndicator(color: _G.activeBtn, strokeWidth: 2),
+      );
+    }
+    if (snap.hasError) {
+      return Center(
+        child: Text(
+          'Could not load orders.\nCheck your connection.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: _G.textMuted, fontSize: 13),
+        ),
+      );
+    }
+    final docs = List.from(snap.data?.docs ?? [])
+      ..sort((a, b) {
+        final aTs = (a.data() as Map)['created_at'];
+        final bTs = (b.data() as Map)['created_at'];
+        if (aTs == null || bTs == null) return 0;
+        return (bTs as dynamic).compareTo(aTs);
+      });
+    if (docs.isEmpty) {
+      final label = filter == 'all'
+          ? 'No orders yet'
+          : 'No ${_filters.firstWhere((f) => f.$1 == filter).$2.toLowerCase()} orders';
+      return Center(
+        child: Text(
+          label,
+          style: const TextStyle(color: _G.textMuted, fontSize: 13),
+        ),
+      );
+    }
+    return ListView.separated(
+      itemCount: docs.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (_, i) {
+        final d = docs[i].data() as Map<String, dynamic>;
+        final status = d['status']?.toString() ?? '';
+        return _OrderCard(
+          orderId: d['order_id']?.toString() ?? docs[i].id,
+          data: d,
+          showMessage: status != 'cancelled',
+        );
+      },
     );
   }
 }
@@ -944,10 +1313,7 @@ class _OrderCard extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF1a1a2e),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (_) => _AccountOrderDetailSheet(
         docId: orderId,
         data: data,
@@ -969,20 +1335,19 @@ class _OrderCard extends StatelessWidget {
     return GestureDetector(
       onTap: () => _showDetail(context),
       child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: AppTheme.glassCard(opacity: 0.13, radius: 14),
+        padding: const EdgeInsets.all(16),
+        decoration: _G.glassCard(radius: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Order # + status badge
             Row(
               children: [
                 Expanded(
                   child: Text(
                     orderId,
                     style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                      color: _G.textPrimary,
+                      fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
                   ),
@@ -991,9 +1356,7 @@ class _OrderCard extends StatelessWidget {
                 _StatusBadge(status: status),
               ],
             ),
-            const SizedBox(height: 8),
-
-            // Products list
+            const SizedBox(height: 10),
             ...products.map((p) {
               final name = p['name']?.toString() ?? '';
               final qty = p['qty'] ?? p['quantity'] ?? 0;
@@ -1001,17 +1364,20 @@ class _OrderCard extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 3),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.fiber_manual_record,
-                      size: 5,
-                      color: Colors.white38,
+                    Container(
+                      width: 4,
+                      height: 4,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _G.textMuted,
+                      ),
                     ),
-                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         '$name × $qty',
                         style: const TextStyle(
-                          color: Colors.white70,
+                          color: _G.textSecondary,
                           fontSize: 12,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -1021,9 +1387,9 @@ class _OrderCard extends StatelessWidget {
                 ),
               );
             }),
-            const Divider(color: Colors.white12, height: 14),
-
-            // Balance row
+            const SizedBox(height: 10),
+            Divider(color: Colors.white.withValues(alpha: 0.10), height: 1),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Column(
@@ -1032,8 +1398,8 @@ class _OrderCard extends StatelessWidget {
                     Text(
                       'Total: ₱${total.toStringAsFixed(2)}',
                       style: const TextStyle(
-                        color: AppTheme.gold,
-                        fontWeight: FontWeight.bold,
+                        color: _G.accentAmber,
+                        fontWeight: FontWeight.w700,
                         fontSize: 13,
                       ),
                     ),
@@ -1044,7 +1410,7 @@ class _OrderCard extends StatelessWidget {
                             ? 'Fully paid'
                             : 'Remaining: ₱${remaining.toStringAsFixed(2)}',
                         style: TextStyle(
-                          color: fullyPaid ? Colors.green : Colors.orange,
+                          color: fullyPaid ? _G.accentEmerald : _G.accentAmber,
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
                         ),
@@ -1056,8 +1422,8 @@ class _OrderCard extends StatelessWidget {
                 Row(
                   children: [
                     if (showMessage)
-                      TextButton.icon(
-                        onPressed: () {
+                      GestureDetector(
+                        onTap: () {
                           final uid =
                               FirebaseAuth.instance.currentUser?.uid ?? '';
                           Navigator.push(
@@ -1076,56 +1442,64 @@ class _OrderCard extends StatelessWidget {
                             ),
                           );
                         },
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppTheme.gold,
+                        child: Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                            horizontal: 10,
+                            vertical: 5,
                           ),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        icon: const Icon(Icons.chat_bubble_outline, size: 13),
-                        label: const Text(
-                          'Message',
-                          style: TextStyle(fontSize: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(99),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.20),
+                              width: 0.9,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.chat_bubble_outline,
+                                size: 12,
+                                color: _G.textSecondary,
+                              ),
+                              SizedBox(width: 5),
+                              Text(
+                                'Message',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: _G.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.chevron_right,
-                      color: Colors.white.withValues(alpha: 0.3),
-                      size: 18,
-                    ),
+                    const SizedBox(width: 8),
+                    Icon(Icons.chevron_right, color: _G.textMuted, size: 18),
                   ],
                 ),
               ],
             ),
-
-            // Progress bar — only when payment tracking is active
             if (total > 0 && paid > 0) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               ClipRRect(
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: pct,
-                  backgroundColor: Colors.white.withValues(alpha: 0.1),
+                  backgroundColor: _G.accentAmber.withValues(alpha: 0.12),
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    fullyPaid ? Colors.green : AppTheme.gold,
+                    fullyPaid ? _G.accentEmerald : _G.accentAmber,
                   ),
                   minHeight: 4,
                 ),
               ),
             ],
-
-            // Tap hint
             const SizedBox(height: 6),
             Text(
               'Tap to view details & payment QR',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.25),
-                fontSize: 10,
-              ),
+              style: TextStyle(color: _G.textMuted, fontSize: 10),
             ),
           ],
         ),
@@ -1134,7 +1508,7 @@ class _OrderCard extends StatelessWidget {
   }
 }
 
-// ── Account order detail sheet (full detail + QR + pay) ──────────────────────
+// ── Account order detail sheet ─────────────────────────────────────────────────
 
 class _AccountOrderDetailSheet extends StatefulWidget {
   final String docId;
@@ -1183,9 +1557,6 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
 
     setState(() => _payingNow = true);
     try {
-      // Always create a fresh link — never reuse stored URLs.
-      // Stored URLs may be from a different API environment (test vs live)
-      // and will show "Invalid Request" even when link status is 'unpaid'.
       final isInitial = _status == 'awaiting_payment';
       final link = await PayMongoService.createLink(
         amount: chosen,
@@ -1220,32 +1591,31 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
       final paid = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => PaymentWebViewScreen(
-            checkoutUrl:      checkoutUrl,
-            linkId:           linkId,
-            orderId:          orderId,
-            payAmount:        chosen,
+            checkoutUrl: checkoutUrl,
+            linkId: linkId,
+            orderId: orderId,
+            payAmount: chosen,
             isBalancePayment: !isInitial,
           ),
         ),
       );
 
       if (paid == true && mounted) {
-        Navigator.pop(context); // close the bottom sheet
-        // Navigate to invoice to show the updated payment record
+        Navigator.pop(context);
         final invoiceId = widget.data['invoice_id']?.toString();
         if (invoiceId != null) {
-          Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => InvoiceScreen(invoiceId: invoiceId, fromPayment: true),
-          ));
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) =>
+                  InvoiceScreen(invoiceId: invoiceId, fromPayment: true),
+            ),
+          );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red.shade700,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: _G.accentRose),
         );
       }
     } finally {
@@ -1257,153 +1627,199 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
     final ctrl = TextEditingController(text: maxAmt.toStringAsFixed(2));
     return showModalBottomSheet<double>(
       context: context,
-      backgroundColor: const Color(0xFF1a1a2e),
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
           final chosen = (double.tryParse(ctrl.text) ?? maxAmt).clamp(
             minAmt,
             maxAmt,
           );
-          return SafeArea(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-                left: 20,
-                right: 20,
-                top: 12,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
+          return ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(
+                    255,
+                    12,
+                    9,
+                    31,
+                  ).withValues(alpha: 0.92),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
                   ),
-                  const SizedBox(height: 14),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Enter Payment Amount',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    width: 1.0,
                   ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                ),
+                child: SafeArea(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+                      left: 20,
+                      right: 20,
+                      top: 12,
                     ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.gold.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppTheme.gold.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.info_outline,
-                          color: AppTheme.gold,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _status == 'awaiting_payment'
-                                ? 'Minimum: ₱${minAmt.toStringAsFixed(2)} (50% downpayment)'
-                                : 'Outstanding balance: ₱${maxAmt.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              color: AppTheme.gold,
-                              fontSize: 12,
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.20),
+                              borderRadius: BorderRadius.circular(2),
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.07),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.15),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
+                        const SizedBox(height: 14),
+                        const Align(
+                          alignment: Alignment.centerLeft,
                           child: Text(
-                            '₱',
+                            'Enter Payment Amount',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              fontSize: 20,
+                              color: _G.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
-                        Expanded(
-                          child: TextField(
-                            controller: ctrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _G.accentAmber.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _G.accentAmber.withValues(alpha: 0.30),
                             ),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              hintText: '0.00',
-                              hintStyle: TextStyle(
-                                color: Colors.white24,
-                                fontSize: 20,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: _G.accentAmber,
+                                size: 14,
                               ),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 14,
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _status == 'awaiting_payment'
+                                      ? 'Minimum: ₱${minAmt.toStringAsFixed(2)} (50% downpayment)'
+                                      : 'Outstanding balance: ₱${maxAmt.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    color: _G.accentAmber,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
-                            ),
-                            onChanged: (_) => setSheet(() {}),
+                            ],
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.20),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(left: 14),
+                                child: Text(
+                                  '₱',
+                                  style: TextStyle(
+                                    color: _G.textSecondary,
+                                    fontSize: 20,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: TextField(
+                                  controller: ctrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  style: const TextStyle(
+                                    color: _G.textPrimary,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    hintText: '0.00',
+                                    hintStyle: TextStyle(
+                                      color: _G.textMuted,
+                                      fontSize: 20,
+                                    ),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 14,
+                                    ),
+                                  ),
+                                  onChanged: (_) => setSheet(() {}),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: GestureDetector(
+                            onTap: chosen < minAmt - 0.009
+                                ? null
+                                : () => Navigator.pop(ctx, chosen),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                color: chosen < minAmt - 0.009
+                                    ? Colors.white.withValues(alpha: 0.10)
+                                    : _G.activeBtn,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.payment_rounded,
+                                    color: chosen < minAmt - 0.009
+                                        ? _G.textMuted
+                                        : _G.activeBtnText,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Pay ₱${chosen.toStringAsFixed(2)} via PayMongo',
+                                    style: TextStyle(
+                                      color: chosen < minAmt - 0.009
+                                          ? _G.textMuted
+                                          : _G.activeBtnText,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: chosen < minAmt - 0.009
-                          ? null
-                          : () => Navigator.pop(ctx, chosen),
-                      icon: const Icon(Icons.payment_rounded),
-                      label: Text(
-                        'Pay ₱${chosen.toStringAsFixed(2)} via PayMongo',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      style: AppTheme.primaryButton(),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
+                ),
               ),
             ),
           );
@@ -1425,245 +1841,282 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
         (remaining > 0.009 &&
             ['pending', 'in_production', 'ready'].contains(_status));
 
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.65,
-      maxChildSize: 0.95,
-      builder: (_, ctrl) => ListView(
-        controller: ctrl,
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.95),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.15),
+              width: 1.0,
             ),
           ),
-          const SizedBox(height: 16),
+          child: DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.65,
+            maxChildSize: 0.95,
+            builder: (_, ctrl) => ListView(
+              controller: ctrl,
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.20),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
 
-          // Header
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
                   children: [
-                    Text(
-                      widget.data['order_id']?.toString() ?? widget.docId,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.data['order_id']?.toString() ?? widget.docId,
+                            style: const TextStyle(
+                              color: _G.textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            'Placed ${_fmtDate(widget.data['created_at'])}',
+                            style: const TextStyle(
+                              color: _G.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    Text(
-                      'Placed ${_fmtDate(widget.data['created_at'])}',
-                      style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 12,
-                      ),
-                    ),
+                    _StatusBadge(status: _status),
                   ],
                 ),
-              ),
-              _StatusBadge(status: _status),
-            ],
-          ),
 
-          if (turnaround != null) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.gold.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: AppTheme.gold.withValues(alpha: 0.25),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.schedule_rounded,
-                    color: AppTheme.gold,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Est. turnaround: ~$turnaround day${turnaround == 1 ? '' : 's'}',
-                    style: const TextStyle(
-                      color: AppTheme.gold,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                if (turnaround != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 16),
-
-          // Products
-          const Text(
-            'Items',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ...products.map((p) {
-            final name = p['name']?.toString() ?? '—';
-            final qty = p['qty']?.toString() ?? '1';
-            final price = (p['price'] as num?)?.toStringAsFixed(2) ?? '—';
-            final size = p['size_label']?.toString();
-            final mat = p['material']?.toString();
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    decoration: BoxDecoration(
+                      color: _G.accentAmber.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _G.accentAmber.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Row(
                       children: [
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
+                        Icon(
+                          Icons.schedule_rounded,
+                          color: _G.accentAmber,
+                          size: 14,
                         ),
+                        const SizedBox(width: 8),
                         Text(
-                          [
-                            'Qty: $qty',
-                            if (size != null) size,
-                            if (mat != null) mat,
-                          ].join(' · '),
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 11,
+                          'Est. turnaround: ~$turnaround day${turnaround == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            color: _G.accentAmber,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Text(
-                    '₱$price',
-                    style: const TextStyle(
-                      color: AppTheme.gold,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                ],
+
+                const SizedBox(height: 16),
+                const _SectionLabel(label: 'ITEMS'),
+                const SizedBox(height: 8),
+                ...products.map((p) {
+                  final name = p['name']?.toString() ?? '—';
+                  final qty = p['qty']?.toString() ?? '1';
+                  final price = (p['price'] as num?)?.toStringAsFixed(2) ?? '—';
+                  final size = p['size_label']?.toString();
+                  final mat = p['material']?.toString();
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: _G.glassCard(radius: 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: const TextStyle(
+                                  color: _G.textPrimary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              Text(
+                                [
+                                  'Qty: $qty',
+                                  if (size != null) size,
+                                  if (mat != null) mat,
+                                ].join(' · '),
+                                style: const TextStyle(
+                                  color: _G.textMuted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '₱$price',
+                          style: const TextStyle(
+                            color: _G.accentAmber,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+
+                const SizedBox(height: 8),
+                Divider(color: Colors.white.withValues(alpha: 0.10)),
+                const SizedBox(height: 8),
+
+                _BalRow('Order Total', _total, _G.textPrimary),
+                const SizedBox(height: 6),
+                _BalRow('Paid', _paid, _G.accentEmerald),
+                const SizedBox(height: 6),
+                _BalRow(
+                  fullyPaid ? 'Fully Paid' : 'Balance Due on Pickup',
+                  fullyPaid ? 0 : remaining,
+                  fullyPaid ? _G.accentEmerald : _G.accentAmber,
+                  large: true,
+                ),
+                if (!fullyPaid) ...[
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: _total > 0 ? (_paid / _total).clamp(0, 1) : 0,
+                      backgroundColor: _G.accentAmber.withValues(alpha: 0.12),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        _G.accentAmber,
+                      ),
+                      minHeight: 5,
                     ),
                   ),
                 ],
-              ),
-            );
-          }),
 
-          const Divider(color: Colors.white12, height: 24),
-
-          // Balance
-          _BalRow('Order Total', _total, Colors.white),
-          const SizedBox(height: 6),
-          _BalRow('Paid', _paid, Colors.green),
-          const SizedBox(height: 6),
-          _BalRow(
-            fullyPaid ? 'Fully Paid' : 'Balance Due on Pickup',
-            fullyPaid ? 0 : remaining,
-            fullyPaid ? Colors.green : AppTheme.gold,
-            large: true,
-          ),
-          if (!fullyPaid) ...[
-            const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: _total > 0 ? (_paid / _total).clamp(0, 1) : 0,
-                backgroundColor: Colors.white.withValues(alpha: 0.1),
-                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.gold),
-                minHeight: 5,
-              ),
-            ),
-          ],
-
-          // Pay button
-          if (showPayBtn) ...[
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _payingNow ? null : _payNow,
-                icon: _payingNow
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.black,
-                        ),
-                      )
-                    : const Icon(Icons.payment_rounded),
-                label: Text(
-                  _status == 'awaiting_payment'
-                      ? 'Pay via PayMongo (min 50%)'
-                      : 'Pay Remaining ₱${remaining.toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                style: AppTheme.primaryButton(),
-              ),
-            ),
-          ],
-
-          // Invoice button
-          if (invoiceId != null) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => InvoiceScreen(invoiceId: invoiceId),
+                if (showPayBtn) ...[
+                  const SizedBox(height: 16),
+                  GestureDetector(
+                    onTap: _payingNow ? null : _payNow,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: _payingNow
+                            ? Colors.white.withValues(alpha: 0.10)
+                            : _G.activeBtn,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_payingNow)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          else
+                            Icon(
+                              Icons.payment_rounded,
+                              color: _G.activeBtnText,
+                              size: 18,
+                            ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _status == 'awaiting_payment'
+                                ? 'Pay via PayMongo (min 50%)'
+                                : 'Pay Remaining ₱${remaining.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              color: _payingNow
+                                  ? _G.textMuted
+                                  : _G.activeBtnText,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
-                  );
-                },
-                icon: const Icon(
-                  Icons.receipt_long_rounded,
-                  color: AppTheme.gold,
-                ),
-                label: const Text(
-                  'View Invoice',
-                  style: TextStyle(
-                    color: AppTheme.gold,
-                    fontWeight: FontWeight.bold,
                   ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: AppTheme.gold.withValues(alpha: 0.5)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                ],
+
+                if (invoiceId != null) ...[
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => InvoiceScreen(invoiceId: invoiceId),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.20),
+                          width: 0.9,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(
+                            Icons.receipt_long_rounded,
+                            color: _G.textSecondary,
+                            size: 16,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'View Invoice',
+                            style: TextStyle(
+                              color: _G.textSecondary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                ],
+              ],
             ),
-          ],
-        ],
+          ),
+        ),
       ),
     );
   }
@@ -1683,7 +2136,7 @@ class _BalRow extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            color: Colors.white70,
+            color: _G.textSecondary,
             fontSize: large ? 14 : 13,
             fontWeight: large ? FontWeight.w600 : FontWeight.normal,
           ),
@@ -1694,14 +2147,14 @@ class _BalRow extends StatelessWidget {
         style: TextStyle(
           color: color,
           fontSize: large ? 18 : 13,
-          fontWeight: large ? FontWeight.bold : FontWeight.w500,
+          fontWeight: large ? FontWeight.w800 : FontWeight.w500,
         ),
       ),
     ],
   );
 }
 
-// ── QR code section (account screen version) ─────────────────────────────────
+// ── QR code section ───────────────────────────────────────────────────────────
 
 class _AccountQrSection extends StatefulWidget {
   final String docId;
@@ -1722,23 +2175,20 @@ class _AccountQrSection extends StatefulWidget {
 class _AccountQrSectionState extends State<_AccountQrSection> {
   String? _localUrl;
   bool _generating = false;
-  bool _stale      = false;
+  bool _stale = false;
   bool _validating = true;
 
   @override
   void initState() {
     super.initState();
-    // Validate on load for ALL statuses — awaiting_payment links expire too.
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _validateStoredLink(),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _validateStoredLink());
   }
 
   Future<void> _validateStoredLink() async {
     final isInitial = widget.status == 'awaiting_payment';
     final linkId = isInitial
         ? widget.order['paymongo_link_id'] as String?
-        : widget.order['balance_link_id']  as String?;
+        : widget.order['balance_link_id'] as String?;
     if (linkId == null || !mounted) {
       if (mounted) setState(() => _validating = false);
       return;
@@ -1761,7 +2211,7 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
             .collection('Orders')
             .doc(orderId)
             .update({
-              'paymongo_link_id':      FieldValue.delete(),
+              'paymongo_link_id': FieldValue.delete(),
               'paymongo_checkout_url': FieldValue.delete(),
             })
             .catchError((_) {});
@@ -1770,9 +2220,9 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
             .collection('Orders')
             .doc(orderId)
             .update({
-              'balance_link_id':      FieldValue.delete(),
+              'balance_link_id': FieldValue.delete(),
               'balance_checkout_url': FieldValue.delete(),
-              'balance_link_amount':  FieldValue.delete(),
+              'balance_link_amount': FieldValue.delete(),
             })
             .catchError((_) {});
       }
@@ -1781,7 +2231,7 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
   }
 
   String? get _url {
-    if (_validating) return null; // never expose old URL before validation
+    if (_validating) return null;
     if (_stale) return _localUrl;
     return _localUrl ??
         (widget.status == 'awaiting_payment'
@@ -1790,33 +2240,42 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
   }
 
   Future<void> _applyQrPayment(String paidLinkId) async {
-    final orderId   = widget.order['order_id']?.toString() ?? widget.docId;
-    final paid      = (widget.order['balance_link_amount'] as num?)?.toDouble() ?? 0;
+    final orderId = widget.order['order_id']?.toString() ?? widget.docId;
+    final paid = (widget.order['balance_link_amount'] as num?)?.toDouble() ?? 0;
     if (paid <= 0) return;
-    final oldPaid   = (widget.order['amount_paid']       as num?)?.toDouble() ?? 0;
-    final newPaid   = oldPaid + paid;
-    final newRemain = ((widget.order['remaining_balance'] as num?)?.toDouble() ?? 0) - paid;
+    final oldPaid = (widget.order['amount_paid'] as num?)?.toDouble() ?? 0;
+    final newPaid = oldPaid + paid;
+    final newRemain =
+        ((widget.order['remaining_balance'] as num?)?.toDouble() ?? 0) - paid;
     final fullyPaid = newRemain < 0.01;
 
-    await FirebaseFirestore.instance.collection('Orders').doc(orderId).update({
-      'amount_paid':          newPaid,
-      'remaining_balance':    newRemain.clamp(0.0, double.infinity),
-      'payment_status':       fullyPaid ? 'paid' : 'partial',
-      if (fullyPaid) 'fully_paid_at': FieldValue.serverTimestamp(),
-      'balance_link_id':      FieldValue.delete(),
-      'balance_checkout_url': FieldValue.delete(),
-      'balance_link_amount':  FieldValue.delete(),
-    }).catchError((_) {});
+    await FirebaseFirestore.instance
+        .collection('Orders')
+        .doc(orderId)
+        .update({
+          'amount_paid': newPaid,
+          'remaining_balance': newRemain.clamp(0.0, double.infinity),
+          'payment_status': fullyPaid ? 'paid' : 'partial',
+          if (fullyPaid) 'fully_paid_at': FieldValue.serverTimestamp(),
+          'balance_link_id': FieldValue.delete(),
+          'balance_checkout_url': FieldValue.delete(),
+          'balance_link_amount': FieldValue.delete(),
+        })
+        .catchError((_) {});
 
-    await FirebaseFirestore.instance.collection('Payments').doc().set({
-      'order_id':             orderId,
-      'amount':               paid,
-      'payment_type':         'balance',
-      'payment_method':       'online',
-      'transaction_reference': paidLinkId,
-      'payment_date':         FieldValue.serverTimestamp(),
-      'status':               'paid',
-    }).catchError((_) {});
+    await FirebaseFirestore.instance
+        .collection('Payments')
+        .doc()
+        .set({
+          'order_id': orderId,
+          'amount': paid,
+          'payment_type': 'balance',
+          'payment_method': 'online',
+          'transaction_reference': paidLinkId,
+          'payment_date': FieldValue.serverTimestamp(),
+          'status': 'paid',
+        })
+        .catchError((_) {});
 
     if (!fullyPaid && mounted) {
       setState(() => _stale = true);
@@ -1827,10 +2286,10 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
   Future<void> _generate() async {
     setState(() => _generating = true);
     try {
-      final orderId   = widget.order['order_id']?.toString() ?? widget.docId;
+      final orderId = widget.order['order_id']?.toString() ?? widget.docId;
       final isInitial = widget.status == 'awaiting_payment';
-      final total     = (widget.order['total_price'] as num?)?.toDouble() ?? 0;
-      final amount    = isInitial
+      final total = (widget.order['total_price'] as num?)?.toDouble() ?? 0;
+      final amount = isInitial
           ? (total * 0.5 * 100).round() / 100
           : widget.remaining;
 
@@ -1843,37 +2302,41 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
 
       final orderUpdates = isInitial
           ? {
-              'paymongo_link_id':      link.id,
+              'paymongo_link_id': link.id,
               'paymongo_checkout_url': link.checkoutUrl,
             }
           : {
-              'balance_link_id':      link.id,
+              'balance_link_id': link.id,
               'balance_checkout_url': link.checkoutUrl,
-              'balance_link_amount':  amount,
+              'balance_link_amount': amount,
             };
 
       await Future.wait([
-        FirebaseFirestore.instance.collection('PayMongoLinks').doc(link.id).set({
-          'order_id':        orderId,
-          'purpose':         isInitial ? 'downpayment' : 'balance',
-          'expected_amount': amount,
-          'processed':       false,
-          'created_at':      FieldValue.serverTimestamp(),
-        }),
+        FirebaseFirestore.instance
+            .collection('PayMongoLinks')
+            .doc(link.id)
+            .set({
+              'order_id': orderId,
+              'purpose': isInitial ? 'downpayment' : 'balance',
+              'expected_amount': amount,
+              'processed': false,
+              'created_at': FieldValue.serverTimestamp(),
+            }),
         FirebaseFirestore.instance
             .collection('Orders')
             .doc(orderId)
             .update(orderUpdates),
       ]);
-      if (mounted) setState(() { _localUrl = link.checkoutUrl; _validating = false; });
+      if (mounted)
+        setState(() {
+          _localUrl = link.checkoutUrl;
+          _validating = false;
+        });
     } catch (e) {
       if (mounted) {
         setState(() => _validating = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed: $e'),
-            backgroundColor: Colors.red.shade700,
-          ),
+          SnackBar(content: Text('Failed: $e'), backgroundColor: _G.accentRose),
         );
       }
     } finally {
@@ -1888,12 +2351,14 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
         (widget.order['balance_link_amount'] as num?)?.toDouble() ??
         widget.remaining;
 
-    // Show spinner while validating or regenerating — never show an expired URL
     if (_validating || (_generating && url == null)) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 20),
         child: Center(
-          child: CircularProgressIndicator(color: AppTheme.gold),
+          child: CircularProgressIndicator(
+            color: _G.accentAmber,
+            strokeWidth: 2,
+          ),
         ),
       );
     }
@@ -1901,57 +2366,72 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
     if (url == null && widget.status != 'awaiting_payment') {
       return Container(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        ),
+        decoration: _G.glassCard(radius: 12),
         child: Column(
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.qr_code_2_rounded, color: Colors.white38, size: 16),
-                SizedBox(width: 8),
-                Expanded(
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.qr_code_2_rounded,
+                    color: _G.textSecondary,
+                    size: 14,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
                   child: Text(
                     'Generate a QR code so you or anyone can scan and pay the remaining balance.',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                    style: TextStyle(color: _G.textSecondary, fontSize: 12),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _generating ? null : _generate,
-                icon: _generating
-                    ? const SizedBox(
+            GestureDetector(
+              onTap: _generating ? null : _generate,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 11),
+                decoration: BoxDecoration(
+                  color: _generating
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : _G.activeBtn,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (_generating)
+                      const SizedBox(
                         width: 14,
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: AppTheme.gold,
+                          color: _G.activeBtnText,
                         ),
                       )
-                    : const Icon(
+                    else
+                      Icon(
                         Icons.qr_code_2_rounded,
-                        color: AppTheme.gold,
-                        size: 16,
+                        color: _G.activeBtnText,
+                        size: 15,
                       ),
-                label: Text(
-                  _generating ? 'Generating…' : 'Generate Payment QR',
-                  style: const TextStyle(
-                    color: AppTheme.gold,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: AppTheme.gold.withValues(alpha: 0.4)),
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _generating ? 'Generating…' : 'Generate Payment QR',
+                      style: TextStyle(
+                        color: _generating ? _G.textMuted : _G.activeBtnText,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1965,18 +2445,26 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: _G.accentAmber.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.gold.withValues(alpha: 0.25)),
+        border: Border.all(color: _G.accentAmber.withValues(alpha: 0.30)),
+        boxShadow: const [_G.rowShadow],
       ),
       child: Column(
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.qr_code_2_rounded,
-                color: AppTheme.gold,
-                size: 16,
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: _G.accentAmber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.qr_code_2_rounded,
+                  color: _G.accentAmber,
+                  size: 14,
+                ),
               ),
               const SizedBox(width: 8),
               Text(
@@ -1984,9 +2472,9 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
                     ? 'SCAN TO PAY DOWNPAYMENT'
                     : 'SCAN TO PAY REMAINING BALANCE',
                 style: const TextStyle(
-                  color: AppTheme.gold,
+                  color: _G.accentAmber,
                   fontSize: 11,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: 0.8,
                 ),
               ),
@@ -1999,17 +2487,18 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
+                boxShadow: const [_G.rowShadow],
               ),
               child: QrImageView(
                 data: url,
                 size: 180,
                 eyeStyle: const QrEyeStyle(
                   eyeShape: QrEyeShape.square,
-                  color: Color(0xFF0f0f23),
+                  color: Color(0xFF0F1A2E),
                 ),
                 dataModuleStyle: const QrDataModuleStyle(
                   dataModuleShape: QrDataModuleShape.square,
-                  color: Color(0xFF0f0f23),
+                  color: Color(0xFF0F1A2E),
                 ),
               ),
             ),
@@ -2018,20 +2507,20 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
           Text(
             '₱${amount.toStringAsFixed(2)}',
             style: const TextStyle(
-              color: Colors.white,
+              color: _G.textPrimary,
               fontSize: 14,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 3),
           const Text(
             'Opens PayMongo → GCash / Maya / Card',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
+            style: TextStyle(color: _G.textMuted, fontSize: 11),
           ),
           const SizedBox(height: 2),
           const Text(
             'This QR is unique to this order and safe to share.',
-            style: TextStyle(color: Colors.white24, fontSize: 10),
+            style: TextStyle(color: _G.textMuted, fontSize: 10),
           ),
         ],
       ),
@@ -2049,42 +2538,47 @@ class _StatusBadge extends StatelessWidget {
     String label;
     switch (status) {
       case 'pending':
-        color = Colors.orangeAccent;
+        color = _G.accentAmber;
         label = 'Pending';
         break;
       case 'in_production':
-        color = Colors.blueAccent;
+        color = _G.accentBlue;
         label = 'In Production';
         break;
+      case 'ready':
       case 'ready_for_pickup':
-        color = Colors.greenAccent;
-        label = 'Ready for Pickup';
+        color = _G.accentEmerald;
+        label = 'Ready';
         break;
       case 'cancelled':
-        color = Colors.redAccent;
+        color = _G.accentRose;
         label = 'Cancelled';
         break;
       case 'completed':
-        color = Colors.white54;
+        color = _G.textMuted;
         label = 'Completed';
         break;
+      case 'awaiting_payment':
+        color = _G.accentViolet;
+        label = 'Awaiting Payment';
+        break;
       default:
-        color = Colors.white38;
+        color = _G.textMuted;
         label = status;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: color.withValues(alpha: 0.40)),
       ),
       child: Text(
         label,
         style: TextStyle(
           color: color,
           fontSize: 11,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -2110,8 +2604,6 @@ class _MessagesContentState extends State<_MessagesContent> {
     _ensureGeneralThread();
   }
 
-  // Silently creates a general chat thread on first visit so the
-  // customer can reach the team even without a placed order.
   Future<void> _ensureGeneralThread() async {
     final ref = FirebaseFirestore.instance
         .collection('Messages')
@@ -2141,16 +2633,15 @@ class _MessagesContentState extends State<_MessagesContent> {
         const Text(
           'Messages',
           style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+            color: _G.textPrimary,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
           ),
         ),
         const SizedBox(height: 14),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            // No orderBy — avoids composite index requirement.
-            // Sort by last_updated client-side.
             stream: FirebaseFirestore.instance
                 .collection('Messages')
                 .where('customer_uid', isEqualTo: widget.uid)
@@ -2160,14 +2651,17 @@ class _MessagesContentState extends State<_MessagesContent> {
                 return const Center(
                   child: Text(
                     'Could not load messages.',
-                    style: TextStyle(color: Colors.white38, fontSize: 13),
+                    style: TextStyle(color: _G.textMuted, fontSize: 13),
                   ),
                 );
               }
               if (snap.connectionState == ConnectionState.waiting &&
                   !snap.hasData) {
                 return const Center(
-                  child: CircularProgressIndicator(color: Colors.white38),
+                  child: CircularProgressIndicator(
+                    color: _G.activeBtn,
+                    strokeWidth: 2,
+                  ),
                 );
               }
               final docs = List.from(snap.data?.docs ?? [])
@@ -2179,7 +2673,10 @@ class _MessagesContentState extends State<_MessagesContent> {
                 });
               if (docs.isEmpty) {
                 return const Center(
-                  child: CircularProgressIndicator(color: Colors.white38),
+                  child: CircularProgressIndicator(
+                    color: _G.activeBtn,
+                    strokeWidth: 2,
+                  ),
                 );
               }
               return ListView.separated(
@@ -2202,7 +2699,7 @@ class _MessagesContentState extends State<_MessagesContent> {
                     ),
                     child: Container(
                       padding: const EdgeInsets.all(14),
-                      decoration: AppTheme.glassCard(opacity: 0.12, radius: 12),
+                      decoration: _G.glassCard(radius: 14),
                       child: Row(
                         children: [
                           Container(
@@ -2210,14 +2707,15 @@ class _MessagesContentState extends State<_MessagesContent> {
                             height: 44,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: AppTheme.gold.withValues(alpha: 0.15),
+                              color: Colors.white.withValues(alpha: 0.08),
                               border: Border.all(
-                                color: AppTheme.gold.withValues(alpha: 0.4),
+                                color: Colors.white.withValues(alpha: 0.20),
+                                width: 0.9,
                               ),
                             ),
                             child: const Icon(
-                              Icons.local_print_shop,
-                              color: AppTheme.gold,
+                              Icons.local_print_shop_rounded,
+                              color: _G.textSecondary,
                               size: 20,
                             ),
                           ),
@@ -2229,16 +2727,17 @@ class _MessagesContentState extends State<_MessagesContent> {
                                 const Text(
                                   'Imprenta Inc.',
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
+                                    color: _G.textPrimary,
+                                    fontWeight: FontWeight.w700,
                                     fontSize: 13,
                                   ),
                                 ),
-                                const Text(
+                                Text(
                                   'Printing Services',
                                   style: TextStyle(
-                                    color: AppTheme.gold,
+                                    color: _G.accentAmber,
                                     fontSize: 11,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 if (lastMsg.isNotEmpty) ...[
@@ -2246,7 +2745,7 @@ class _MessagesContentState extends State<_MessagesContent> {
                                   Text(
                                     lastMsg,
                                     style: const TextStyle(
-                                      color: Colors.white54,
+                                      color: _G.textMuted,
                                       fontSize: 12,
                                     ),
                                     maxLines: 1,
@@ -2258,11 +2757,11 @@ class _MessagesContentState extends State<_MessagesContent> {
                           ),
                           if (unread > 0)
                             Container(
-                              width: 20,
-                              height: 20,
+                              width: 22,
+                              height: 22,
                               decoration: const BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.redAccent,
+                                color: _G.accentRose,
                               ),
                               child: Center(
                                 child: Text(
@@ -2270,15 +2769,15 @@ class _MessagesContentState extends State<_MessagesContent> {
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 10,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
                               ),
                             ),
                           const SizedBox(width: 4),
-                          const Icon(
+                          Icon(
                             Icons.chevron_right,
-                            color: Colors.white30,
+                            color: _G.textMuted,
                             size: 18,
                           ),
                         ],
@@ -2296,7 +2795,7 @@ class _MessagesContentState extends State<_MessagesContent> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Manage Account
+// Manage Account / Profile — fully functional email change + password flowchart
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _ManageAccountContent extends StatefulWidget {
@@ -2307,39 +2806,68 @@ class _ManageAccountContent extends StatefulWidget {
   State<_ManageAccountContent> createState() => _ManageAccountContentState();
 }
 
-class _ManageAccountContentState extends State<_ManageAccountContent> {
+class _ManageAccountContentState extends State<_ManageAccountContent>
+    with SingleTickerProviderStateMixin {
+  // ── Personal Info ──────────────────────────────────────────────
   final _nameCtrl = TextEditingController();
+  bool _savingInfo = false;
+  String? _infoMsg, _infoErr;
+
+  // ── Email change (full flow) ───────────────────────────────────
   final _emailCtrl = TextEditingController();
+  final _emailPwCtrl = TextEditingController();
+  bool _editingEmail = false;
+  bool _savingEmail = false;
+  bool _showEmailPw = false;
+  bool _verificationPending = false;
+  String _pendingNewEmail = '';
+  String _pendingPassword = '';
+  String _originalEmail = '';
+  bool _checkingVerification = false;
+  String? _emailMsg, _emailErr;
+
+  // ── Password (two-step matching flowchart) ─────────────────────
+  int _pwStep = 0; // 0 = verify current, 1 = set new
+  bool _verifyingCur = false;
+  bool _savingPw = false;
+  bool _showCur = false, _showNew = false, _showConf = false;
   final _curPwCtrl = TextEditingController();
   final _newPwCtrl = TextEditingController();
   final _confPwCtrl = TextEditingController();
+  String? _pwMsg, _pwErr;
 
-  bool _showCur = false, _showNew = false, _showConf = false;
-  bool _savingInfo = false, _savingPw = false, _savingEmail = false;
+  late final AnimationController _slideCtrl;
+  late final Animation<Offset> _slideAnim;
+
   bool _loading = true;
-  String? _infoMsg, _infoErr, _pwMsg, _pwErr, _emailMsg, _emailErr;
-
-  final _emailPwCtrl = TextEditingController();
-  bool _showEmailPw = false;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _slideCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0.1, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOut));
+    _loadUser();
   }
 
   @override
   void dispose() {
+    _slideCtrl.dispose();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
+    _emailPwCtrl.dispose();
     _curPwCtrl.dispose();
     _newPwCtrl.dispose();
     _confPwCtrl.dispose();
-    _emailPwCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _loadUser() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final doc = await FirebaseFirestore.instance
@@ -2350,10 +2878,13 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
       setState(() {
         _nameCtrl.text = doc.data()?['full_name'] ?? user.displayName ?? '';
         _emailCtrl.text = doc.data()?['email'] ?? user.email ?? '';
+        _originalEmail = _emailCtrl.text;
         _loading = false;
       });
     }
   }
+
+  // ── Save name ──────────────────────────────────────────────────
 
   Future<void> _saveName() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -2379,7 +2910,7 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
       widget.onNameUpdated(name);
       if (mounted)
         setState(() {
-          _infoMsg = 'Name updated.';
+          _infoMsg = 'Name updated successfully.';
           _savingInfo = false;
         });
     } catch (e) {
@@ -2391,11 +2922,14 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
     }
   }
 
+  // ── Email change (matches admin_profile.dart logic) ────────────
+
   Future<void> _changeEmail() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final newEmail = _emailCtrl.text.trim();
-    final pw = _emailPwCtrl.text.trim();
+    final password = _emailPwCtrl.text;
+
     if (newEmail.isEmpty) {
       setState(() {
         _emailErr = 'Email cannot be empty.';
@@ -2410,20 +2944,21 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
       });
       return;
     }
-    if (pw.isEmpty) {
+    if (newEmail == _originalEmail) {
+      setState(() {
+        _emailErr = 'This is already your current email.';
+        _emailMsg = null;
+      });
+      return;
+    }
+    if (password.isEmpty) {
       setState(() {
         _emailErr = 'Enter your current password to confirm.';
         _emailMsg = null;
       });
       return;
     }
-    if (newEmail == user.email) {
-      setState(() {
-        _emailErr = 'That is already your current email.';
-        _emailMsg = null;
-      });
-      return;
-    }
+
     setState(() {
       _savingEmail = true;
       _emailErr = null;
@@ -2432,54 +2967,210 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
     try {
       final cred = EmailAuthProvider.credential(
         email: user.email!,
-        password: pw,
+        password: password,
       );
       await user.reauthenticateWithCredential(cred);
       await user.verifyBeforeUpdateEmail(newEmail);
-      await FirebaseFirestore.instance.collection('User').doc(user.uid).update({
-        'email': newEmail,
+      if (!mounted) return;
+      setState(() {
+        _verificationPending = true;
+        _pendingNewEmail = newEmail;
+        _pendingPassword = password;
+        _savingEmail = false;
+        _editingEmail = false;
+        _emailErr = null;
+        _emailMsg = null;
+        _emailPwCtrl.clear();
+        _showEmailPw = false;
       });
-      if (mounted) {
-        setState(() {
-          _emailMsg =
-              'Verification email sent to $newEmail. Please verify to complete the change.';
-          _savingEmail = false;
-          _emailPwCtrl.clear();
-        });
-      }
     } on FirebaseAuthException catch (e) {
+      String msg;
+      switch (e.code) {
+        case 'wrong-password':
+        case 'invalid-credential':
+          msg = 'Incorrect password.';
+          break;
+        case 'requires-recent-login':
+          msg = 'Session expired. Please log out and log back in.';
+          break;
+        case 'too-many-requests':
+          msg = 'Too many attempts. Please wait and try again.';
+          break;
+        default:
+          msg = 'Error (${e.code}): ${e.message ?? 'Please try again.'}';
+      }
       if (mounted)
         setState(() {
-          _emailErr = e.code == 'wrong-password'
-              ? 'Current password is incorrect.'
-              : (e.message ?? 'Failed to update email.');
+          _emailErr = msg;
           _savingEmail = false;
         });
     } catch (e) {
       if (mounted)
         setState(() {
-          _emailErr = 'Failed: $e';
+          _emailErr = 'Unexpected error: $e';
           _savingEmail = false;
         });
     }
   }
 
-  Future<void> _changePw() async {
+  Future<void> _checkVerification() async {
+    setState(() {
+      _checkingVerification = true;
+      _emailErr = null;
+    });
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user == null || user.email == _pendingNewEmail) {
+        final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: _pendingNewEmail,
+          password: _pendingPassword,
+        );
+        user = cred.user;
+      } else {
+        await user.reload();
+        user = FirebaseAuth.instance.currentUser;
+      }
+      if (user == null) {
+        if (mounted)
+          setState(() {
+            _emailErr = 'Session lost. Please log in again.';
+            _checkingVerification = false;
+          });
+        return;
+      }
+      if ((user.email ?? '') != _pendingNewEmail) {
+        if (mounted)
+          setState(() {
+            _emailErr =
+                'Email not verified yet. Please check your inbox and click the link, then try again.';
+            _checkingVerification = false;
+          });
+        return;
+      }
+      await _finalizeEmailChange(_pendingNewEmail);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-token-expired' ||
+          e.code == 'invalid-user-token' ||
+          e.code == 'user-not-found') {
+        try {
+          final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+            email: _pendingNewEmail,
+            password: _pendingPassword,
+          );
+          if (cred.user != null && cred.user!.email == _pendingNewEmail) {
+            await _finalizeEmailChange(_pendingNewEmail);
+            return;
+          }
+        } catch (_) {}
+      }
+      if (mounted)
+        setState(() {
+          _emailErr = 'Verification check failed: ${e.message ?? e.code}';
+          _checkingVerification = false;
+        });
+    } catch (e) {
+      if (mounted)
+        setState(() {
+          _emailErr = 'Verification check failed: $e';
+          _checkingVerification = false;
+        });
+    }
+  }
+
+  Future<void> _finalizeEmailChange(String newEmail) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final cur = _curPwCtrl.text.trim();
-    final nw = _newPwCtrl.text.trim();
-    final conf = _confPwCtrl.text.trim();
-    if (cur.isEmpty || nw.isEmpty || conf.isEmpty) {
+    try {
+      await FirebaseFirestore.instance.collection('User').doc(user.uid).update({
+        'email': newEmail,
+      });
+      if (!mounted) return;
+      _originalEmail = newEmail;
       setState(() {
-        _pwErr = 'Fill in all password fields.';
+        _verificationPending = false;
+        _pendingNewEmail = '';
+        _pendingPassword = '';
+        _checkingVerification = false;
+        _emailCtrl.text = newEmail;
+        _emailMsg = 'Email changed successfully.';
+        _emailErr = null;
+      });
+    } catch (e) {
+      if (mounted)
+        setState(() {
+          _emailErr = 'Failed to save email change: $e';
+          _checkingVerification = false;
+        });
+    }
+  }
+
+  // ── Password: two-step (flowchart: verify current → set new) ──
+
+  Future<void> _verifyCurrentPassword() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final cur = _curPwCtrl.text;
+    if (cur.isEmpty) {
+      setState(() {
+        _pwErr = 'Please enter your current password.';
+        _pwMsg = null;
+      });
+      return;
+    }
+    setState(() {
+      _verifyingCur = true;
+      _pwErr = null;
+      _pwMsg = null;
+    });
+    try {
+      final cred = EmailAuthProvider.credential(
+        email: user.email!,
+        password: cur,
+      );
+      await user.reauthenticateWithCredential(cred);
+      if (mounted) {
+        setState(() {
+          _verifyingCur = false;
+          _pwStep = 1;
+        });
+        _slideCtrl.forward(from: 0);
+      }
+    } on FirebaseAuthException catch (e) {
+      String msg;
+      switch (e.code) {
+        case 'wrong-password':
+        case 'invalid-credential':
+          msg = 'Incorrect password. Please try again.';
+          break;
+        case 'too-many-requests':
+          msg = 'Too many attempts. Please wait.';
+          break;
+        default:
+          msg = 'Error (${e.code}): ${e.message ?? 'Please try again.'}';
+      }
+      if (mounted)
+        setState(() {
+          _pwErr = msg;
+          _verifyingCur = false;
+        });
+    }
+  }
+
+  Future<void> _setNewPassword() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final nw = _newPwCtrl.text;
+    final conf = _confPwCtrl.text;
+    if (nw.isEmpty || conf.isEmpty) {
+      setState(() {
+        _pwErr = 'Please fill in all fields.';
         _pwMsg = null;
       });
       return;
     }
     if (nw.length < 6) {
       setState(() {
-        _pwErr = 'New password must be at least 6 characters.';
+        _pwErr = 'Password must be at least 6 characters.';
         _pwMsg = null;
       });
       return;
@@ -2497,16 +3188,12 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
       _pwMsg = null;
     });
     try {
-      final cred = EmailAuthProvider.credential(
-        email: user.email!,
-        password: cur,
-      );
-      await user.reauthenticateWithCredential(cred);
       await user.updatePassword(nw);
       if (mounted) {
         setState(() {
           _pwMsg = 'Password changed successfully.';
           _savingPw = false;
+          _pwStep = 0;
           _curPwCtrl.clear();
           _newPwCtrl.clear();
           _confPwCtrl.clear();
@@ -2515,19 +3202,446 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
     } on FirebaseAuthException catch (e) {
       if (mounted)
         setState(() {
-          _pwErr = e.code == 'wrong-password'
-              ? 'Current password is incorrect.'
+          _pwErr = e.code == 'weak-password'
+              ? 'Password is too weak.'
               : (e.message ?? 'Failed.');
           _savingPw = false;
         });
     }
   }
 
+  void _resetPwFlow() {
+    setState(() {
+      _pwStep = 0;
+      _pwErr = null;
+      _pwMsg = null;
+      _curPwCtrl.clear();
+      _newPwCtrl.clear();
+      _confPwCtrl.clear();
+    });
+  }
+
+  // ── UI Helpers ─────────────────────────────────────────────────
+
+  Widget _glassField({
+    required String label,
+    required TextEditingController ctrl,
+    bool readOnly = false,
+    IconData? icon,
+  }) => Container(
+    decoration: _G.glassCard(radius: 10),
+    child: TextField(
+      controller: ctrl,
+      readOnly: readOnly,
+      style: TextStyle(
+        color: readOnly ? _G.textMuted : _G.textPrimary,
+        fontSize: 14,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: _G.textMuted, fontSize: 13),
+        prefixIcon: icon != null
+            ? Icon(icon, color: _G.textMuted, size: 17)
+            : null,
+        border: InputBorder.none,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 13,
+        ),
+      ),
+    ),
+  );
+
+  Widget _pwField({
+    required String label,
+    required TextEditingController ctrl,
+    required bool show,
+    required VoidCallback toggle,
+    Color? accentColor,
+  }) => Container(
+    decoration: _G.glassCard(radius: 10),
+    child: TextField(
+      controller: ctrl,
+      obscureText: !show,
+      style: const TextStyle(color: _G.textPrimary, fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: _G.textMuted, fontSize: 13),
+        prefixIcon: const Icon(
+          Icons.lock_outline_rounded,
+          color: _G.textMuted,
+          size: 17,
+        ),
+        border: InputBorder.none,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 13,
+        ),
+        suffixIcon: IconButton(
+          icon: Icon(
+            show ? Icons.visibility : Icons.visibility_off,
+            color: _G.textMuted,
+            size: 18,
+          ),
+          onPressed: toggle,
+        ),
+      ),
+    ),
+  );
+
+  Widget _banner(String msg, bool isError) {
+    final color = isError ? _G.accentRose : _G.accentEmerald;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isError ? Icons.error_outline : Icons.check_circle_outline,
+            color: color,
+            size: 15,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(msg, style: TextStyle(color: color, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionHeader(String title, IconData icon, Color color) => Container(
+    margin: const EdgeInsets.only(bottom: 14),
+    child: Row(
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: color.withValues(alpha: 0.30),
+              width: 1.0,
+            ),
+          ),
+          child: Icon(icon, color: color, size: 14),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: const TextStyle(
+            color: _G.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [color.withValues(alpha: 0.25), Colors.transparent],
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _primaryBtn({
+    required String label,
+    required IconData icon,
+    required VoidCallback? onTap,
+    bool loading = false,
+    Color? color,
+  }) {
+    final c = color ?? _G.activeBtn;
+    final textC = (c == _G.activeBtn) ? _G.activeBtnText : Colors.white;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          color: onTap == null ? Colors.white.withValues(alpha: 0.05) : c,
+          borderRadius: BorderRadius.circular(99),
+          boxShadow: onTap == null
+              ? []
+              : [
+                  BoxShadow(
+                    color: c.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            loading
+                ? SizedBox(
+                    width: 13,
+                    height: 13,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: textC,
+                    ),
+                  )
+                : Icon(
+                    icon,
+                    size: 14,
+                    color: onTap == null ? _G.textMuted : textC,
+                  ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: onTap == null ? _G.textMuted : textC,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _outlinedBtn({
+    required String label,
+    required IconData icon,
+    required VoidCallback? onTap,
+    Color? color,
+  }) {
+    final c = color ?? _G.accentViolet;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          color: c.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: c.withValues(alpha: 0.45), width: 1.2),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: c),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: c,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Password Section (two-step) ────────────────────────────────
+
+  Widget _passwordSection() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1.0,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Step track header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.06),
+              border: Border(
+                bottom: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.10),
+                  width: 0.9,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                _StepChip(
+                  number: 1,
+                  label: 'Verify Identity',
+                  isActive: _pwStep == 0,
+                  isDone: _pwStep > 0,
+                ),
+                Expanded(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        height: 2,
+                        color: Colors.white.withValues(alpha: 0.10),
+                      ),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 350),
+                        curve: Curves.easeOut,
+                        height: 2,
+                        width: _pwStep >= 1 ? double.infinity : 0,
+                        color: _G.accentEmerald,
+                      ),
+                    ],
+                  ),
+                ),
+                _StepChip(
+                  number: 2,
+                  label: 'New Password',
+                  isActive: _pwStep == 1,
+                  isDone: false,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+            child: _pwStep == 0 ? _step0() : _step1(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _step0() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const Text(
+        'Enter your current password to proceed',
+        style: TextStyle(color: _G.textMuted, fontSize: 12),
+      ),
+      const SizedBox(height: 10),
+      _pwField(
+        label: 'Current Password',
+        ctrl: _curPwCtrl,
+        show: _showCur,
+        toggle: () => setState(() => _showCur = !_showCur),
+      ),
+      if (_pwErr != null) ...[
+        const SizedBox(height: 8),
+        _banner(_pwErr!, true),
+      ],
+      if (_pwMsg != null) ...[
+        const SizedBox(height: 8),
+        _banner(_pwMsg!, false),
+      ],
+      const SizedBox(height: 14),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          _primaryBtn(
+            label: 'Verify & Continue',
+            icon: Icons.arrow_forward_rounded,
+            onTap: _verifyingCur ? null : _verifyCurrentPassword,
+            loading: _verifyingCur,
+          ),
+        ],
+      ),
+    ],
+  );
+
+  Widget _step1() => SlideTransition(
+    position: _slideAnim,
+    child: FadeTransition(
+      opacity: _slideCtrl,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Choose a new password',
+            style: TextStyle(color: _G.textMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          _pwField(
+            label: 'New Password',
+            ctrl: _newPwCtrl,
+            show: _showNew,
+            toggle: () => setState(() => _showNew = !_showNew),
+            accentColor: _G.accentEmerald,
+          ),
+          const SizedBox(height: 10),
+          _pwField(
+            label: 'Confirm New Password',
+            ctrl: _confPwCtrl,
+            show: _showConf,
+            toggle: () => setState(() => _showConf = !_showConf),
+            accentColor: _G.accentEmerald,
+          ),
+          if (_pwErr != null) ...[
+            const SizedBox(height: 8),
+            _banner(_pwErr!, true),
+          ],
+          if (_pwMsg != null) ...[
+            const SizedBox(height: 8),
+            _banner(_pwMsg!, false),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onTap: _resetPwFlow,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(
+                      Icons.arrow_back_rounded,
+                      size: 14,
+                      color: _G.textMuted,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'Back',
+                      style: TextStyle(
+                        color: _G.textMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _primaryBtn(
+                label: 'Change Password',
+                icon: Icons.check_rounded,
+                onTap: _savingPw ? null : _setNewPassword,
+                loading: _savingPw,
+                color: _G.accentEmerald,
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+
+  // ── Build ──────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(
-        child: CircularProgressIndicator(color: Colors.white38),
+        child: CircularProgressIndicator(color: _G.activeBtn, strokeWidth: 2),
       );
     }
     return SingleChildScrollView(
@@ -2537,257 +3651,298 @@ class _ManageAccountContentState extends State<_ManageAccountContent> {
           const Text(
             'Profile',
             style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
+              color: _G.textPrimary,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 20),
-          _section('Personal Information'),
-          const SizedBox(height: 12),
-          _field(label: 'Full Name', ctrl: _nameCtrl),
-          const SizedBox(height: 10),
-          _field(label: 'Email', ctrl: _emailCtrl),
-          const SizedBox(height: 10),
-          _pwField(
-            label: 'Current Password (to confirm email change)',
-            ctrl: _emailPwCtrl,
-            show: _showEmailPw,
-            toggle: () => setState(() => _showEmailPw = !_showEmailPw),
+          const SizedBox(height: 22),
+
+          // ── Personal Info ─────────────────────────────────────
+          _sectionHeader(
+            'Personal Information',
+            Icons.person_outline_rounded,
+            _G.activeBtn,
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'A verification link will be sent to your new email.',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
+          _glassField(
+            label: 'Full Name',
+            ctrl: _nameCtrl,
+            icon: Icons.person_outline_rounded,
           ),
-          if (_emailMsg != null) ...[
+          if (_infoErr != null) ...[
             const SizedBox(height: 8),
-            _banner(_emailMsg!, false),
-          ],
-          if (_emailErr != null) ...[
-            const SizedBox(height: 8),
-            _banner(_emailErr!, true),
+            _banner(_infoErr!, true),
           ],
           if (_infoMsg != null) ...[
             const SizedBox(height: 8),
             _banner(_infoMsg!, false),
           ],
-          if (_infoErr != null) ...[
-            const SizedBox(height: 8),
-            _banner(_infoErr!, true),
-          ],
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              ElevatedButton(
-                onPressed: _savingEmail ? null : _changeEmail,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueGrey.shade700,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
-                  ),
-                ),
-                child: _savingEmail
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white54,
-                        ),
-                      )
-                    : const Text(
-                        'Change Email',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: _savingInfo ? null : _saveName,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.gold,
-                  foregroundColor: Colors.black,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 10,
-                  ),
-                ),
-                child: _savingInfo
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.black54,
-                        ),
-                      )
-                    : const Text(
-                        'Save Name',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
+              _primaryBtn(
+                label: 'Save Name',
+                icon: Icons.save_rounded,
+                onTap: _savingInfo ? null : _saveName,
+                loading: _savingInfo,
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          _section('Change Password'),
-          const SizedBox(height: 12),
-          _pwField(
-            label: 'Current Password',
-            ctrl: _curPwCtrl,
-            show: _showCur,
-            toggle: () => setState(() => _showCur = !_showCur),
+
+          const SizedBox(height: 22),
+
+          // ── Email ─────────────────────────────────────────────
+          _sectionHeader(
+            'Email Address',
+            Icons.email_outlined,
+            _G.accentViolet,
           ),
-          const SizedBox(height: 10),
-          _pwField(
-            label: 'New Password',
-            ctrl: _newPwCtrl,
-            show: _showNew,
-            toggle: () => setState(() => _showNew = !_showNew),
+          _glassField(
+            label: 'Email',
+            ctrl: _emailCtrl,
+            readOnly: !_editingEmail && !_verificationPending,
+            icon: Icons.email_outlined,
           ),
-          const SizedBox(height: 10),
-          _pwField(
-            label: 'Confirm New Password',
-            ctrl: _confPwCtrl,
-            show: _showConf,
-            toggle: () => setState(() => _showConf = !_showConf),
-          ),
-          if (_pwMsg != null) ...[
-            const SizedBox(height: 8),
-            _banner(_pwMsg!, false),
-          ],
-          if (_pwErr != null) ...[
-            const SizedBox(height: 8),
-            _banner(_pwErr!, true),
-          ],
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton(
-              onPressed: _savingPw ? null : _changePw,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.gold,
-                foregroundColor: Colors.black,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+
+          if (!_editingEmail && !_verificationPending) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _outlinedBtn(
+                  label: 'Change Email',
+                  icon: Icons.edit_outlined,
+                  color: _G.accentViolet,
+                  onTap: () => setState(() {
+                    _editingEmail = true;
+                    _emailErr = null;
+                    _emailMsg = null;
+                    _emailPwCtrl.clear();
+                  }),
                 ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 10,
-                ),
-              ),
-              child: _savingPw
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.black54,
-                      ),
-                    )
-                  : const Text(
-                      'Change Password',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
+              ],
             ),
+          ] else if (_editingEmail && !_verificationPending) ...[
+            const SizedBox(height: 10),
+            _pwField(
+              label: 'Current Password (to confirm)',
+              ctrl: _emailPwCtrl,
+              show: _showEmailPw,
+              toggle: () => setState(() => _showEmailPw = !_showEmailPw),
+              accentColor: _G.accentViolet,
+            ),
+            if (_emailErr != null) ...[
+              const SizedBox(height: 8),
+              _banner(_emailErr!, true),
+            ],
+            const SizedBox(height: 4),
+            const Text(
+              'A verification link will be sent to your new email.',
+              style: TextStyle(color: _G.textMuted, fontSize: 11),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                GestureDetector(
+                  onTap: _savingEmail
+                      ? null
+                      : () => setState(() {
+                          _editingEmail = false;
+                          _emailErr = null;
+                          _emailMsg = null;
+                          _emailPwCtrl.clear();
+                          _showEmailPw = false;
+                          _emailCtrl.text = _originalEmail;
+                        }),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: _G.textMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _primaryBtn(
+                  label: 'Send Verification',
+                  icon: Icons.send_rounded,
+                  color: _G.accentViolet,
+                  onTap: _savingEmail ? null : _changeEmail,
+                  loading: _savingEmail,
+                ),
+              ],
+            ),
+          ] else if (_verificationPending) ...[
+            const SizedBox(height: 10),
+            _banner(
+              'Verification email sent to $_pendingNewEmail.\nClick the link in your inbox, then tap "I\'ve Verified" below.',
+              false,
+            ),
+            if (_emailErr != null) ...[
+              const SizedBox(height: 8),
+              _banner(_emailErr!, true),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              children: const [
+                SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _G.accentViolet,
+                  ),
+                ),
+                SizedBox(width: 9),
+                Text(
+                  'Waiting for verification…',
+                  style: TextStyle(color: _G.textMuted, fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                GestureDetector(
+                  onTap: _checkingVerification
+                      ? null
+                      : () => setState(() {
+                          _verificationPending = false;
+                          _pendingNewEmail = '';
+                          _pendingPassword = '';
+                          _emailErr = null;
+                          _emailCtrl.text = _originalEmail;
+                        }),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: _G.textMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _primaryBtn(
+                  label: "I've Verified",
+                  icon: Icons.verified_rounded,
+                  color: _G.accentViolet,
+                  onTap: _checkingVerification ? null : _checkVerification,
+                  loading: _checkingVerification,
+                ),
+              ],
+            ),
+          ],
+
+          if (_emailMsg != null) ...[
+            const SizedBox(height: 8),
+            _banner(_emailMsg!, false),
+          ],
+
+          const SizedBox(height: 22),
+
+          // ── Change Password ───────────────────────────────────
+          _sectionHeader(
+            'Change Password',
+            Icons.lock_outline_rounded,
+            _G.accentEmerald,
           ),
+          _passwordSection(),
+
+          const SizedBox(height: 24),
         ],
       ),
     );
   }
+}
 
-  Widget _section(String title) => Row(
-    children: [
-      Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      const SizedBox(width: 12),
-      Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.2))),
-    ],
-  );
+// ── Step Chip ─────────────────────────────────────────────────────────────────
 
-  Widget _field({
-    required String label,
-    required TextEditingController ctrl,
-    bool readOnly = false,
-  }) => TextField(
-    controller: ctrl,
-    readOnly: readOnly,
-    style: TextStyle(
-      color: readOnly ? Colors.white54 : Colors.white,
-      fontSize: 14,
-    ),
-    decoration: AppTheme.inputDecoration(label),
-  );
+class _StepChip extends StatelessWidget {
+  final int number;
+  final String label;
+  final bool isActive;
+  final bool isDone;
 
-  Widget _pwField({
-    required String label,
-    required TextEditingController ctrl,
-    required bool show,
-    required VoidCallback toggle,
-  }) => TextField(
-    controller: ctrl,
-    obscureText: !show,
-    style: const TextStyle(color: Colors.white, fontSize: 14),
-    decoration: AppTheme.inputDecoration(
-      label,
-      icon: Icons.lock_outline,
-      suffixIcon: IconButton(
-        icon: Icon(
-          show ? Icons.visibility : Icons.visibility_off,
-          color: Colors.white54,
-          size: 18,
-        ),
-        onPressed: toggle,
-      ),
-    ),
-  );
+  const _StepChip({
+    required this.number,
+    required this.label,
+    required this.isActive,
+    required this.isDone,
+  });
 
-  Widget _banner(String msg, bool isError) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    decoration: BoxDecoration(
-      color: (isError ? Colors.red : Colors.green).withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(
-        color: (isError ? Colors.red : Colors.green).withValues(alpha: 0.35),
-      ),
-    ),
-    child: Row(
+  @override
+  Widget build(BuildContext context) {
+    Color dotBg, dotFg, labelColor;
+    if (isDone) {
+      dotBg = _G.accentEmerald;
+      dotFg = Colors.white;
+      labelColor = _G.accentEmerald;
+    } else if (isActive) {
+      dotBg = _G.activeBtn;
+      dotFg = _G.activeBtnText;
+      labelColor = _G.activeBtn;
+    } else {
+      dotBg = Colors.transparent;
+      dotFg = _G.textMuted;
+      labelColor = _G.textMuted;
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          isError ? Icons.error_outline : Icons.check_circle_outline,
-          color: isError ? Colors.redAccent : Colors.greenAccent,
-          size: 15,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            msg,
-            style: TextStyle(
-              color: isError ? Colors.redAccent : Colors.greenAccent,
-              fontSize: 12,
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: dotBg,
+            border: Border.all(
+              color: isDone
+                  ? _G.accentEmerald
+                  : isActive
+                  ? _G.activeBtn
+                  : Colors.white.withValues(alpha: 0.20),
+              width: 1.8,
             ),
+          ),
+          child: Center(
+            child: isDone
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 12)
+                : Text(
+                    '$number',
+                    style: TextStyle(
+                      color: dotFg,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            color: labelColor,
+            fontSize: 11,
+            fontWeight: isActive || isDone ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
       ],
-    ),
-  );
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2806,15 +3961,16 @@ class _FeedbackContent extends StatelessWidget {
         const Text(
           'Order Reviews',
           style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+            color: _G.textPrimary,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
           ),
         ),
         const SizedBox(height: 4),
         const Text(
           'Rate your completed orders',
-          style: TextStyle(color: Colors.white54, fontSize: 13),
+          style: TextStyle(color: _G.textMuted, fontSize: 13),
         ),
         const SizedBox(height: 16),
         Expanded(
@@ -2828,29 +3984,39 @@ class _FeedbackContent extends StatelessWidget {
               if (snap.connectionState == ConnectionState.waiting &&
                   !snap.hasData) {
                 return const Center(
-                  child: CircularProgressIndicator(color: Colors.white38),
+                  child: CircularProgressIndicator(
+                    color: _G.activeBtn,
+                    strokeWidth: 2,
+                  ),
                 );
               }
               final docs = snap.data?.docs ?? [];
               if (docs.isEmpty) {
-                return const Center(
+                return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.rate_review_outlined,
-                        size: 48,
-                        color: Colors.white24,
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.06),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.rate_review_outlined,
+                          size: 36,
+                          color: _G.textMuted,
+                        ),
                       ),
-                      SizedBox(height: 12),
-                      Text(
+                      const SizedBox(height: 12),
+                      const Text(
                         'No completed orders yet',
-                        style: TextStyle(color: Colors.white38, fontSize: 13),
+                        style: TextStyle(color: _G.textMuted, fontSize: 13),
                       ),
-                      SizedBox(height: 4),
-                      Text(
+                      const SizedBox(height: 4),
+                      const Text(
                         'Reviews will appear here once your orders are completed',
-                        style: TextStyle(color: Colors.white24, fontSize: 11),
+                        style: TextStyle(color: _G.textMuted, fontSize: 11),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -2902,16 +4068,23 @@ class _ReviewOrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: AppTheme.glassCard(opacity: 0.12, radius: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: _G.glassCard(radius: 14),
       child: Row(
         children: [
-          const Icon(
-            Icons.receipt_long_outlined,
-            color: Colors.white54,
-            size: 20,
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.receipt_long_outlined,
+              color: _G.textSecondary,
+              size: 18,
+            ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2919,23 +4092,23 @@ class _ReviewOrderCard extends StatelessWidget {
                 Text(
                   orderId,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
+                    color: _G.textPrimary,
+                    fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
                 ),
                 if (productName.isNotEmpty)
                   Text(
                     productName,
-                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    style: const TextStyle(color: _G.textMuted, fontSize: 11),
                   ),
                 if (totalPrice != null)
                   Text(
                     '₱$totalPrice',
                     style: const TextStyle(
-                      color: AppTheme.gold,
+                      color: _G.accentAmber,
                       fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
               ],
@@ -2944,24 +4117,20 @@ class _ReviewOrderCard extends StatelessWidget {
           const SizedBox(width: 8),
           if (hasReview)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: _G.pill(tint: _G.accentEmerald),
               child: const Text(
                 'Reviewed ✓',
                 style: TextStyle(
-                  color: Colors.greenAccent,
+                  color: _G.accentEmerald,
                   fontSize: 11,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             )
           else
-            ElevatedButton(
-              onPressed: () => showDialog(
+            GestureDetector(
+              onTap: () => showDialog(
                 context: context,
                 builder: (_) => _ReviewDialog(
                   orderId: orderId,
@@ -2970,25 +4139,31 @@ class _ReviewOrderCard extends StatelessWidget {
                   fullName: fullName,
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.gold,
-                foregroundColor: Colors.black,
-                elevation: 0,
+              child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 6,
                 ),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
+                decoration: BoxDecoration(
+                  color: _G.activeBtn,
+                  borderRadius: BorderRadius.circular(99),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _G.activeBtn.withValues(alpha: 0.30),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                textStyle: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+                child: const Text(
+                  'Leave Review',
+                  style: TextStyle(
+                    color: _G.activeBtnText,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-              child: const Text('Leave Review'),
             ),
         ],
       ),
@@ -3030,14 +4205,13 @@ class _ReviewDialogState extends State<_ReviewDialog> {
     setState(() => _submitting = true);
     final db = FirebaseFirestore.instance;
 
-    // Fetch the customer_id from the User document
     final userDoc = await db.collection('User').doc(widget.uid).get();
     final customerId = userDoc.data()?['customer_id']?.toString() ?? '';
 
     await db.collection('OrderReviews').add({
       'order_id': widget.orderId,
       'customer_uid': widget.uid,
-      'customer_id': customerId, // ← add this
+      'customer_id': customerId,
       'customer_name': widget.fullName,
       'product_name': widget.productName,
       'rating': _rating,
@@ -3054,116 +4228,168 @@ class _ReviewDialogState extends State<_ReviewDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: const Color(0xFF1a1a2e),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Leave a Review',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+      backgroundColor: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: const Color.fromARGB(
+                255,
+                12,
+                9,
+                31,
+              ).withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 1.0,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              widget.orderId,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-            if (widget.productName.isNotEmpty)
-              Text(
-                widget.productName,
-                style: const TextStyle(color: AppTheme.gold, fontSize: 12),
-              ),
-            const SizedBox(height: 16),
-            const Text(
-              'Rating',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: List.generate(5, (i) {
-                final star = i + 1;
-                return GestureDetector(
-                  onTap: () => setState(() => _rating = star),
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Icon(
-                      star <= _rating
-                          ? Icons.star_rounded
-                          : Icons.star_outline_rounded,
-                      color: star <= _rating ? AppTheme.gold : Colors.white30,
-                      size: 36,
-                    ),
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Your Review',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _msgCtrl,
-              maxLines: 3,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: AppTheme.inputDecoration(
-                'How was your experience with this order?',
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(color: Colors.white54),
+                const Text(
+                  'Leave a Review',
+                  style: TextStyle(
+                    color: _G.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.orderId,
+                  style: const TextStyle(color: _G.textMuted, fontSize: 12),
+                ),
+                if (widget.productName.isNotEmpty)
+                  Text(
+                    widget.productName,
+                    style: const TextStyle(color: _G.accentAmber, fontSize: 12),
+                  ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Rating',
+                  style: TextStyle(
+                    color: _G.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: List.generate(5, (i) {
+                    final star = i + 1;
+                    return GestureDetector(
+                      onTap: () => setState(() => _rating = star),
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Icon(
+                          star <= _rating
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
+                          color: star <= _rating
+                              ? _G.accentAmber
+                              : Colors.white.withValues(alpha: 0.20),
+                          size: 36,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Your Review',
+                  style: TextStyle(
+                    color: _G.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: _G.glassCard(radius: 10),
+                  child: TextField(
+                    controller: _msgCtrl,
+                    maxLines: 3,
+                    style: const TextStyle(color: _G.textPrimary, fontSize: 13),
+                    decoration: const InputDecoration(
+                      hintText: 'How was your experience with this order?',
+                      hintStyle: TextStyle(color: _G.textMuted, fontSize: 13),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.all(12),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _submitting ? null : _submit,
-                    style: AppTheme.primaryButton(),
-                    child: _submitting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.black,
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(99),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              width: 0.9,
                             ),
-                          )
-                        : const Text(
-                            'Submit',
-                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
-                  ),
+                          child: const Center(
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: _G.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: _submitting ? null : _submit,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          decoration: BoxDecoration(
+                            color: _submitting
+                                ? Colors.white.withValues(alpha: 0.05)
+                                : _G.activeBtn,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Center(
+                            child: _submitting
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: _G.activeBtnText,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Submit',
+                                    style: TextStyle(
+                                      color: _G.activeBtnText,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
