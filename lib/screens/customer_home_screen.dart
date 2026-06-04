@@ -537,12 +537,14 @@ class _FeaturedCardState extends State<_FeaturedCard> {
           transform: Matrix4.translationValues(0, _hovered ? -5 : 0, 0),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            color: const Color(0xFF2A2245),
+            color: _hovered
+                ? Colors.white.withValues(alpha: 0.20)
+                : Colors.white.withValues(alpha: 0.12),
             border: Border.all(
               color: _hovered
                   ? AppTheme.gold.withValues(alpha: 0.75)
-                  : Colors.white.withValues(alpha: 0.14),
-              width: _hovered ? 1.5 : 1,
+                  : Colors.white.withValues(alpha: 0.30),
+              width: _hovered ? 1.5 : 1.2,
             ),
             boxShadow: _hovered
                 ? [
@@ -552,14 +554,14 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                       offset: const Offset(0, 8),
                     ),
                     BoxShadow(
-                      color: const Color(0xFF6C3FD4).withValues(alpha: 0.15),
-                      blurRadius: 30,
+                      color: Colors.black.withValues(alpha: 0.20),
+                      blurRadius: 16,
                       offset: const Offset(0, 4),
                     ),
                   ]
                 : [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.35),
+                      color: Colors.black.withValues(alpha: 0.22),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -594,7 +596,7 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                           end: Alignment.bottomCenter,
                           colors: [
                             Colors.transparent,
-                            const Color(0xFF2A2245).withValues(alpha: 0.95),
+                            Colors.black.withValues(alpha: 0.55),
                           ],
                         ),
                       ),
@@ -928,31 +930,32 @@ class _ServiceCardState extends State<_ServiceCard> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           color: _hovered
-              ? Color.lerp(
-                  s.bgColor,
-                  s.accentColor.withValues(alpha: 0.3),
-                  0.18,
-                )
-              : s.bgColor,
+              ? Colors.white.withValues(alpha: 0.20)
+              : Colors.white.withValues(alpha: 0.12),
           border: Border.all(
             color: _hovered
-                ? s.iconColor.withValues(alpha: 0.65)
-                : s.accentColor.withValues(alpha: 0.45),
-            width: _hovered ? 1.5 : 1,
+                ? s.iconColor.withValues(alpha: 0.75)
+                : s.accentColor.withValues(alpha: 0.55),
+            width: _hovered ? 1.5 : 1.2,
           ),
           boxShadow: _hovered
               ? [
                   BoxShadow(
-                    color: s.accentColor.withValues(alpha: 0.45),
+                    color: s.accentColor.withValues(alpha: 0.35),
                     blurRadius: 20,
                     offset: const Offset(0, 6),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.18),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
                   ),
                 ]
               : [
                   BoxShadow(
-                    color: s.accentColor.withValues(alpha: 0.10),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    color: Colors.black.withValues(alpha: 0.20),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                   ),
                 ],
         ),

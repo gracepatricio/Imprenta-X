@@ -2087,18 +2087,14 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
     '5×10 ft': (5.0, 10.0),
   };
   static const _materialMap = {
-    'Large Format Printing': ['Standard Tarp', 'Premium Tarp', 'Mesh Tarp'],
-    'Sticker Printing': ['Glossy Vinyl', 'Matte Vinyl', 'Clear Vinyl'],
-    'Photo Printing': ['Glossy', 'Matte', 'Satin'],
-    'Menu Board': ['Standard', 'Premium Backlit'],
-    'Invitations': ['Matte', 'Glossy', 'Kraft Paper'],
-    'Calling Cards': ['Matte', 'Glossy', 'UV Coated'],
+    'Large Format & Signage': ['Standard Tarp', 'Premium Tarp', 'Mesh Tarp', 'Standard', 'Premium Backlit'],
+    'Stickers & Labels': ['Glossy Vinyl', 'Matte Vinyl', 'Clear Vinyl'],
+    'Photo & Card Prints': ['Glossy', 'Matte', 'Satin', 'Kraft Paper', 'UV Coated'],
   };
   static const _categories = [
-    'Large Format Printing',
-    'Menu Boards',
-    'Stationery & Cards',
-    'Sticker Printing',
+    'Large Format & Signage',
+    'Stickers & Labels',
+    'Photo & Card Prints',
   ];
 
   @override

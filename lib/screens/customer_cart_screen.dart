@@ -1045,109 +1045,133 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
 
             return Column(
               children: [
-                // ── Header ─────────────────────────────────────────────────
-                Padding(
-                  padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 12),
-                  child: Row(
-                    children: [
-                      // Gold accent bar + title (mirrors _SectionHeader)
-                      Container(
-                        width: 4,
-                        height: 22,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              AppTheme.gold,
-                              AppTheme.gold.withValues(alpha: 0.5),
-                            ],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                          ),
-                          borderRadius: BorderRadius.circular(2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.gold.withValues(alpha: 0.45),
-                              blurRadius: 8,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'My Cart',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.gold.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: AppTheme.gold.withValues(alpha: 0.45),
-                          ),
-                        ),
-                        child: Text(
-                          '${items.length} item${items.length != 1 ? 's' : ''}',
-                          style: const TextStyle(
-                            color: AppTheme.gold,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      // Select-all checkbox
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Checkbox(
-                            value:
-                                _selected.length == items.length &&
-                                items.isNotEmpty,
-                            tristate:
-                                _selected.isNotEmpty &&
-                                _selected.length < items.length,
-                            onChanged: (v) => setState(() {
-                              if (v == true) {
-                                _selectAll();
-                              } else {
-                                _selected.clear();
-                              }
-                            }),
-                            activeColor: AppTheme.gold,
-                            checkColor: Colors.black,
-                            side: const BorderSide(color: Colors.white38),
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          Text(
-                            'All',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.5),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // ── Items list ─────────────────────────────────────────────
+                // ── My Cart frosted glass enclosure ────────────────────────
                 Expanded(
-                  child: ListView.separated(
-                    padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 8),
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (_, i) => _CartItemTile(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.30),
+                              width: 1.2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.18),
+                                blurRadius: 32,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              // ── Header ────────────────────────────────────
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 4,
+                                      height: 22,
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            AppTheme.gold,
+                                            AppTheme.gold.withValues(alpha: 0.5),
+                                          ],
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                        ),
+                                        borderRadius: BorderRadius.circular(2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppTheme.gold.withValues(alpha: 0.45),
+                                            blurRadius: 8,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    const Text(
+                                      'My Cart',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 9,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.gold.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: AppTheme.gold.withValues(alpha: 0.45),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${items.length} item${items.length != 1 ? 's' : ''}',
+                                        style: const TextStyle(
+                                          color: AppTheme.gold,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Checkbox(
+                                          value:
+                                              _selected.length == items.length &&
+                                              items.isNotEmpty,
+                                          tristate:
+                                              _selected.isNotEmpty &&
+                                              _selected.length < items.length,
+                                          onChanged: (v) => setState(() {
+                                            if (v == true) {
+                                              _selectAll();
+                                            } else {
+                                              _selected.clear();
+                                            }
+                                          }),
+                                          activeColor: AppTheme.gold,
+                                          checkColor: Colors.black,
+                                          side: const BorderSide(color: Colors.white38),
+                                          materialTapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        Text(
+                                          'All',
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.5),
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // ── Items list ─────────────────────────────────
+                              Expanded(
+                                child: ListView.separated(
+                                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                                  itemCount: items.length,
+                                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                                  itemBuilder: (_, i) => _CartItemTile(
                       item: items[i],
                       index: i,
                       isSelected: _selected.contains(i),
@@ -1185,6 +1209,13 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                             },
                             initialItem: items[i],
                             editIndex: i,
+                          ),
+                        ),
+                      ),
+                    ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -1509,29 +1540,29 @@ class _CartItemTileState extends State<_CartItemTile> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           color: widget.isSelected
-              ? const Color(0xFF2A2245)
-              : const Color(0xFF161228),
+              ? Colors.white.withValues(alpha: 0.20)
+              : Colors.white.withValues(alpha: 0.10),
           border: Border.all(
             color: widget.isSelected
                 ? (_hovered
                       ? AppTheme.gold.withValues(alpha: 0.75)
-                      : AppTheme.gold.withValues(alpha: 0.35))
-                : Colors.white.withValues(alpha: _hovered ? 0.18 : 0.09),
-            width: widget.isSelected ? 1.2 : 1,
+                      : AppTheme.gold.withValues(alpha: 0.45))
+                : Colors.white.withValues(alpha: _hovered ? 0.35 : 0.22),
+            width: widget.isSelected ? 1.3 : 1.1,
           ),
           boxShadow: _hovered
               ? [
                   BoxShadow(
                     color: widget.isSelected
-                        ? AppTheme.gold.withValues(alpha: 0.15)
-                        : Colors.black.withValues(alpha: 0.25),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
+                        ? AppTheme.gold.withValues(alpha: 0.18)
+                        : Colors.black.withValues(alpha: 0.20),
+                    blurRadius: 16,
+                    offset: const Offset(0, 5),
                   ),
                 ]
               : [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
+                    color: Colors.black.withValues(alpha: 0.14),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),

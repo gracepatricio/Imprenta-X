@@ -145,12 +145,9 @@ class AdminProductManagementScreen extends StatefulWidget {
 class _AdminProductManagementScreenState
     extends State<AdminProductManagementScreen> {
   static const _categories = [
-    'Large Format Printing',
-    'Sticker Printing',
-    'Photo Printing',
-    'Menu Board',
-    'Invitations',
-    'Calling Cards',
+    'Large Format & Signage',
+    'Stickers & Labels',
+    'Photo & Card Prints',
   ];
 
   String? _categoryFilter;

@@ -67,6 +67,18 @@ class _G {
     boxShadow: [elevated ? elevatedShadow : rowShadow],
   );
 
+  // Light frosted glass card — off-white, contrasts against dark containers
+  static BoxDecoration lightCard({double radius = 14, Color? tintBorder}) =>
+      BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: tintBorder ?? Colors.white.withValues(alpha: 0.30),
+          width: 1.1,
+        ),
+        boxShadow: const [rowShadow],
+      );
+
   // Pill decoration for inactive chips
   static BoxDecoration pill({Color? tint}) => BoxDecoration(
     color: tint != null ? tint.withValues(alpha: 0.18) : glassThin,
@@ -884,10 +896,17 @@ class _StatCard extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.all(compact ? 12 : 16),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.10),
+          color: color.withValues(alpha: 0.22),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.30), width: 1.0),
-          boxShadow: const [_G.rowShadow],
+          border: Border.all(color: color.withValues(alpha: 0.55), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.15),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+            _G.rowShadow,
+          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -896,8 +915,9 @@ class _StatCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.18),
+                color: color.withValues(alpha: 0.30),
                 borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: color.withValues(alpha: 0.40)),
               ),
               child: Icon(icon, color: color, size: compact ? 18 : 22),
             ),
@@ -1006,7 +1026,7 @@ class _UnreadMessagesPreview extends StatelessWidget {
             if (docs.isEmpty)
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: _G.glassCard(radius: 14),
+                decoration: _G.lightCard(radius: 14),
                 child: const Center(
                   child: Text(
                     'No unread messages',
@@ -1062,23 +1082,34 @@ class _UnreadMessageCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
-      decoration: _G.glassCard(radius: 14),
+      decoration: _G.lightCard(radius: 14),
       child: Row(
         children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _G.accentViolet.withValues(alpha: 0.18),
+              border: Border.all(color: _G.accentViolet.withValues(alpha: 0.40), width: 0.9),
+            ),
+            child: const Icon(Icons.local_print_shop_rounded, color: _G.accentViolet, size: 18),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  orderDisplay,
-                  style: const TextStyle(
+                const Text(
+                  'Imprenta Inc.',
+                  style: TextStyle(
                     color: _G.textPrimary,
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
                 ),
                 if (lastMsg.isNotEmpty) ...[
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
                     lastMsg,
                     style: const TextStyle(color: _G.textMuted, fontSize: 12),
@@ -1336,7 +1367,7 @@ class _OrderCard extends StatelessWidget {
       onTap: () => _showDetail(context),
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: _G.glassCard(radius: 14),
+        decoration: _G.lightCard(radius: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1949,7 +1980,7 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(12),
-                    decoration: _G.glassCard(radius: 10),
+                    decoration: _G.lightCard(radius: 10),
                     child: Row(
                       children: [
                         Expanded(
@@ -2699,7 +2730,7 @@ class _MessagesContentState extends State<_MessagesContent> {
                     ),
                     child: Container(
                       padding: const EdgeInsets.all(14),
-                      decoration: _G.glassCard(radius: 14),
+                      decoration: _G.lightCard(radius: 14),
                       child: Row(
                         children: [
                           Container(
@@ -3229,7 +3260,11 @@ class _ManageAccountContentState extends State<_ManageAccountContent>
     bool readOnly = false,
     IconData? icon,
   }) => Container(
-    decoration: _G.glassCard(radius: 10),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.28), width: 1.0),
+    ),
     child: TextField(
       controller: ctrl,
       readOnly: readOnly,
@@ -3259,7 +3294,11 @@ class _ManageAccountContentState extends State<_ManageAccountContent>
     required VoidCallback toggle,
     Color? accentColor,
   }) => Container(
-    decoration: _G.glassCard(radius: 10),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.28), width: 1.0),
+    ),
     child: TextField(
       controller: ctrl,
       obscureText: !show,
@@ -4069,7 +4108,7 @@ class _ReviewOrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: _G.glassCard(radius: 14),
+      decoration: _G.lightCard(radius: 14),
       child: Row(
         children: [
           Container(
@@ -4311,7 +4350,7 @@ class _ReviewDialogState extends State<_ReviewDialog> {
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  decoration: _G.glassCard(radius: 10),
+                  decoration: _G.lightCard(radius: 10),
                   child: TextField(
                     controller: _msgCtrl,
                     maxLines: 3,

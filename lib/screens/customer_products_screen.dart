@@ -18,12 +18,9 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
   String? _selectedCategory;
 
   static const _categories = [
-    'Large Format Printing',
-    'Sticker Printing',
-    'Photo Printing',
-    'Menu Board',
-    'Invitations',
-    'Calling Cards',
+    'Large Format & Signage',
+    'Stickers & Labels',
+    'Photo & Card Prints',
   ];
 
   @override
@@ -779,13 +776,15 @@ class _ProductCardState extends State<_ProductCard> {
           duration: const Duration(milliseconds: 200),
           transform: Matrix4.translationValues(0, _hovered ? -4 : 0, 0),
           decoration: BoxDecoration(
-            color: const Color(0xFF252136),
+            color: _hovered
+                ? Colors.white.withValues(alpha: 0.20)
+                : Colors.white.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: _hovered
                   ? AppTheme.gold.withValues(alpha: 0.70)
-                  : Colors.white.withValues(alpha: 0.10),
-              width: _hovered ? 1.5 : 1,
+                  : Colors.white.withValues(alpha: 0.30),
+              width: _hovered ? 1.5 : 1.2,
             ),
             boxShadow: _hovered
                 ? [
@@ -795,15 +794,15 @@ class _ProductCardState extends State<_ProductCard> {
                       offset: const Offset(0, 8),
                     ),
                     BoxShadow(
-                      color: const Color(0xFF6C3FD4).withValues(alpha: 0.14),
-                      blurRadius: 32,
+                      color: Colors.black.withValues(alpha: 0.20),
+                      blurRadius: 16,
                       offset: const Offset(0, 4),
                     ),
                   ]
                 : [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      blurRadius: 12,
+                      color: Colors.black.withValues(alpha: 0.22),
+                      blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
                   ],
@@ -837,7 +836,7 @@ class _ProductCardState extends State<_ProductCard> {
                             end: Alignment.bottomCenter,
                             colors: [
                               Colors.transparent,
-                              const Color(0xFF252136).withValues(alpha: 0.95),
+                              Colors.black.withValues(alpha: 0.55),
                             ],
                           ),
                         ),

@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -360,19 +361,40 @@ decoration: AppTheme.backgroundDecoration(context),
       children: [
         Expanded(
           flex: 2,
-          child: Container(
-            decoration: AppTheme.glassCard(opacity: 0.15),
-            clipBehavior: Clip.antiAlias,
-            child: _productImage(),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: _productImage(),
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 20),
         Expanded(
           flex: 3,
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: AppTheme.glassCard(opacity: 0.15),
-            child: SingleChildScrollView(child: _orderForm()),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 32, offset: const Offset(0, 6))],
+                ),
+                child: SingleChildScrollView(child: _orderForm()),
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 20),
@@ -381,10 +403,21 @@ decoration: AppTheme.backgroundDecoration(context),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: AppTheme.glassCard(opacity: 0.18),
-                child: _summary(),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 32, offset: const Offset(0, 6))],
+                    ),
+                    child: _summary(),
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               _addToCartBtn(),
@@ -401,23 +434,55 @@ decoration: AppTheme.backgroundDecoration(context),
       children: [
         AspectRatio(
           aspectRatio: 16 / 9,
-          child: Container(
-            decoration: AppTheme.glassCard(opacity: 0.15),
-            clipBehavior: Clip.antiAlias,
-            child: _productImage(),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: _productImage(),
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: AppTheme.glassCard(opacity: 0.15),
-          child: _orderForm(),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 32, offset: const Offset(0, 6))],
+              ),
+              child: _orderForm(),
+            ),
+          ),
         ),
         const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: AppTheme.glassCard(opacity: 0.18),
-          child: _summary(),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 32, offset: const Offset(0, 6))],
+              ),
+              child: _summary(),
+            ),
+          ),
         ),
         const SizedBox(height: 12),
         _addToCartBtn(),

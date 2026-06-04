@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
 
@@ -14,6 +15,8 @@ class _CustomerAboutScreenState extends State<CustomerAboutScreen> {
   final _scrollCtrl = ScrollController();
   int _currentPage = 0;
 
+  // Set imagePath to 'assets/images/about_<name>.jpg' once you add the photo
+  // files to assets/images/ and uncomment them in pubspec.yaml.
   static const _slides = [
     _Slide(
       title: 'Print Floor',
@@ -21,14 +24,14 @@ class _CustomerAboutScreenState extends State<CustomerAboutScreen> {
           'State-of-the-art large-format printers ready for your projects.',
       accentColor: Color(0xFF1E6AE8),
       icon: Icons.print_outlined,
-      imagePath: null,
+      imagePath: null, // replace with 'assets/images/about_print_floor.jpg'
     ),
     _Slide(
       title: 'Design Studio',
       caption: 'Our in-house design team helps bring your concepts to life.',
       accentColor: Color(0xFF7C3AED),
       icon: Icons.draw_outlined,
-      imagePath: null,
+      imagePath: null, // replace with 'assets/images/about_design_studio.jpg'
     ),
     _Slide(
       title: 'Finishing Area',
@@ -36,7 +39,7 @@ class _CustomerAboutScreenState extends State<CustomerAboutScreen> {
           'Precision cutting, laminating, and mounting for a polished result.',
       accentColor: Color(0xFF059669),
       icon: Icons.content_cut_outlined,
-      imagePath: null,
+      imagePath: null, // replace with 'assets/images/about_finishing_area.jpg'
     ),
   ];
 
@@ -103,12 +106,20 @@ class _CustomerAboutScreenState extends State<CustomerAboutScreen> {
                   ],
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: PageView.builder(
-                  controller: _pageCtrl,
-                  itemCount: _slides.length,
-                  onPageChanged: (i) => setState(() => _currentPage = i),
-                  itemBuilder: (_, i) =>
-                      _SlideWidget(slide: _slides[i], showBadge: false),
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(
+                    dragDevices: {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.mouse,
+                    },
+                  ),
+                  child: PageView.builder(
+                    controller: _pageCtrl,
+                    itemCount: _slides.length,
+                    onPageChanged: (i) => setState(() => _currentPage = i),
+                    itemBuilder: (_, i) =>
+                        _SlideWidget(slide: _slides[i], showBadge: false),
+                  ),
                 ),
               ),
               Positioned(
@@ -252,8 +263,8 @@ class _CustomerAboutScreenState extends State<CustomerAboutScreen> {
         label: 'Founded',
         accentColor: const Color(0xFF4C6EF5),
         text:
-            'Imprenta Inc. was established with a single mission: to deliver high-quality '
-            'printing services to local businesses and individuals who value precision and creativity.',
+            'Established in 2018, Imprenta Inc. was founded with a single mission: to deliver '
+            'high-quality printing services to local businesses and individuals who value precision and creativity.',
       ),
       _TimelineEntry(
         label: 'Growth',
