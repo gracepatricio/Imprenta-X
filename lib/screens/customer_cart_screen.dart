@@ -959,6 +959,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       'order_id': orderId,
       'customer_name': customerName,
       'customer_email': customerEmail,
+      'customer_id': customerId,
       'issued_date': now,
       'items': products,
       'total_amount': total,
@@ -973,6 +974,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       'order_id': orderId,
       'customer_uid': uid,
       'customer_name': customerName,
+      'customer_id': customerId,
       'job_status': 'pending',
       'turnaround_days': turnaroundDays,
       'estimated_completion': Timestamp.fromDate(estimatedCompletion),
@@ -1165,54 +1167,54 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                 ),
                               ),
 
-                              // ── Items list ─────────────────────────────────
+                              // ── Items list (newest first) ───────────────────
                               Expanded(
                                 child: ListView.separated(
                                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                                   itemCount: items.length,
                                   separatorBuilder: (_, __) => const SizedBox(height: 10),
-                                  itemBuilder: (_, i) => _CartItemTile(
-                      item: items[i],
-                      index: i,
-                      isSelected: _selected.contains(i),
-                      onToggle: (val) => setState(() {
-                        if (val)
-                          _selected.add(i);
-                        else
-                          _selected.remove(i);
-                      }),
-                      onDelete: () => setState(() {
-                        final newSelected = <int>{};
-                        for (final s in _selected) {
-                          if (s < i)
-                            newSelected.add(s);
-                          else if (s > i)
-                            newSelected.add(s - 1);
-                        }
-                        _selected
-                          ..clear()
-                          ..addAll(newSelected);
-                        CartManager.removeAt(i);
-                      }),
-                      onEdit: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => CustomerOrderScreen(
-                            product: {
-                              'product_id': items[i].productId,
-                              'product_name': items[i].productName,
-                              'category': items[i].category,
-                              'image_url': items[i].imageUrl,
-                              'price': items[i].unitPrice,
-                              'pricing_unit': items[i].pricingUnit,
-                              'min_quantity': 1,
-                              'description': '',
-                            },
-                            initialItem: items[i],
-                            editIndex: i,
-                          ),
-                        ),
-                      ),
-                    ),
+                                  itemBuilder: (_, d) {
+                                    // Reverse display: newest item shown at top
+                                    final i = items.length - 1 - d;
+                                    return _CartItemTile(
+                                      item: items[i],
+                                      index: i,
+                                      isSelected: _selected.contains(i),
+                                      onToggle: (val) => setState(() {
+                                        if (val) _selected.add(i);
+                                        else _selected.remove(i);
+                                      }),
+                                      onDelete: () => setState(() {
+                                        final newSelected = <int>{};
+                                        for (final s in _selected) {
+                                          if (s < i) newSelected.add(s);
+                                          else if (s > i) newSelected.add(s - 1);
+                                        }
+                                        _selected
+                                          ..clear()
+                                          ..addAll(newSelected);
+                                        CartManager.removeAt(i);
+                                      }),
+                                      onEdit: () => Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => CustomerOrderScreen(
+                                            product: {
+                                              'product_id': items[i].productId,
+                                              'product_name': items[i].productName,
+                                              'category': items[i].category,
+                                              'image_url': items[i].imageUrl,
+                                              'price': items[i].unitPrice,
+                                              'pricing_unit': items[i].pricingUnit,
+                                              'min_quantity': 1,
+                                              'description': '',
+                                            },
+                                            initialItem: items[i],
+                                            editIndex: i,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             ],

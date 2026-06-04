@@ -20,6 +20,7 @@ class CustomerHomepage extends StatefulWidget {
 
 class _CustomerHomepageState extends State<CustomerHomepage> {
   String _active = 'Home';
+  String? _pendingProductCategory;
 
   StreamSubscription<DocumentSnapshot>? _deletionSub;
 
@@ -67,7 +68,10 @@ class _CustomerHomepageState extends State<CustomerHomepage> {
   Widget _screen(int cartCount) {
     switch (_active) {
       case 'About':    return const CustomerAboutScreen();
-      case 'Products': return const CustomerProductsScreen();
+      case 'Products':
+        final cat = _pendingProductCategory;
+        _pendingProductCategory = null; // consume once
+        return CustomerProductsScreen(initialCategory: cat);
       case 'Cart':
         return CustomerCartScreen(
           onOrderPlaced: () => setState(() => _active = 'Account'),
@@ -75,7 +79,10 @@ class _CustomerHomepageState extends State<CustomerHomepage> {
       case 'Account':  return const CustomerAccountScreen();
       default:
         return CustomerHomeScreen(
-          onViewProducts: () => setState(() => _active = 'Products'),
+          onViewProducts: ([String? category]) {
+            _pendingProductCategory = category;
+            setState(() => _active = 'Products');
+          },
         );
     }
   }

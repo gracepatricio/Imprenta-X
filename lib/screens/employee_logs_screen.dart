@@ -396,6 +396,101 @@ class _SalesPillTab extends StatelessWidget {
 }
 
 // =============================================================================
+// _PillSegmentItem / _PillSegmentControl — mirrors admin design
+// =============================================================================
+class _PillSegmentItem<T> {
+  final T value;
+  final String label;
+  final IconData icon;
+  final Color accent;
+  const _PillSegmentItem({
+    required this.value,
+    required this.label,
+    required this.icon,
+    required this.accent,
+  });
+}
+
+class _PillSegmentControl<T> extends StatelessWidget {
+  final T selected;
+  final List<_PillSegmentItem<T>> items;
+  final ValueChanged<T> onChanged;
+
+  const _PillSegmentControl({
+    required this.selected,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: _Glass.surfaceThin,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: _Glass.borderMid, width: 0.9),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: items.map((item) {
+            final isActive = selected == item.value;
+            return GestureDetector(
+              onTap: () => onChanged(item.value),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeInOut,
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: isActive
+                    ? BoxDecoration(
+                        color: item.accent,
+                        borderRadius: BorderRadius.circular(99),
+                        boxShadow: [
+                          BoxShadow(
+                            color: item.accent.withValues(alpha: 0.30),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      )
+                    : const BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.all(Radius.circular(99)),
+                      ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      item.icon,
+                      size: 12,
+                      color: isActive ? Colors.white : _Glass.textMuted,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      item.label,
+                      style: TextStyle(
+                        color: isActive ? Colors.white : _Glass.textSecondary,
+                        fontSize: 12,
+                        fontWeight:
+                            isActive ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
 // EmployeeJobQueueScreen — public entry-point (unchanged structure)
 // =============================================================================
 class EmployeeJobQueueScreen extends StatelessWidget {
@@ -476,52 +571,8 @@ class EmployeeJobQueueScreen extends StatelessWidget {
 // =============================================================================
 // _JobQueueSection — 5 sub-tabs (structure unchanged)
 // =============================================================================
-class _UnderlineTabBar extends StatelessWidget {
-  final List<String> tabs;
-  final int active;
-  final ValueChanged<int> onTap;
-
-  const _UnderlineTabBar({
-    required this.tabs,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(tabs.length, (i) {
-          final isActive = i == active;
-          return GestureDetector(
-            onTap: () => onTap(i),
-            child: Container(
-              margin: EdgeInsets.only(right: i < tabs.length - 1 ? 20 : 0),
-              padding: const EdgeInsets.only(bottom: 10),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: isActive ? _navyBlue : Colors.transparent,
-                    width: 2.5,
-                  ),
-                ),
-              ),
-              child: Text(
-                tabs[i],
-                style: TextStyle(
-                  color: isActive ? _Glass.textPrimary : _Glass.textMuted,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
+// _QueueSubTab enum for pill control
+enum _QueueSubTab { pending, active, ready, cancelled, history }
 
 class _JobQueueSection extends StatefulWidget {
   final int initialTab;
@@ -531,54 +582,98 @@ class _JobQueueSection extends StatefulWidget {
   State<_JobQueueSection> createState() => _JobQueueSectionState();
 }
 
-class _JobQueueSectionState extends State<_JobQueueSection>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabs;
+class _JobQueueSectionState extends State<_JobQueueSection> {
+  late _QueueSubTab _sub;
 
-  static const _tabLabels = [
-    'Pending',
-    'Active',
-    'Ready for Pickup',
-    'Cancelled',
-    'Order History',
+  static const _statusTabs = [
+    (
+      _QueueSubTab.pending,
+      'Pending',
+      Icons.hourglass_empty_rounded,
+      Color(0xFFD97706),
+    ),
+    (_QueueSubTab.active, 'Active', Icons.bolt_rounded, Color(0xFF2563EB)),
+    (
+      _QueueSubTab.ready,
+      'Ready',
+      Icons.check_circle_outline,
+      Color(0xFF16A34A),
+    ),
+    (
+      _QueueSubTab.cancelled,
+      'Cancelled',
+      Icons.cancel_outlined,
+      Color(0xFFDC2626),
+    ),
   ];
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(
-      length: 5,
-      vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 4),
-    );
-    _tabs.addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
+    final idx = widget.initialTab.clamp(0, 4);
+    _sub = _QueueSubTab.values[idx];
   }
 
   @override
   Widget build(BuildContext context) {
+    final isHistory = _sub == _QueueSubTab.history;
+
     return _BlurCard(
       radius: 20,
       elevated: true,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _UnderlineTabBar(
-                    tabs: _tabLabels,
-                    active: _tabs.index,
-                    onTap: (i) => _tabs.animateTo(i),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Tab controls row ──────────────────────────────────────────────
+            if (!isHistory)
+              Row(
+                children: [
+                  Expanded(
+                    child: _PillSegmentControl<_QueueSubTab>(
+                      selected: _sub,
+                      items: _statusTabs
+                          .map(
+                            (t) => _PillSegmentItem(
+                              value: t.$1,
+                              label: t.$2,
+                              icon: t.$3,
+                              accent: t.$4,
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _sub = v),
+                    ),
                   ),
-                ),
-                if (_tabs.index != 4)
+                  const SizedBox(width: 8),
+                  // Order History violet button
+                  GestureDetector(
+                    onTap: () => setState(() => _sub = _QueueSubTab.history),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 9),
+                      decoration: _Glass.solidPill(const Color(0xFF8B5CF6)),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.history_rounded,
+                              size: 13, color: Colors.white),
+                          SizedBox(width: 6),
+                          Text(
+                            'History',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Add walk-in button
                   GestureDetector(
                     onTap: () => showDialog(
                       context: context,
@@ -596,43 +691,44 @@ class _JobQueueSectionState extends State<_JobQueueSection>
                       ),
                     ),
                   ),
-              ],
-            ),
-          ),
-          Divider(
-            height: 1,
-            color: _Glass.borderDim,
-            indent: 16,
-            endIndent: 16,
-          ),
-          Expanded(
-            child: NestedScrollView(
-              headerSliverBuilder: (context, innerBoxIsScrolled) => [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: const _DeadlineAlertBanner(),
-                  ),
-                ),
-              ],
-              body: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TabBarView(
-                  controller: _tabs,
-                  children: const [
-                    _QueueList(jobStatus: 'pending'),
-                    _QueueList(jobStatus: 'active'),
-                    _ReadyForPickupList(),
-                    _QueueList(jobStatus: 'cancelled'),
-                    _EmployeeOrderHistory(),
-                  ],
-                ),
+                ],
               ),
+
+            if (!isHistory) const SizedBox(height: 10),
+
+            // ── Deadline banner (collapsed by default) ────────────────────────
+            if (!isHistory) const _DeadlineAlertBanner(),
+            if (!isHistory) const SizedBox(height: 6),
+
+            // ── Content ───────────────────────────────────────────────────────
+            Expanded(
+              child: isHistory
+                  ? _EmployeeOrderHistory(
+                      onBack: () =>
+                          setState(() => _sub = _QueueSubTab.pending),
+                    )
+                  : _buildQueueContent(),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildQueueContent() {
+    switch (_sub) {
+      case _QueueSubTab.pending:
+        return const _QueueList(jobStatus: 'pending');
+      case _QueueSubTab.active:
+        return const _QueueList(jobStatus: 'active');
+      case _QueueSubTab.ready:
+        return const _ReadyForPickupList();
+      case _QueueSubTab.cancelled:
+        return const _QueueList(jobStatus: 'cancelled');
+      case _QueueSubTab.history:
+        return _EmployeeOrderHistory(
+            onBack: () => setState(() => _sub = _QueueSubTab.pending));
+    }
   }
 }
 
@@ -640,7 +736,8 @@ class _JobQueueSectionState extends State<_JobQueueSection>
 // _EmployeeOrderHistory
 // =============================================================================
 class _EmployeeOrderHistory extends StatefulWidget {
-  const _EmployeeOrderHistory();
+  final VoidCallback? onBack;
+  const _EmployeeOrderHistory({this.onBack});
 
   @override
   State<_EmployeeOrderHistory> createState() => _EmployeeOrderHistoryState();
@@ -825,6 +922,38 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Back button (if onBack provided)
+        if (widget.onBack != null) ...[
+          GestureDetector(
+            onTap: widget.onBack,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: _Glass.surfaceThin,
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(color: _Glass.borderMid, width: 0.9),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.arrow_back_ios_new_rounded,
+                      size: 12, color: _Glass.textSecondary),
+                  SizedBox(width: 6),
+                  Text(
+                    'Order History',
+                    style: TextStyle(
+                      color: _Glass.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+
         // Status filter chips
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -1005,6 +1134,7 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                   final data = doc.data() as Map<String, dynamic>;
                   final orderId = data['order_id']?.toString() ?? doc.id;
                   final customer = data['customer_name']?.toString() ?? '—';
+                  final customerId = data['customer_id']?.toString() ?? '';
                   final status = data['status']?.toString() ?? '';
                   final total = (data['total_price'] as num?)?.toDouble() ?? 0;
                   final paid = (data['amount_paid'] as num?)?.toDouble() ?? 0;
@@ -1023,6 +1153,7 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                     doc: doc,
                     orderId: orderId,
                     customer: customer,
+                    customerId: customerId,
                     status: status,
                     statusLabel: _statusLabel(status),
                     statusColor: statusColor,
@@ -1046,7 +1177,7 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
 // ── Order history card ────────────────────────────────────────────────────────
 class _OrderHistoryCard extends StatelessWidget {
   final QueryDocumentSnapshot doc;
-  final String orderId, customer, status, statusLabel, dateStr;
+  final String orderId, customer, customerId, status, statusLabel, dateStr;
   final Color statusColor;
   final double total, paid, remaining;
   final List<Map<String, dynamic>> products;
@@ -1056,6 +1187,7 @@ class _OrderHistoryCard extends StatelessWidget {
     required this.doc,
     required this.orderId,
     required this.customer,
+    required this.customerId,
     required this.status,
     required this.statusLabel,
     required this.statusColor,
@@ -1101,6 +1233,16 @@ class _OrderHistoryCard extends StatelessWidget {
                           fontSize: 12,
                         ),
                       ),
+                      if (customerId.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Customer ID: $customerId',
+                          style: const TextStyle(
+                            color: _Glass.textMuted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1400,6 +1542,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
       batch.set(orderRef, {
         'order_id': orderId,
         'customer_uid': '',
+        'customer_id': '',
         'customer_name': customerName,
         'customer_email': customerEmail,
         'status': 'pending',
@@ -1425,6 +1568,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
       batch.set(queueRef, {
         'order_id':             orderId,
         'customer_uid':         '',
+        'customer_id':          '',
         'customer_name':        customerName,
         'job_status':           'pending',
         'turnaround_days':      turnaroundDays,
@@ -1441,6 +1585,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
         'order_id': orderId,
         'customer_name': customerName,
         'customer_email': customerEmail,
+        'customer_id': '',
         'issued_date': now,
         'items': products,
         'total_amount': total,
@@ -2807,7 +2952,7 @@ class _QueueList extends StatelessWidget {
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
-            return ta.compareTo(tb);
+            return ta.compareTo(tb); // FIFO: oldest first
           });
 
         if (docs.isEmpty) {
@@ -2844,9 +2989,10 @@ class _QueueList extends StatelessWidget {
           );
         }
 
-        return ListView.builder(
+        return ListView.separated(
           padding: const EdgeInsets.only(bottom: 16),
           itemCount: docs.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
           itemBuilder: (_, i) {
             final doc = docs[i];
             final data = doc.data() as Map<String, dynamic>;
@@ -2899,7 +3045,7 @@ class _ReadyForPickupList extends StatelessWidget {
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
-            return ta.compareTo(tb);
+            return ta.compareTo(tb); // FIFO: oldest first
           });
 
         if (docs.isEmpty) {
@@ -2978,6 +3124,84 @@ class _ReadyOrderCard extends StatelessWidget {
   }
 
   Future<void> _markCompleted(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: _Glass.surface,
+        elevation: 24,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: _Glass.borderMid, width: 1),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Mark as Completed?',
+                style: TextStyle(
+                  color: _Glass.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Mark order $orderId as completed (picked up)?',
+                style: const TextStyle(
+                  color: _Glass.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 9),
+                      decoration: _Glass.glass(radius: 99),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: _Glass.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 9),
+                      decoration: _Glass.solidPill(
+                          _Glass.accentEmerald, glow: true),
+                      child: const Text(
+                        'Mark Completed',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+
     final db = FirebaseFirestore.instance;
     await db.collection('Orders').doc(orderId).update({'status': 'completed'});
     if (context.mounted) {
@@ -3075,6 +3299,7 @@ class _ReadyOrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final orderLabel = data['order_id']?.toString() ?? orderId;
     final customer = data['customer_name']?.toString() ?? '—';
+    final customerId = data['customer_id']?.toString() ?? '';
     final total = (data['total_price'] as num?)?.toDouble() ?? 0;
     final paid = (data['amount_paid'] as num?)?.toDouble() ?? 0;
     final remaining =
@@ -3114,6 +3339,16 @@ class _ReadyOrderCard extends StatelessWidget {
                           fontSize: 12,
                         ),
                       ),
+                      if (customerId.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Customer ID: $customerId',
+                          style: const TextStyle(
+                            color: _Glass.textMuted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -3438,6 +3673,17 @@ class _QueueCard extends StatelessWidget {
       'updated_at': FieldValue.serverTimestamp(),
     });
     batch.update(db.collection('Orders').doc(orderId), {'status': 'cancelled'});
+
+    // Also stamp the invoice as cancelled
+    final orderSnap = await db.collection('Orders').doc(orderId).get();
+    final invoiceId = orderSnap.data()?['invoice_id']?.toString();
+    if (invoiceId != null && invoiceId.isNotEmpty) {
+      batch.update(db.collection('Invoices').doc(invoiceId), {
+        'status': 'cancelled',
+        'cancelled_at': FieldValue.serverTimestamp(),
+      });
+    }
+
     await batch.commit();
 
     if (customerUid != null && customerUid.isNotEmpty) {
@@ -3472,6 +3718,84 @@ class _QueueCard extends StatelessWidget {
     final orderId = data['order_id']?.toString();
     final customerUid = data['customer_uid']?.toString();
     if (orderId == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: _Glass.surface,
+        elevation: 24,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: _Glass.borderMid, width: 1),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Start Production?',
+                style: TextStyle(
+                  color: _Glass.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Start production for order $orderId?',
+                style: const TextStyle(
+                  color: _Glass.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 9),
+                      decoration: _Glass.glass(radius: 99),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: _Glass.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 9),
+                      decoration: _Glass.solidPill(
+                          _Glass.accentBlue, glow: true),
+                      child: const Text(
+                        'Start Job',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true) return;
 
     final db = FirebaseFirestore.instance;
     final batch = db.batch();
@@ -3560,6 +3884,84 @@ class _QueueCard extends StatelessWidget {
     final orderId = data['order_id']?.toString();
     final customerUid = data['customer_uid']?.toString();
     if (orderId == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: _Glass.surface,
+        elevation: 24,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: _Glass.borderMid, width: 1),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Mark Ready for Pickup?',
+                style: TextStyle(
+                  color: _Glass.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Mark order $orderId as ready for pickup?',
+                style: const TextStyle(
+                  color: _Glass.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 9),
+                      decoration: _Glass.glass(radius: 99),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: _Glass.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 9),
+                      decoration: _Glass.solidPill(
+                          _Glass.accentEmerald, glow: true),
+                      child: const Text(
+                        'Mark Ready',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true) return;
 
     final db = FirebaseFirestore.instance;
     final batch = db.batch();
@@ -3673,6 +4075,7 @@ class _QueueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final orderId = data['order_id']?.toString() ?? '—';
     final customerName = data['customer_name']?.toString() ?? 'Customer';
+    final customerId = data['customer_id']?.toString() ?? '';
     final turnaround = data['turnaround_days'] as int?;
     final total = (data['total_price'] as num?)?.toDouble() ?? 0;
     final jobStatus = data['job_status']?.toString() ?? 'pending';
@@ -3696,283 +4099,353 @@ class _QueueCard extends StatelessWidget {
         ? _Glass.accentRose
         : _Glass.accentAmber;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: _Glass.glass(radius: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                // Position badge
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: _navyBlue.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: _navyBlue.withValues(alpha: 0.3),
-                      width: 0.9,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '#$position',
-                      style: TextStyle(
-                        color: _navyBlue.withValues(alpha: 0.7),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        orderId,
-                        style: const TextStyle(
-                          color: _Glass.textPrimary,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text(
-                        customerName,
-                        style: const TextStyle(
-                          color: _Glass.textMuted,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+    final statusLabel = jobStatus == 'active'
+        ? 'Active'
+        : jobStatus == 'cancelled'
+        ? 'Cancelled'
+        : 'Pending';
 
-                // Status badge
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(99),
-                    border: Border.all(
-                      color: statusColor.withValues(alpha: 0.35),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Text(
-                    jobStatus == 'active'
-                        ? 'Active'
-                        : jobStatus == 'cancelled'
-                        ? 'Cancelled'
-                        : 'Pending',
-                    style: TextStyle(
-                      color: statusColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
+    final productSummary = products.isEmpty
+        ? null
+        : products
+            .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
+            .join(', ');
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // ── Amber index bubble ────────────────────────────────────────────────
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: _Glass.accentAmber.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: _Glass.accentAmber.withValues(alpha: 0.35),
             ),
-            const SizedBox(height: 10),
-
-            if (products.isNotEmpty) ...[
-              Text(
-                products
-                    .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
-                    .join(', '),
-                style: const TextStyle(
-                  color: _Glass.textSecondary,
-                  fontSize: 14,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+          ),
+          child: Center(
+            child: Text(
+              '$position',
+              style: const TextStyle(
+                color: _Glass.accentAmber,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
               ),
-              DesignFilesSection(products: products),
-              const SizedBox(height: 6),
-            ],
-
-            Row(
-              children: [
-                Icon(Icons.schedule, size: 15, color: _Glass.textMuted),
-                const SizedBox(width: 4),
-                Text(
-                  turnaround != null
-                      ? 'Est. $turnaround day${turnaround == 1 ? '' : 's'}'
-                      : 'Turnaround TBD',
-                  style: const TextStyle(color: _Glass.textMuted, fontSize: 13),
-                ),
-                const SizedBox(width: 12),
-                Icon(Icons.calendar_today, size: 15, color: _Glass.textMuted),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    dateStr,
-                    style: const TextStyle(
-                      color: _Glass.textMuted,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-                Text(
-                  '₱${total.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    color: _Glass.textPrimary,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                  ),
-                ),
-              ],
             ),
-            if (estimatedCompletion != null && jobStatus != 'cancelled') ...[
-              const SizedBox(height: 6),
-              _DueDateRow(dueDate: estimatedCompletion),
-            ],
-            const SizedBox(height: 12),
-
-            if (jobStatus != 'cancelled')
-              Row(
-                children: [
-                  if (jobStatus == 'pending')
+          ),
+        ),
+        const SizedBox(width: 8),
+        // ── Glass card ────────────────────────────────────────────────────────
+        Expanded(
+          child: _BlurCard(
+            radius: 14,
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top row: order ID + customer + status badge
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Expanded(
-                      child: GestureDetector(
-                        onTap: () => _startJob(context),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 9),
-                          decoration: _Glass.solidPill(
-                            _Glass.accentBlue,
-                            glow: true,
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'Start Job',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            orderId,
+                            style: const TextStyle(
+                              color: _Glass.textPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              letterSpacing: -0.2,
                             ),
                           ),
-                        ),
-                      ),
-                    ),
-                  if (jobStatus == 'active')
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => _markReady(context),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 9),
-                          decoration: _Glass.solidPill(
-                            _Glass.accentEmerald,
-                            glow: true,
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'Mark Ready',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
+                          const SizedBox(height: 2),
+                          Text(
+                            customerName,
+                            style: const TextStyle(
+                              color: _Glass.textSecondary,
+                              fontSize: 12,
                             ),
                           ),
-                        ),
+                          if (customerId.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'Customer ID: $customerId',
+                              style: const TextStyle(
+                                color: _Glass.textMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                  const SizedBox(width: 8),
-                  // Cancel button
-                  GestureDetector(
-                    onTap: () => _cancelOrder(context),
-                    child: Container(
+                    Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 9,
-                      ),
+                          horizontal: 11, vertical: 4),
                       decoration: BoxDecoration(
-                        color: _Glass.accentRose.withValues(alpha: 0.08),
+                        color: statusColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(99),
                         border: Border.all(
-                          color: _Glass.accentRose.withValues(alpha: 0.30),
+                          color: statusColor.withValues(alpha: 0.35),
                           width: 0.8,
                         ),
                       ),
-                      child: const Icon(
-                        Icons.cancel_outlined,
-                        size: 18,
-                        color: _Glass.accentRose,
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
+                  ],
+                ),
+
+                // Product summary
+                if (productSummary != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    productSummary,
+                    style: const TextStyle(
+                      color: _Glass.textSecondary,
+                      fontSize: 13,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: 8),
-                  // Invoice button
+                  DesignFilesSection(products: products),
+                ],
+
+                // Due date row
+                if (estimatedCompletion != null &&
+                    jobStatus != 'cancelled') ...[
+                  const SizedBox(height: 6),
+                  _DueDateRow(dueDate: estimatedCompletion),
+                ],
+
+                const SizedBox(height: 10),
+                Divider(height: 0.8, color: _Glass.borderDim),
+                const SizedBox(height: 10),
+
+                // Date + total row
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_today_outlined,
+                        size: 11, color: _Glass.textMuted),
+                    const SizedBox(width: 4),
+                    Text(
+                      dateStr,
+                      style: const TextStyle(
+                          color: _Glass.textMuted, fontSize: 12),
+                    ),
+                    if (turnaround != null) ...[
+                      const SizedBox(width: 8),
+                      const Icon(Icons.schedule,
+                          size: 11, color: _Glass.textMuted),
+                      const SizedBox(width: 4),
+                      Text(
+                        '~$turnaround day${turnaround == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                            color: _Glass.textMuted, fontSize: 12),
+                      ),
+                    ],
+                    const Spacer(),
+                    Text(
+                      '₱${total.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: _Glass.accentAmber,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                // Action buttons
+                if (jobStatus == 'cancelled')
                   Builder(
                     builder: (ctx) => GestureDetector(
                       onTap: () async {
+                        final oid =
+                            data['order_id']?.toString() ?? queueDocId;
                         final orderSnap = await FirebaseFirestore.instance
                             .collection('Orders')
-                            .doc(orderId)
+                            .doc(oid)
                             .get();
-                        final invId = orderSnap
-                            .data()?['invoice_id']
-                            ?.toString();
-                        if (invId != null && ctx.mounted) {
-                          Navigator.of(ctx).push(
-                            MaterialPageRoute(
-                              builder: (_) => InvoiceScreen(invoiceId: invId),
-                            ),
-                          );
-                        } else if (ctx.mounted) {
+                        final invId =
+                            orderSnap.data()?['invoice_id']?.toString();
+                        if (!ctx.mounted) return;
+                        if (invId != null && invId.isNotEmpty) {
+                          Navigator.of(ctx).push(MaterialPageRoute(
+                            builder: (_) =>
+                                InvoiceScreen(invoiceId: invId),
+                          ));
+                        } else {
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             const SnackBar(
-                              content: Text('No invoice yet for this order'),
-                            ),
+                                content: Text('No invoice for this order')),
                           );
                         }
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 9,
+                            horizontal: 14, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: _Glass.surfaceThin,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: _Glass.borderMid, width: 0.9),
                         ),
-                        decoration: _Glass.glass(radius: 99),
-                        child: const Icon(
-                          Icons.receipt_long_rounded,
-                          size: 18,
-                          color: _Glass.textSecondary,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.receipt_long_rounded,
+                                size: 15,
+                                color: _navyBlue.withValues(alpha: 0.7)),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'View Invoice',
+                              style: TextStyle(
+                                color: _Glass.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  // Message button
-                  GestureDetector(
-                    onTap: () => _openChat(context),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 9,
+
+                if (jobStatus != 'cancelled')
+                  Row(
+                    children: [
+                      if (jobStatus == 'pending')
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _startJob(context),
+                            child: Container(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 9),
+                              decoration: _Glass.solidPill(
+                                  _Glass.accentBlue, glow: true),
+                              child: const Center(
+                                child: Text(
+                                  'Start Job',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (jobStatus == 'active')
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _markReady(context),
+                            child: Container(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 9),
+                              decoration: _Glass.solidPill(
+                                  _Glass.accentEmerald, glow: true),
+                              child: const Center(
+                                child: Text(
+                                  'Mark Ready',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(width: 8),
+                      // Cancel button
+                      GestureDetector(
+                        onTap: () => _cancelOrder(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: _Glass.accentRose.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(99),
+                            border: Border.all(
+                              color:
+                                  _Glass.accentRose.withValues(alpha: 0.30),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: const Icon(Icons.cancel_outlined,
+                              size: 18, color: _Glass.accentRose),
+                        ),
                       ),
-                      decoration: _Glass.glass(radius: 99),
-                      child: const Icon(
-                        Icons.chat_bubble_outline_rounded,
-                        size: 18,
-                        color: _Glass.textSecondary,
+                      const SizedBox(width: 8),
+                      // Invoice button
+                      Builder(
+                        builder: (ctx) => GestureDetector(
+                          onTap: () async {
+                            final orderSnap = await FirebaseFirestore
+                                .instance
+                                .collection('Orders')
+                                .doc(orderId)
+                                .get();
+                            final invId =
+                                orderSnap.data()?['invoice_id']?.toString();
+                            if (invId != null && ctx.mounted) {
+                              Navigator.of(ctx).push(MaterialPageRoute(
+                                builder: (_) =>
+                                    InvoiceScreen(invoiceId: invId),
+                              ));
+                            } else if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                    content:
+                                        Text('No invoice yet for this order')),
+                              );
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 9),
+                            decoration: _Glass.glass(radius: 99),
+                            child: const Icon(Icons.receipt_long_rounded,
+                                size: 18, color: _Glass.textSecondary),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      // Message button
+                      GestureDetector(
+                        onTap: () => _openChat(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 9),
+                          decoration: _Glass.glass(radius: 99),
+                          child: const Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 18,
+                              color: _Glass.textSecondary),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-          ],
+              ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -4041,7 +4514,7 @@ class _DeadlineAlertBanner extends StatefulWidget {
 }
 
 class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
-  bool _expanded = true;
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {

@@ -734,6 +734,7 @@ class _QueueStatusList extends StatelessWidget {
                   final data = docs[i].data() as Map<String, dynamic>;
                   final orderId = data['order_id']?.toString() ?? '—';
                   final customer = data['customer_name']?.toString() ?? '—';
+                  final customerId = data['customer_id']?.toString() ?? '';
                   final status = data['job_status']?.toString() ?? jobStatus;
                   final total = (data['total_price'] as num?)?.toDouble() ?? 0;
                   final products =
@@ -752,6 +753,7 @@ class _QueueStatusList extends StatelessWidget {
                     index: i + 1,
                     orderId: orderId,
                     customer: customer,
+                    customerId: customerId,
                     statusLabel: _statusLabel(status),
                     statusColor: statusColor,
                     productSummary: productSummary,
@@ -773,6 +775,7 @@ class _JobCard extends StatelessWidget {
   final int index;
   final String orderId;
   final String customer;
+  final String customerId;
   final String statusLabel;
   final Color statusColor;
   final String? productSummary;
@@ -783,6 +786,7 @@ class _JobCard extends StatelessWidget {
     required this.index,
     required this.orderId,
     required this.customer,
+    this.customerId = '',
     required this.statusLabel,
     required this.statusColor,
     this.productSummary,
@@ -845,6 +849,16 @@ class _JobCard extends StatelessWidget {
                               fontSize: 12,
                             ),
                           ),
+                          if (customerId.isNotEmpty) ...[
+                            const SizedBox(height: 1),
+                            Text(
+                              'ID: $customerId',
+                              style: const TextStyle(
+                                color: _G.textMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1327,6 +1341,8 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                             data['order_id']?.toString() ?? doc.id;
                         final customer =
                             data['customer_name']?.toString() ?? '—';
+                        final customerId =
+                            data['customer_id']?.toString() ?? '';
                         final status = data['status']?.toString() ?? '';
                         final total =
                             (data['total_price'] as num?)?.toDouble() ?? 0;
@@ -1346,6 +1362,7 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                           docId: doc.id,
                           orderId: orderLabel,
                           customer: customer,
+                          customerId: customerId,
                           dateStr: dateStr,
                           statusLabel: _statusLabel(status),
                           statusColor: _statusColor(status),
@@ -1373,6 +1390,7 @@ class _OrderHistoryCard extends StatelessWidget {
   final String docId;
   final String orderId;
   final String customer;
+  final String customerId;
   final String dateStr;
   final String statusLabel;
   final Color statusColor;
@@ -1386,6 +1404,7 @@ class _OrderHistoryCard extends StatelessWidget {
     required this.docId,
     required this.orderId,
     required this.customer,
+    this.customerId = '',
     required this.dateStr,
     required this.statusLabel,
     required this.statusColor,
@@ -1432,6 +1451,16 @@ class _OrderHistoryCard extends StatelessWidget {
                         fontSize: 12,
                       ),
                     ),
+                    if (customerId.isNotEmpty) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        'ID: $customerId',
+                        style: const TextStyle(
+                          color: _G.textMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -2623,7 +2652,9 @@ class _LogRow extends StatelessWidget {
           Expanded(
             flex: 2,
             child: Text(
-              isOrderDeduction ? 'Auto (Order)' : employee,
+              isOrderDeduction
+                  ? (orderId.isNotEmpty ? orderId : employee)
+                  : employee,
               style: TextStyle(
                 color: isOrderDeduction ? _G.accentViolet : _G.textPrimary,
                 fontSize: 12,

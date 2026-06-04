@@ -357,7 +357,7 @@ decoration: AppTheme.backgroundDecoration(context),
   Widget _wideLayout() => Padding(
     padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
     child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
           flex: 2,
@@ -367,9 +367,9 @@ decoration: AppTheme.backgroundDecoration(context),
               filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
+                  color: const Color.fromARGB(255, 28, 22, 68).withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.2),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: _productImage(),
@@ -387,9 +387,9 @@ decoration: AppTheme.backgroundDecoration(context),
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
+                  color: const Color.fromARGB(255, 28, 22, 68).withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.2),
                   boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 32, offset: const Offset(0, 6))],
                 ),
                 child: SingleChildScrollView(child: _orderForm()),
@@ -410,9 +410,9 @@ decoration: AppTheme.backgroundDecoration(context),
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.45),
+                      color: const Color.fromARGB(255, 28, 22, 68).withValues(alpha: 0.60),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.2),
                       boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 32, offset: const Offset(0, 6))],
                     ),
                     child: _summary(),
@@ -440,9 +440,9 @@ decoration: AppTheme.backgroundDecoration(context),
               filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
+                  color: const Color.fromARGB(255, 28, 22, 68).withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.2),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: _productImage(),
@@ -458,9 +458,9 @@ decoration: AppTheme.backgroundDecoration(context),
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.40),
+                color: const Color.fromARGB(255, 28, 22, 68).withValues(alpha: 0.55),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.2),
                 boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 32, offset: const Offset(0, 6))],
               ),
               child: _orderForm(),
@@ -475,9 +475,9 @@ decoration: AppTheme.backgroundDecoration(context),
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 12, 9, 31).withValues(alpha: 0.45),
+                color: const Color.fromARGB(255, 28, 22, 68).withValues(alpha: 0.60),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.2),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.2),
                 boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 32, offset: const Offset(0, 6))],
               ),
               child: _summary(),

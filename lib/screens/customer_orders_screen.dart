@@ -538,6 +538,7 @@ class _OrderCardState extends State<_OrderCard> {
       'order_id':          orderId,
       'customer_name':     customerName,
       'customer_email':    customerEmail,
+      'customer_id':       customerId,
       'issued_date':       FieldValue.serverTimestamp(),
       'items':             products,
       'total_amount':      total,
@@ -551,6 +552,7 @@ class _OrderCardState extends State<_OrderCard> {
     batch.set(queueRef, {
       'order_id':          orderId,
       'customer_uid':      FirebaseAuth.instance.currentUser?.uid ?? '',
+      'customer_id':       customerId,
       'customer_name':     customerName,
       'job_status':        'pending',
       'turnaround_days':   turnaroundDays,
@@ -715,6 +717,12 @@ class _OrderCardState extends State<_OrderCard> {
                       Text(widget.order['order_id']?.toString() ?? widget.docId,
                           style: const TextStyle(
                               color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                      const SizedBox(height: 1),
+                      if ((widget.order['customer_id']?.toString() ?? '').isNotEmpty)
+                        Text(
+                          'Customer ID: ${widget.order['customer_id']}',
+                          style: const TextStyle(color: Colors.white38, fontSize: 11),
+                        ),
                       const SizedBox(height: 2),
                       Text(
                         (() {

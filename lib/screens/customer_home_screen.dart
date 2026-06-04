@@ -5,7 +5,7 @@ import 'app_theme.dart';
 import 'customer_order_screen.dart';
 
 class CustomerHomeScreen extends StatelessWidget {
-  final VoidCallback onViewProducts;
+  final void Function([String? category]) onViewProducts;
   const CustomerHomeScreen({super.key, required this.onViewProducts});
 
   @override
@@ -26,8 +26,8 @@ class CustomerHomeScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Hero(isWide: isWide, onViewProducts: onViewProducts),
-                _FeaturedSection(isWide: isWide),
-                _ServicesSection(isWide: isWide),
+                _FeaturedSection(isWide: isWide, onViewProducts: onViewProducts),
+                _ServicesSection(isWide: isWide, onViewProducts: onViewProducts),
                 const SizedBox(height: 32),
               ],
             ),
@@ -87,7 +87,7 @@ class _FrostedSectionContainer extends StatelessWidget {
 
 class _Hero extends StatelessWidget {
   final bool isWide;
-  final VoidCallback onViewProducts;
+  final void Function([String? category]) onViewProducts;
   const _Hero({required this.isWide, required this.onViewProducts});
 
   @override
@@ -220,7 +220,7 @@ class _DiagonalLinePainter extends CustomPainter {
 }
 
 class _HeroText extends StatelessWidget {
-  final VoidCallback onViewProducts;
+  final void Function([String? category]) onViewProducts;
   const _HeroText({required this.onViewProducts});
 
   @override
@@ -429,7 +429,8 @@ class _HeroLogo extends StatelessWidget {
 
 class _FeaturedSection extends StatelessWidget {
   final bool isWide;
-  const _FeaturedSection({required this.isWide});
+  final void Function([String? category]) onViewProducts;
+  const _FeaturedSection({required this.isWide, required this.onViewProducts});
 
   @override
   Widget build(BuildContext context) {
@@ -474,19 +475,32 @@ class _FeaturedSection extends StatelessWidget {
                     ),
                   );
                 }
-                return SizedBox(
-                  height: 220,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: EdgeInsets.only(right: h),
-                    itemCount: docs.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemBuilder: (_, i) {
-                      final d = docs[i].data() as Map<String, dynamic>;
-                      final docId = docs[i].id;
-                      return _FeaturedCard(data: d, docId: docId);
-                    },
-                  ),
+                return LayoutBuilder(
+                  builder: (_, boxConstraints) {
+                    // Aim to show exactly 3 cards; compute their width.
+                    final availW = boxConstraints.maxWidth - h;
+                    final cardW = ((availW - 24) / 3).clamp(160.0, 260.0);
+                    final cardH = cardW * 1.35;
+                    return SizedBox(
+                      height: cardH,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: EdgeInsets.only(right: h),
+                        itemCount: docs.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemBuilder: (_, i) {
+                          final d = docs[i].data() as Map<String, dynamic>;
+                          final docId = docs[i].id;
+                          return _FeaturedCard(
+                            data: d,
+                            docId: docId,
+                            cardWidth: cardW,
+                            onViewProducts: onViewProducts,
+                          );
+                        },
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -500,7 +514,14 @@ class _FeaturedSection extends StatelessWidget {
 class _FeaturedCard extends StatefulWidget {
   final Map<String, dynamic> data;
   final String docId;
-  const _FeaturedCard({required this.data, required this.docId});
+  final double cardWidth;
+  final void Function([String? category]) onViewProducts;
+  const _FeaturedCard({
+    required this.data,
+    required this.docId,
+    required this.cardWidth,
+    required this.onViewProducts,
+  });
 
   @override
   State<_FeaturedCard> createState() => _FeaturedCardState();
@@ -533,7 +554,7 @@ class _FeaturedCardState extends State<_FeaturedCard> {
         onTap: () => _goToOrder(context),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: 162,
+          width: widget.cardWidth,
           transform: Matrix4.translationValues(0, _hovered ? -5 : 0, 0),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -574,7 +595,7 @@ class _FeaturedCardState extends State<_FeaturedCard> {
               Stack(
                 children: [
                   SizedBox(
-                    height: 110,
+                    height: widget.cardWidth * 0.65,
                     width: double.infinity,
                     child: imageUrl.isNotEmpty
                         ? Image.network(
@@ -762,43 +783,38 @@ class _SectionHeader extends StatelessWidget {
 
 class _ServicesSection extends StatelessWidget {
   final bool isWide;
-  const _ServicesSection({required this.isWide});
+  final void Function([String? category]) onViewProducts;
+  const _ServicesSection({required this.isWide, required this.onViewProducts});
 
   static const _services = [
     _ServiceItem(
-      title: 'Large Format Printing',
+      title: 'Large Format & Signage',
       subtitle: 'Tarpaulins, banners & sintra boards',
       icon: Icons.photo_size_select_actual_outlined,
       accentColor: Color(0xFF4C6EF5),
       iconColor: Color(0xFFAABEFF),
       bgColor: Color(0xFF1A2760),
+      category: 'Large Format & Signage',
       tag: 'Popular',
     ),
     _ServiceItem(
-      title: 'Menu Boards',
-      subtitle: 'Backlit & printed menus for cafes',
-      icon: Icons.menu_book_outlined,
-      accentColor: Color(0xFF9B51E0),
-      iconColor: Color(0xFFDDB8FF),
-      bgColor: Color(0xFF2B1A58),
-      tag: null,
-    ),
-    _ServiceItem(
-      title: 'Stationery & Cards',
-      subtitle: 'Calling cards, flyers & invitations',
-      icon: Icons.credit_card_outlined,
-      accentColor: Color(0xFF059669),
-      iconColor: Color(0xFF6EE7B7),
-      bgColor: Color(0xFF0A3326),
-      tag: null,
-    ),
-    _ServiceItem(
-      title: 'Sticker Printing',
-      subtitle: 'Custom stickers, labels & decals',
+      title: 'Stickers & Labels',
+      subtitle: 'Custom stickers, vinyl & decals',
       icon: Icons.local_offer_outlined,
       accentColor: Color(0xFFE08C00),
       iconColor: Color(0xFFFFD166),
       bgColor: Color(0xFF3D2200),
+      category: 'Stickers & Labels',
+      tag: null,
+    ),
+    _ServiceItem(
+      title: 'Photo & Card Prints',
+      subtitle: 'Photos, calling cards & invitations',
+      icon: Icons.credit_card_outlined,
+      accentColor: Color(0xFF059669),
+      iconColor: Color(0xFF6EE7B7),
+      bgColor: Color(0xFF0A3326),
+      category: 'Photo & Card Prints',
       tag: null,
     ),
   ];
@@ -832,52 +848,33 @@ class _ServicesSection extends StatelessWidget {
                               padding: EdgeInsets.only(
                                 right: s == _services.last ? 0 : 10,
                               ),
-                              child: _ServiceCard(service: s, compact: false),
+                              child: _ServiceCard(
+                                service: s,
+                                compact: false,
+                                onTap: () => onViewProducts(s.category),
+                              ),
                             ),
                           ),
                         )
                         .toList(),
                   )
-                : Column(
-                    children: [
-                      Row(
-                        children: _services
-                            .take(2)
-                            .map(
-                              (s) => Expanded(
-                                child: Padding(
-                                  padding: EdgeInsets.only(
-                                    right: s == _services[0] ? 8 : 0,
-                                  ),
-                                  child: _ServiceCard(
-                                    service: s,
-                                    compact: true,
-                                  ),
-                                ),
+                : Row(
+                    children: _services
+                        .map(
+                          (s) => Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                right: s == _services.last ? 0 : 8,
                               ),
-                            )
-                            .toList(),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: _services
-                            .skip(2)
-                            .map(
-                              (s) => Expanded(
-                                child: Padding(
-                                  padding: EdgeInsets.only(
-                                    right: s == _services[2] ? 8 : 0,
-                                  ),
-                                  child: _ServiceCard(
-                                    service: s,
-                                    compact: true,
-                                  ),
-                                ),
+                              child: _ServiceCard(
+                                service: s,
+                                compact: true,
+                                onTap: () => onViewProducts(s.category),
                               ),
-                            )
-                            .toList(),
-                      ),
-                    ],
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
           ],
         ),
@@ -893,6 +890,7 @@ class _ServiceItem {
   final Color accentColor;
   final Color iconColor;
   final Color bgColor;
+  final String category;
   final String? tag;
   const _ServiceItem({
     required this.title,
@@ -901,6 +899,7 @@ class _ServiceItem {
     required this.accentColor,
     required this.iconColor,
     required this.bgColor,
+    required this.category,
     this.tag,
   });
 }
@@ -908,7 +907,8 @@ class _ServiceItem {
 class _ServiceCard extends StatefulWidget {
   final _ServiceItem service;
   final bool compact;
-  const _ServiceCard({required this.service, required this.compact});
+  final VoidCallback onTap;
+  const _ServiceCard({required this.service, required this.compact, required this.onTap});
 
   @override
   State<_ServiceCard> createState() => _ServiceCardState();
@@ -923,7 +923,10 @@ class _ServiceCardState extends State<_ServiceCard> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         transform: Matrix4.translationValues(0, _hovered ? -4 : 0, 0),
         padding: EdgeInsets.all(widget.compact ? 14 : 16),
@@ -1032,6 +1035,7 @@ class _ServiceCardState extends State<_ServiceCard> {
           ],
         ),
       ),
+        ),
     );
   }
 }

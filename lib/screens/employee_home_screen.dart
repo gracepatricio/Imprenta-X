@@ -375,8 +375,11 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
                           // ── 3. Date, time, employee badge ─────────
                           Padding(
                             padding: EdgeInsets.fromLTRB(padH, 16, padH, padV),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
+                            child: Wrap(
+                              spacing: 12,
+                              runSpacing: 8,
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 // Date
                                 Row(
@@ -403,8 +406,6 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
                                     ),
                                   ],
                                 ),
-
-                                const Spacer(),
 
                                 // Clock
                                 Row(
@@ -434,8 +435,6 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
                                     ),
                                   ],
                                 ),
-
-                                const SizedBox(width: 14),
 
                                 // Employee badge
                                 Container(

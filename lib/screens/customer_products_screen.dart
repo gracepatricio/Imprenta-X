@@ -5,7 +5,8 @@ import 'app_theme.dart';
 import 'customer_order_screen.dart';
 
 class CustomerProductsScreen extends StatefulWidget {
-  const CustomerProductsScreen({super.key});
+  final String? initialCategory;
+  const CustomerProductsScreen({super.key, this.initialCategory});
 
   @override
   State<CustomerProductsScreen> createState() => _CustomerProductsScreenState();
@@ -22,6 +23,12 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
     'Stickers & Labels',
     'Photo & Card Prints',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCategory = widget.initialCategory;
+  }
 
   @override
   void dispose() {

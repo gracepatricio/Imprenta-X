@@ -14,19 +14,28 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
   final _searchCtrl = TextEditingController();
   final _db = FirebaseFirestore.instance;
 
-  List<Map<String, dynamic>> _customers = [];
-  Map<String, dynamic>? _selectedCustomer;
-  List<Map<String, dynamic>> _activeOrders = [];
+  // All orders with remaining balance
+  List<Map<String, dynamic>> _allOrders = [];
+  List<Map<String, dynamic>> get _displayOrders {
+    if (_searchQuery.isEmpty) return _allOrders;
+    final q = _searchQuery.toLowerCase();
+    return _allOrders.where((o) {
+      final orderId  = (o['order_id']?.toString() ?? '').toLowerCase();
+      final custName = (o['customer_name']?.toString() ?? '').toLowerCase();
+      final custId   = (o['customer_id']?.toString() ?? '').toLowerCase();
+      return orderId.contains(q) || custName.contains(q) || custId.contains(q);
+    }).toList();
+  }
 
-  bool _loadingCustomers = false;
-  bool _loadingOrders = false;
+  Map<String, dynamic>? _selectedCustomer; // kept for payment refresh
+  bool _loading = false;
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _searchCtrl.addListener(_onSearchChanged);
-    _loadAllCustomers();
+    _loadOrdersWithBalance();
   }
 
   @override
@@ -41,176 +50,59 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
   void _onSearchChanged() {
     final q = _searchCtrl.text.trim();
     if (q == _searchQuery) return;
-    _searchQuery = q;
-    if (q.isEmpty) {
-      setState(() {
-        _selectedCustomer = null;
-        _activeOrders = [];
-      });
-      _loadAllCustomers();
-      return;
-    }
-    _searchCustomers(q);
+    setState(() => _searchQuery = q);
   }
 
-  Future<void> _loadAllCustomers() async {
-    setState(() => _loadingCustomers = true);
+  Future<void> _loadOrdersWithBalance() async {
+    setState(() => _loading = true);
     try {
-      final snap = await _db
-          .collection('User')
-          .where('role', isEqualTo: 'customer')
-          .limit(100)
-          .get()
-          .catchError((_) => null);
-      final results = <Map<String, dynamic>>[];
-      if (snap != null) {
-        for (final doc in snap.docs) {
-          results.add({'uid': doc.id, ...doc.data()});
-        }
-        results.sort((a, b) {
-          final na = (a['full_name'] as String? ?? '').toLowerCase();
-          final nb = (b['full_name'] as String? ?? '').toLowerCase();
-          return na.compareTo(nb);
-        });
-      }
-      if (mounted) setState(() => _customers = results);
-    } catch (e) {
-      _showSnack('Could not load customers: $e');
-    } finally {
-      if (mounted) setState(() => _loadingCustomers = false);
-    }
-  }
-
-  Future<void> _searchCustomers(String query) async {
-    setState(() => _loadingCustomers = true);
-    try {
-      final seen    = <String>{};
-      final results = <Map<String, dynamic>>[];
-
-      void addDoc(String id, Map<String, dynamic> data) {
-        if (seen.contains(id)) return;
-        seen.add(id);
-        results.add({'uid': id, ...data});
-      }
-
-      void addSnap(QuerySnapshot? snap) {
-        if (snap == null) return;
-        for (final doc in snap.docs) {
-          addDoc(doc.id, doc.data() as Map<String, dynamic>);
-        }
-      }
-
-      final variants = <String>{
-        query,
-        query.toLowerCase(),
-        query[0].toUpperCase() +
-            (query.length > 1 ? query.substring(1).toLowerCase() : ''),
-      };
-      for (final v in variants) {
-        addSnap(await _db
-            .collection('User')
-            .orderBy('full_name')
-            .startAt([v])
-            .endAt(['\$v\uf8ff'])
-            .limit(15)
-            .get()
-            .catchError((_) => null));
-      }
-
-      addSnap(await _db
-          .collection('User')
-          .orderBy('customer_id')
-          .startAt([query])
-          .endAt(['\$query\uf8ff'])
-          .limit(10)
-          .get()
-          .catchError((_) => null));
-
-      if (results.isEmpty) {
-        final all = await _db
-            .collection('User')
-            .limit(300)
-            .get()
-            .catchError((_) => null);
-        if (all != null) {
-          final q = query.toLowerCase();
-          for (final doc in all.docs) {
-            final data       = doc.data();
-            final name       = (data['full_name']   as String? ?? '').toLowerCase();
-            final customerId = (data['customer_id'] as String? ?? '').toLowerCase();
-            final email      = (data['email']       as String? ?? '').toLowerCase();
-            if (name.contains(q) || customerId.contains(q) || email.startsWith(q)) {
-              addDoc(doc.id, data);
-            }
-          }
-        }
-      }
-
-      if (mounted) setState(() => _customers = results);
-    } catch (e) {
-      _showSnack('Search failed: $e');
-    } finally {
-      if (mounted) setState(() => _loadingCustomers = false);
-    }
-  }
-
-  // ── Select customer → load active orders ─────────────────────────────────
-
-  Future<void> _selectCustomer(Map<String, dynamic> customer) async {
-    setState(() {
-      _selectedCustomer = customer;
-      _activeOrders = [];
-      _loadingOrders = true;
-    });
-
-    try {
-      final uid = customer['uid'] as String;
       final snap = await _db
           .collection('Orders')
-          .where('customer_uid', isEqualTo: uid)
           .where('status', whereIn: ['pending', 'in_production', 'ready'])
           .where('payment_status', whereIn: ['unpaid', 'partial'])
           .get()
           .catchError((_) => null);
-
-      final orders = <Map<String, dynamic>>[];
-
+      final results = <Map<String, dynamic>>[];
       if (snap != null) {
-        for (final d in snap.docs) {
-          final data      = d.data();
-          final total     = (data['total_price']   as num?)?.toDouble() ?? 0.0;
-          final paid      = (data['amount_paid']   as num?)?.toDouble() ?? 0.0;
+        for (final doc in snap.docs) {
+          final data      = doc.data();
+          final total     = (data['total_price'] as num?)?.toDouble() ?? 0.0;
+          final paid      = (data['amount_paid'] as num?)?.toDouble() ?? 0.0;
           final remaining = (data['remaining_balance'] as num?)?.toDouble() ?? (total - paid);
-          orders.add({
-            'orderId':     d.id,
-            ...data,
-            'total_amount': total,
-            'paid_amount':  paid,
-            'remaining':    remaining,
-          });
+          if (remaining > 0.01) {
+            results.add({
+              'orderId': doc.id,
+              ...data,
+              'total_amount': total,
+              'paid_amount':  paid,
+              'remaining':    remaining,
+            });
+          }
         }
+        results.sort((a, b) {
+          final ta = a['created_at'] as Timestamp?;
+          final tb = b['created_at'] as Timestamp?;
+          if (ta == null && tb == null) return 0;
+          if (ta == null) return 1;
+          if (tb == null) return -1;
+          return tb.compareTo(ta);
+        });
       }
-
-      orders.sort((a, b) {
-        final ta = a['created_at'];
-        final tb = b['created_at'];
-        if (ta == null || tb == null) return 0;
-        return (tb as Timestamp).compareTo(ta as Timestamp);
-      });
-
-      if (mounted) setState(() => _activeOrders = orders);
+      if (mounted) setState(() => _allOrders = results);
     } catch (e) {
       _showSnack('Could not load orders: $e');
     } finally {
-      if (mounted) setState(() => _loadingOrders = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
+  // These methods are no longer called (POS now shows orders directly).
+  Future<void> _selectCustomer(Map<String, dynamic> customer) async {
+    setState(() => _selectedCustomer = customer);
+  }
+
   void _clearSelection() {
-    setState(() {
-      _selectedCustomer = null;
-      _activeOrders = [];
-    });
+    setState(() => _selectedCustomer = null);
   }
 
   // ── Payment bottom-sheet ──────────────────────────────────────────────────
@@ -311,9 +203,7 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
           }
 
           // ── 5. Refresh orders panel ───────────────────────────────────
-          if (_selectedCustomer != null) {
-            _selectCustomer(_selectedCustomer!);
-          }
+          _loadOrdersWithBalance();
         },
       ),
     );
@@ -366,22 +256,14 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
           const SizedBox(height: 16),
 
           // ── Search bar ──
-          _SearchBar(controller: _searchCtrl, loading: _loadingCustomers),
+          _SearchBar(controller: _searchCtrl, loading: _loading),
           const SizedBox(height: 12),
 
           Expanded(
-            child: _selectedCustomer == null
-                ? _CustomerResultsList(
-              customers: _customers,
-              query: _searchQuery,
-              loading: _loadingCustomers,
-              onSelect: _selectCustomer,
-            )
-                : _CustomerOrdersView(
-              customer: _selectedCustomer!,
-              orders: _activeOrders,
-              loading: _loadingOrders,
-              onBack: _clearSelection,
+            child: _OrderWithBalanceList(
+              orders: _displayOrders,
+              loading: _loading,
+              onRefresh: _loadOrdersWithBalance,
               onSelectOrder: _openPaymentSheet,
             ),
           ),
@@ -413,7 +295,7 @@ class _SearchBar extends StatelessWidget {
         controller: controller,
         style: const TextStyle(color: Colors.white, fontSize: 14),
         decoration: InputDecoration(
-          hintText: 'Search by customer name or ID…',
+          hintText: 'Search by order ID, customer name or ID…',
           hintStyle: TextStyle(
               color: Colors.white.withValues(alpha: 0.4), fontSize: 14),
           prefixIcon:
@@ -1275,6 +1157,111 @@ class _SuccessView extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Empty state helper
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Orders with balance list (new default POS view)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OrderWithBalanceList extends StatelessWidget {
+  final List<Map<String, dynamic>> orders;
+  final bool loading;
+  final VoidCallback onRefresh;
+  final ValueChanged<Map<String, dynamic>> onSelectOrder;
+
+  const _OrderWithBalanceList({
+    required this.orders,
+    required this.loading,
+    required this.onRefresh,
+    required this.onSelectOrder,
+  });
+
+  String _fmtDate(dynamic ts) {
+    if (ts == null) return '';
+    try {
+      final d = (ts as Timestamp).toDate().toLocal();
+      const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return '${m[d.month - 1]} ${d.day}, ${d.year}';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && orders.isEmpty) {
+      return const Center(child: CircularProgressIndicator(color: AppTheme.gold));
+    }
+    if (orders.isEmpty) {
+      return _EmptyHint(
+        icon: Icons.receipt_long_outlined,
+        title: 'No outstanding balances',
+        subtitle: 'All orders are fully paid',
+      );
+    }
+    return Container(
+      decoration: AppTheme.glassCard(opacity: 0.13, radius: 18),
+      child: ListView.separated(
+        padding: const EdgeInsets.all(8),
+        itemCount: orders.length,
+        separatorBuilder: (_, __) =>
+            Divider(color: Colors.white.withValues(alpha: 0.07), height: 1),
+        itemBuilder: (_, i) {
+          final o         = orders[i];
+          final orderId   = o['order_id']?.toString() ?? o['orderId']?.toString() ?? '—';
+          final custName  = o['customer_name']?.toString() ?? 'Walk-in';
+          final custId    = o['customer_id']?.toString() ?? '';
+          final remaining = (o['remaining'] as num?)?.toDouble() ?? 0.0;
+          final total     = (o['total_amount'] as num?)?.toDouble() ?? 0.0;
+          final dateStr   = _fmtDate(o['created_at']);
+          final statusStr = o['status']?.toString() ?? 'pending';
+
+          return ListTile(
+            onTap: () => onSelectOrder(o),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            leading: Container(
+              width: 42, height: 42,
+              decoration: BoxDecoration(
+                color: AppTheme.gold.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.gold.withValues(alpha: 0.35)),
+              ),
+              child: const Icon(Icons.receipt_outlined, color: AppTheme.gold, size: 18),
+            ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    orderId,
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(color: Colors.orange.withValues(alpha: 0.35)),
+                  ),
+                  child: Text(
+                    '₱${remaining.toStringAsFixed(2)} due',
+                    style: const TextStyle(
+                        color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            subtitle: Text(
+              '$custName${custId.isNotEmpty ? '  ·  ID: $custId' : ''}${dateStr.isNotEmpty ? '  •  $dateStr' : ''}  •  $statusStr',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11),
+            ),
+            trailing: Icon(Icons.chevron_right, color: Colors.white.withValues(alpha: 0.3)),
+          );
+        },
+      ),
+    );
+  }
+}
 
 class _EmptyHint extends StatelessWidget {
   final IconData icon;

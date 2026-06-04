@@ -896,6 +896,12 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     );
     _uomCtrl = TextEditingController(text: e?['unit_of_measurement'] ?? '');
     _selectedCategory = e?['category'];
+    // If the product has an old category not in the current list, clear it
+    // so the dropdown doesn't throw an assertion error.
+    if (_selectedCategory != null &&
+        !widget.categories.contains(_selectedCategory)) {
+      _selectedCategory = null;
+    }
     _isAvailable = e?['is_available'] as bool? ?? true;
     _availabilityOverride = e?['availability_override'] as bool?;
     _isFeatured = e?['featured'] as bool? ?? false;

@@ -76,6 +76,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     final paid      = (inv['amount_paid']       as num?)?.toDouble() ?? 0;
     final remaining = (inv['remaining_balance'] as num?)?.toDouble() ?? 0;
     final isFullyPaid = remaining < 0.01;
+    final isCancelledPdf = inv['status']?.toString() == 'cancelled';
 
     String fmtDate(dynamic ts) {
       if (ts == null) return '—';
@@ -171,15 +172,27 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                       pw.Container(
                         padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                         decoration: pw.BoxDecoration(
-                          color: isFullyPaid
-                              ? const PdfColor.fromInt(0xFF14532D)
-                              : const PdfColor.fromInt(0xFF78350F),
+                          color: isCancelledPdf
+                              ? const PdfColor.fromInt(0xFF7F1D1D)
+                              : isFullyPaid
+                                  ? const PdfColor.fromInt(0xFF14532D)
+                                  : const PdfColor.fromInt(0xFF78350F),
                           borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
                         ),
                         child: pw.Text(
-                          isFullyPaid ? 'PAID IN FULL' : 'PARTIAL PAYMENT',
-                          style: pw.TextStyle(font: bold, fontSize: 9,
-                              color: isFullyPaid ? paidGreen : dueTint),
+                          isCancelledPdf
+                              ? 'CANCELLED'
+                              : isFullyPaid
+                                  ? 'PAID IN FULL'
+                                  : 'PARTIAL PAYMENT',
+                          style: pw.TextStyle(
+                              font: bold,
+                              fontSize: 9,
+                              color: isCancelledPdf
+                                  ? const PdfColor.fromInt(0xFFEF4444)
+                                  : isFullyPaid
+                                      ? paidGreen
+                                      : dueTint),
                         ),
                       ),
                     ],
@@ -222,6 +235,9 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                         pw.Text(inv['customer_name']?.toString() ?? '—',
                             style: s(bold, 11, textDark)),
                         pw.Text(inv['customer_email']?.toString() ?? '—',
+                            style: s(regular, 8.5, textMid)),
+                        pw.Text(
+                            'ID: ${inv['customer_id']?.toString().isNotEmpty == true ? inv['customer_id'] : '—'}',
                             style: s(regular, 8.5, textMid)),
                       ],
                     ),
@@ -544,6 +560,7 @@ class _InvoiceView extends StatelessWidget {
     final paid      = (inv['amount_paid']       as num?)?.toDouble() ?? 0;
     final remaining = (inv['remaining_balance'] as num?)?.toDouble() ?? 0;
     final isFullPaid = remaining < 0.01;
+    final isCancelled = inv['status']?.toString() == 'cancelled';
 
     return SingleChildScrollView(
       child: Column(
@@ -590,20 +607,32 @@ class _InvoiceView extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: isFullPaid
-                            ? Colors.green.withValues(alpha: 0.15)
-                            : Colors.orange.withValues(alpha: 0.15),
+                        color: isCancelled
+                            ? Colors.red.withValues(alpha: 0.15)
+                            : isFullPaid
+                                ? Colors.green.withValues(alpha: 0.15)
+                                : Colors.orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: isFullPaid
-                              ? Colors.green.withValues(alpha: 0.5)
-                              : Colors.orange.withValues(alpha: 0.5),
+                          color: isCancelled
+                              ? Colors.red.withValues(alpha: 0.5)
+                              : isFullPaid
+                                  ? Colors.green.withValues(alpha: 0.5)
+                                  : Colors.orange.withValues(alpha: 0.5),
                         ),
                       ),
                       child: Text(
-                        isFullPaid ? 'PAID IN FULL' : 'PARTIAL PAYMENT',
+                        isCancelled
+                            ? 'CANCELLED'
+                            : isFullPaid
+                                ? 'PAID IN FULL'
+                                : 'PARTIAL PAYMENT',
                         style: TextStyle(
-                            color: isFullPaid ? Colors.green : Colors.orange,
+                            color: isCancelled
+                                ? Colors.redAccent
+                                : isFullPaid
+                                    ? Colors.green
+                                    : Colors.orange,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 0.5),
@@ -656,6 +685,15 @@ class _InvoiceView extends StatelessWidget {
                   Expanded(child: _InvDetail(
                       label: 'DATE ISSUED',
                       value: _fmtDate(inv['issued_date']))),
+                ]),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: _InvDetail(
+                      label: 'CUSTOMER ID',
+                      value: inv['customer_id']?.toString().isNotEmpty == true
+                          ? inv['customer_id'].toString()
+                          : '—')),
+                  const Expanded(child: SizedBox()),
                 ]),
               ],
             ),

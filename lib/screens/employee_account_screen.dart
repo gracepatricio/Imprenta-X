@@ -1417,10 +1417,17 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => ChatScreen(
-                                customerUid: customerUid,
-                                customerName: customerName,
-                                isEmployee: true,
+                              builder: (ctx) => Scaffold(
+                                backgroundColor: const Color(0xFFF7F8FA),
+                                body: SafeArea(
+                                  child: ChatScreen(
+                                    customerUid: customerUid,
+                                    customerName: customerName,
+                                    isEmployee: true,
+                                    embedded: true,
+                                    onClose: () => Navigator.pop(ctx),
+                                  ),
+                                ),
                               ),
                             ),
                           );

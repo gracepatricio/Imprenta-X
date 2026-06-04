@@ -396,6 +396,7 @@ class _MobileOrderCard extends StatelessWidget {
     final orderId = doc.id;
     final customer =
         data['customer_name']?.toString() ?? 'Unknown Customer';
+    final customerId = data['customer_id']?.toString() ?? '';
     final status = data['status']?.toString() ?? 'pending';
     final products =
         (data['products'] as List<dynamic>?)?.cast<Map>() ?? [];
@@ -461,12 +462,26 @@ class _MobileOrderCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
 
-          // Order ID
-          Text(
-            '#${orderId.length > 8 ? orderId.substring(0, 8).toUpperCase() : orderId.toUpperCase()}',
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4),
-                fontSize: 11),
+          // Order ID + Customer ID
+          Row(
+            children: [
+              Text(
+                data['order_id']?.toString().isNotEmpty == true
+                    ? data['order_id'].toString()
+                    : '#${orderId.length > 8 ? orderId.substring(0, 8).toUpperCase() : orderId.toUpperCase()}',
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.4),
+                    fontSize: 11),
+              ),
+              if (customerId.isNotEmpty) ...[
+                Text(
+                  '  ·  ID: $customerId',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      fontSize: 11),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 8),
 

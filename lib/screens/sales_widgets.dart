@@ -94,6 +94,27 @@ class _SalesDatePickerDialogState extends State<_SalesDatePickerDialog> {
   late bool _pickingStart;
   late DateTime _viewMonth;
 
+  late TextEditingController _startCtrl;
+  late TextEditingController _endCtrl;
+
+  static String _fmt(DateTime d) =>
+      '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}/${d.year}';
+
+  DateTime? _parse(String s) {
+    try {
+      final parts = s.trim().split(RegExp(r'[/\-]'));
+      if (parts.length == 3) {
+        final m = int.parse(parts[0]);
+        final d = int.parse(parts[1]);
+        final y = int.parse(parts[2]);
+        if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 2000) {
+          return DateTime(y, m, d);
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -101,6 +122,43 @@ class _SalesDatePickerDialogState extends State<_SalesDatePickerDialog> {
     _end = widget.initialEnd;
     _pickingStart = true;
     _viewMonth = DateTime(_start.year, _start.month);
+    _startCtrl = TextEditingController(text: _fmt(_start));
+    _endCtrl = TextEditingController(text: _fmt(_end));
+  }
+
+  @override
+  void dispose() {
+    _startCtrl.dispose();
+    _endCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onStartTextSubmit(String val) {
+    final d = _parse(val);
+    if (d != null) {
+      setState(() {
+        _start = d;
+        if (_start.isAfter(_end)) _end = _start;
+        _endCtrl.text = _fmt(_end);
+        _viewMonth = DateTime(_start.year, _start.month);
+      });
+    } else {
+      _startCtrl.text = _fmt(_start);
+    }
+  }
+
+  void _onEndTextSubmit(String val) {
+    final d = _parse(val);
+    if (d != null) {
+      setState(() {
+        _end = d;
+        if (_end.isBefore(_start)) _start = _end;
+        _startCtrl.text = _fmt(_start);
+        _viewMonth = DateTime(_end.year, _end.month);
+      });
+    } else {
+      _endCtrl.text = _fmt(_end);
+    }
   }
 
   // ── Theming helpers ────────────────────────────────────────────────────────
@@ -122,10 +180,14 @@ class _SalesDatePickerDialogState extends State<_SalesDatePickerDialog> {
       if (_pickingStart) {
         _start = day;
         if (_start.isAfter(_end)) _end = _start;
+        _startCtrl.text = _fmt(_start);
+        _endCtrl.text = _fmt(_end);
         _pickingStart = false;
       } else {
         _end = day;
         if (_end.isBefore(_start)) _start = _end;
+        _startCtrl.text = _fmt(_start);
+        _endCtrl.text = _fmt(_end);
         _pickingStart = true;
       }
     });
@@ -207,32 +269,37 @@ class _SalesDatePickerDialogState extends State<_SalesDatePickerDialog> {
     padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
     child: Row(
       children: [
-        _DateBox(
-          label: 'Start',
-          date: _start,
-          active: _pickingStart,
-          dark: widget.dark,
-          accent: _accent,
-          textPrimary: _textPrimary,
-          textMuted: _textMuted,
-          surface: _surface,
-          border: _border,
-          onTap: () => setState(() => _pickingStart = true),
+        Expanded(
+          child: _EditableDateBox(
+            label: 'Start',
+            controller: _startCtrl,
+            active: _pickingStart,
+            accent: _accent,
+            textPrimary: _textPrimary,
+            textMuted: _textMuted,
+            surface: _surface,
+            border: _border,
+            onTap: () => setState(() => _pickingStart = true),
+            onSubmit: _onStartTextSubmit,
+          ),
         ),
-        const SizedBox(width: 8),
-        Icon(Icons.arrow_forward_rounded, size: 14, color: _textMuted),
-        const SizedBox(width: 8),
-        _DateBox(
-          label: 'End',
-          date: _end,
-          active: !_pickingStart,
-          dark: widget.dark,
-          accent: _accent,
-          textPrimary: _textPrimary,
-          textMuted: _textMuted,
-          surface: _surface,
-          border: _border,
-          onTap: () => setState(() => _pickingStart = false),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Icon(Icons.arrow_forward_rounded, size: 14, color: _textMuted),
+        ),
+        Expanded(
+          child: _EditableDateBox(
+            label: 'End',
+            controller: _endCtrl,
+            active: !_pickingStart,
+            accent: _accent,
+            textPrimary: _textPrimary,
+            textMuted: _textMuted,
+            surface: _surface,
+            border: _border,
+            onTap: () => setState(() => _pickingStart = false),
+            onSubmit: _onEndTextSubmit,
+          ),
         ),
       ],
     ),
@@ -475,6 +542,96 @@ class _DateBox extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Editable date box (type MM/DD/YYYY or pick from calendar) ─────────────────
+class _EditableDateBox extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final bool active;
+  final Color accent, textPrimary, textMuted, surface, border;
+  final VoidCallback onTap;
+  final ValueChanged<String> onSubmit;
+
+  const _EditableDateBox({
+    required this.label,
+    required this.controller,
+    required this.active,
+    required this.accent,
+    required this.textPrimary,
+    required this.textMuted,
+    required this.surface,
+    required this.border,
+    required this.onTap,
+    required this.onSubmit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final activeBg = accent.withValues(alpha: 0.07);
+    final activeBorder = accent.withValues(alpha: 0.45);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? activeBg : surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: active ? activeBorder : border,
+            width: active ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: active ? accent : textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                if (active) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    width: 5, height: 5,
+                    decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 3),
+            TextField(
+              controller: controller,
+              onTap: onTap,
+              onSubmitted: onSubmit,
+              onEditingComplete: () => onSubmit(controller.text),
+              style: TextStyle(
+                color: textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+                border: InputBorder.none,
+                hintText: 'MM/DD/YYYY',
+                hintStyle: TextStyle(color: textMuted, fontSize: 11),
+              ),
+            ),
+          ],
         ),
       ),
     );
