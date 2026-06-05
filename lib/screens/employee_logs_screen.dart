@@ -444,7 +444,10 @@ class _PillSegmentControl<T> extends StatelessWidget {
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeInOut,
                 margin: const EdgeInsets.symmetric(horizontal: 2),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
                 decoration: isActive
                     ? BoxDecoration(
                         color: item.accent,
@@ -475,8 +478,9 @@ class _PillSegmentControl<T> extends StatelessWidget {
                       style: TextStyle(
                         color: isActive ? Colors.white : _Glass.textSecondary,
                         fontSize: 12,
-                        fontWeight:
-                            isActive ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: isActive
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                       ),
                     ),
                   ],
@@ -652,13 +656,18 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
                     onTap: () => setState(() => _sub = _QueueSubTab.history),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 9),
+                        horizontal: 14,
+                        vertical: 9,
+                      ),
                       decoration: _Glass.solidPill(const Color(0xFF8B5CF6)),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.history_rounded,
-                              size: 13, color: Colors.white),
+                          Icon(
+                            Icons.history_rounded,
+                            size: 13,
+                            color: Colors.white,
+                          ),
                           SizedBox(width: 6),
                           Text(
                             'History',
@@ -704,8 +713,7 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
             Expanded(
               child: isHistory
                   ? _EmployeeOrderHistory(
-                      onBack: () =>
-                          setState(() => _sub = _QueueSubTab.pending),
+                      onBack: () => setState(() => _sub = _QueueSubTab.pending),
                     )
                   : _buildQueueContent(),
             ),
@@ -727,7 +735,8 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
         return const _QueueList(jobStatus: 'cancelled');
       case _QueueSubTab.history:
         return _EmployeeOrderHistory(
-            onBack: () => setState(() => _sub = _QueueSubTab.pending));
+          onBack: () => setState(() => _sub = _QueueSubTab.pending),
+        );
     }
   }
 }
@@ -936,8 +945,11 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.arrow_back_ios_new_rounded,
-                      size: 12, color: _Glass.textSecondary),
+                  Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    size: 12,
+                    color: _Glass.textSecondary,
+                  ),
                   SizedBox(width: 6),
                   Text(
                     'Order History',
@@ -1149,20 +1161,54 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                   final invoiceId = data['invoice_id']?.toString();
                   final statusColor = _statusColor(status);
 
-                  return _OrderHistoryCard(
-                    doc: doc,
-                    orderId: orderId,
-                    customer: customer,
-                    customerId: customerId,
-                    status: status,
-                    statusLabel: _statusLabel(status),
-                    statusColor: statusColor,
-                    total: total,
-                    paid: paid,
-                    remaining: remaining,
-                    products: products,
-                    dateStr: dateStr,
-                    invoiceId: invoiceId,
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: _Glass.accentAmber.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _Glass.accentAmber.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${i + 1}',
+                              style: const TextStyle(
+                                color: _Glass.accentAmber,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _OrderHistoryCard(
+                            doc: doc,
+                            orderId: orderId,
+                            customer: customer,
+                            customerId: customerId,
+                            status: status,
+                            statusLabel: _statusLabel(status),
+                            statusColor: statusColor,
+                            total: total,
+                            paid: paid,
+                            remaining: remaining,
+                            products: products,
+                            dateStr: dateStr,
+                            invoiceId: invoiceId,
+                            cancelReason:
+                                data['cancel_reason']?.toString() ?? '',
+                          ),
+                        ),
+                      ],
+                    ),
                   );
                 },
               );
@@ -1182,6 +1228,7 @@ class _OrderHistoryCard extends StatelessWidget {
   final double total, paid, remaining;
   final List<Map<String, dynamic>> products;
   final String? invoiceId;
+  final String cancelReason;
 
   const _OrderHistoryCard({
     required this.doc,
@@ -1197,6 +1244,7 @@ class _OrderHistoryCard extends StatelessWidget {
     required this.products,
     required this.dateStr,
     this.invoiceId,
+    this.cancelReason = '',
   });
 
   @override
@@ -1285,90 +1333,130 @@ class _OrderHistoryCard extends StatelessWidget {
               ),
               DesignFilesSection(products: products),
             ],
-            const SizedBox(height: 10),
-
-            // Chips row
-            Row(
-              children: [
-                _InfoChip(
-                  'Total',
-                  '₱${total.toStringAsFixed(2)}',
-                  _Glass.textSecondary,
+            // Cancellation reason banner (cancelled orders only)
+            if (cancelReason.isNotEmpty && status == 'cancelled') ...[
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
                 ),
-                const SizedBox(width: 10),
-                _InfoChip(
-                  'Paid',
-                  '₱${paid.toStringAsFixed(2)}',
-                  _Glass.accentEmerald,
-                ),
-                const SizedBox(width: 10),
-                _InfoChip(
-                  fullyPaid ? 'Fully Paid' : 'Balance',
-                  fullyPaid ? '—' : '₱${remaining.toStringAsFixed(2)}',
-                  fullyPaid ? _Glass.accentEmerald : _amber,
-                  bold: true,
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // Invoice button
-            Builder(
-              builder: (ctx) => GestureDetector(
-                onTap: () async {
-                  String? invId = invoiceId;
-                  if (invId == null) {
-                    final orderSnap = await FirebaseFirestore.instance
-                        .collection('Orders')
-                        .doc(doc.id)
-                        .get();
-                    invId = orderSnap.data()?['invoice_id']?.toString();
-                  }
-                  if (invId != null && ctx.mounted) {
-                    Navigator.of(ctx).push(
-                      MaterialPageRoute(
-                        builder: (_) => InvoiceScreen(invoiceId: invId!),
-                      ),
-                    );
-                  } else if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(
-                        content: Text('No invoice for this order'),
-                      ),
-                    );
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
+                decoration: BoxDecoration(
+                  color: _Glass.accentRose.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _Glass.accentRose.withValues(alpha: 0.22),
+                    width: 0.9,
                   ),
-                  decoration: BoxDecoration(
-                    color: _Glass.surfaceThin,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: _Glass.borderMid, width: 0.9),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.receipt_long_rounded,
-                        size: 15,
-                        color: _navyBlue.withValues(alpha: 0.7),
-                      ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        'View Invoice',
-                        style: TextStyle(
-                          color: _Glass.textSecondary,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.cancel_outlined,
+                      size: 13,
+                      color: _Glass.accentRose,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Cancelled: $cancelReason',
+                        style: const TextStyle(
+                          color: _Glass.accentRose,
                           fontSize: 12,
-                          fontWeight: FontWeight.w600,
                         ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Chips on the left
+                Expanded(
+                  child: Row(
+                    children: [
+                      _InfoChip(
+                        'Total',
+                        '₱${total.toStringAsFixed(2)}',
+                        _Glass.textSecondary,
+                      ),
+                      const SizedBox(width: 10),
+                      _InfoChip(
+                        'Paid',
+                        '₱${paid.toStringAsFixed(2)}',
+                        _Glass.accentEmerald,
+                      ),
+                      const SizedBox(width: 10),
+                      _InfoChip(
+                        fullyPaid ? 'Fully Paid' : 'Balance',
+                        fullyPaid ? '—' : '₱${remaining.toStringAsFixed(2)}',
+                        fullyPaid ? _Glass.accentEmerald : _amber,
+                        bold: true,
                       ),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                // Invoice button — radius: 99 to match pending/active style
+                Builder(
+                  builder: (ctx) => GestureDetector(
+                    onTap: () async {
+                      String? invId = invoiceId;
+                      if (invId == null) {
+                        final orderSnap = await FirebaseFirestore.instance
+                            .collection('Orders')
+                            .doc(doc.id)
+                            .get();
+                        invId = orderSnap.data()?['invoice_id']?.toString();
+                      }
+                      if (invId != null && ctx.mounted) {
+                        Navigator.of(ctx).push(
+                          MaterialPageRoute(
+                            builder: (_) => InvoiceScreen(invoiceId: invId!),
+                          ),
+                        );
+                      } else if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                            content: Text('No invoice for this order'),
+                          ),
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                      decoration: _Glass.glass(radius: 99),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.receipt_long_rounded,
+                            size: 15,
+                            color: _navyBlue.withValues(alpha: 0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'View Invoice',
+                            style: TextStyle(
+                              color: _Glass.textSecondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1466,12 +1554,16 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
 
   int get _turnaround {
     if (_items.isEmpty) return 1;
-    final products = _items.map((item) => {
-      'category': item.productData['category']?.toString() ?? '',
-      'qty':      item.qty,
-      if (item.widthFt  != null) 'width_ft':  item.widthFt,
-      if (item.heightFt != null) 'height_ft': item.heightFt,
-    }).toList();
+    final products = _items
+        .map(
+          (item) => {
+            'category': item.productData['category']?.toString() ?? '',
+            'qty': item.qty,
+            if (item.widthFt != null) 'width_ft': item.widthFt,
+            if (item.heightFt != null) 'height_ft': item.heightFt,
+          },
+        )
+        .toList();
     return TurnaroundService.computeOrderDays(products);
   }
 
@@ -1566,17 +1658,17 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
 
       final queueRef = db.collection('Order_Queue').doc();
       batch.set(queueRef, {
-        'order_id':             orderId,
-        'customer_uid':         '',
-        'customer_id':          '',
-        'customer_name':        customerName,
-        'job_status':           'pending',
-        'turnaround_days':      turnaroundDays,
+        'order_id': orderId,
+        'customer_uid': '',
+        'customer_id': '',
+        'customer_name': customerName,
+        'job_status': 'pending',
+        'turnaround_days': turnaroundDays,
         'estimated_completion': Timestamp.fromDate(estimatedCompletion),
-        'products':             products,
-        'total_price':          total,
-        'walk_in':              true,
-        'created_at':           now,
+        'products': products,
+        'total_price': total,
+        'walk_in': true,
+        'created_at': now,
       });
 
       final invoiceRef = db.collection('Invoices').doc(invoiceId);
@@ -2232,9 +2324,21 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
     '5×10 ft': (5.0, 10.0),
   };
   static const _materialMap = {
-    'Large Format & Signage': ['Standard Tarp', 'Premium Tarp', 'Mesh Tarp', 'Standard', 'Premium Backlit'],
+    'Large Format & Signage': [
+      'Standard Tarp',
+      'Premium Tarp',
+      'Mesh Tarp',
+      'Standard',
+      'Premium Backlit',
+    ],
     'Stickers & Labels': ['Glossy Vinyl', 'Matte Vinyl', 'Clear Vinyl'],
-    'Photo & Card Prints': ['Glossy', 'Matte', 'Satin', 'Kraft Paper', 'UV Coated'],
+    'Photo & Card Prints': [
+      'Glossy',
+      'Matte',
+      'Satin',
+      'Kraft Paper',
+      'UV Coated',
+    ],
   };
   static const _categories = [
     'Large Format & Signage',
@@ -2516,8 +2620,6 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                                               color: _Glass.textMuted,
                                               fontSize: 11,
                                             ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
                                           ),
                                       ],
                                     ),
@@ -2597,11 +2699,12 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                       Expanded(
                         child: _dimField('Width', _widthCtrl, (v) {
                           final d = double.tryParse(v);
-                          if (d != null && d > 0)
+                          if (d != null && d > 0) {
                             setState(() {
                               _widthFt = d;
                               _sizePreset = 'Custom';
                             });
+                          }
                         }),
                       ),
                       const Padding(
@@ -2617,11 +2720,12 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                       Expanded(
                         child: _dimField('Height', _heightCtrl, (v) {
                           final d = double.tryParse(v);
-                          if (d != null && d > 0)
+                          if (d != null && d > 0) {
                             setState(() {
                               _heightFt = d;
                               _sizePreset = 'Custom';
                             });
+                          }
                         }),
                       ),
                     ],
@@ -2766,7 +2870,7 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                               productData:
                                   _selected!.data() as Map<String, dynamic>,
                               qty: _qty,
-                              notes: _notes,
+                              notes: _notesCtrl.text.trim(),
                               widthFt: _needsSize ? _widthFt : null,
                               heightFt: _needsSize ? _heightFt : null,
                               material: _material,
@@ -3083,7 +3187,39 @@ class _ReadyForPickupList extends StatelessWidget {
           itemBuilder: (_, i) {
             final doc = docs[i];
             final data = doc.data() as Map<String, dynamic>;
-            return _ReadyOrderCard(orderId: doc.id, data: data);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: _Glass.accentAmber.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _Glass.accentAmber.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${i + 1}',
+                        style: const TextStyle(
+                          color: _Glass.accentAmber,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _ReadyOrderCard(orderId: doc.id, data: data),
+                  ),
+                ],
+              ),
+            );
           },
         );
       },
@@ -3092,7 +3228,7 @@ class _ReadyForPickupList extends StatelessWidget {
 }
 
 // =============================================================================
-// _ReadyOrderCard (structure unchanged, colours aligned)
+// _ReadyOrderCard — invoice + message icons at bottom-right
 // =============================================================================
 class _ReadyOrderCard extends StatelessWidget {
   final String orderId;
@@ -3163,7 +3299,9 @@ class _ReadyOrderCard extends StatelessWidget {
                     onTap: () => Navigator.pop(ctx, false),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 9),
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
                       decoration: _Glass.glass(radius: 99),
                       child: const Text(
                         'Cancel',
@@ -3180,9 +3318,13 @@ class _ReadyOrderCard extends StatelessWidget {
                     onTap: () => Navigator.pop(ctx, true),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 9),
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
                       decoration: _Glass.solidPill(
-                          _Glass.accentEmerald, glow: true),
+                        _Glass.accentEmerald,
+                        glow: true,
+                      ),
                       child: const Text(
                         'Mark Completed',
                         style: TextStyle(
@@ -3233,14 +3375,17 @@ class _ReadyOrderCard extends StatelessWidget {
   }
 
   Future<void> _openChat(BuildContext context) async {
-    final customerUid  = data['customer_uid']?.toString() ?? '';
+    final customerUid = data['customer_uid']?.toString() ?? '';
     final customerName = data['customer_name']?.toString() ?? 'Customer';
     if (customerUid.isEmpty) return;
 
     final orderLabel = data['order_id']?.toString() ?? orderId;
-    final products   = (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final products =
+        (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final productSummary = products.isNotEmpty
-        ? products.map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}').join(', ')
+        ? products
+              .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
+              .join(', ')
         : '—';
     final total = (data['total_price'] as num?)?.toDouble() ?? 0;
 
@@ -3249,49 +3394,55 @@ class _ReadyOrderCard extends StatelessWidget {
     if (user != null) {
       try {
         final doc = await FirebaseFirestore.instance
-            .collection('User').doc(user.uid).get();
+            .collection('User')
+            .doc(user.uid)
+            .get();
         employeeName = doc.data()?['full_name'] ?? employeeName;
       } catch (_) {}
     }
 
     final threadRef = FirebaseFirestore.instance
-        .collection('Messages').doc('chat_$customerUid');
+        .collection('Messages')
+        .doc('chat_$customerUid');
 
-    final msgText = 'Regarding Order: $orderLabel\n'
+    final msgText =
+        'Regarding Order: $orderLabel\n'
         'Items: $productSummary\n'
         'Status: Ready for Pickup\n'
         'Total: ₱${total.toStringAsFixed(2)}';
 
     await threadRef.collection('chat').add({
-      'sender_uid':  user?.uid ?? 'employee',
+      'sender_uid': user?.uid ?? 'employee',
       'sender_name': employeeName,
       'sender_role': 'employee',
-      'text':        msgText,
-      'timestamp':   FieldValue.serverTimestamp(),
+      'text': msgText,
+      'timestamp': FieldValue.serverTimestamp(),
     });
     await threadRef.set({
-      'customer_uid':   customerUid,
-      'customer_name':  customerName,
-      'last_message':   'Re: $orderLabel — Ready for Pickup',
-      'last_updated':   FieldValue.serverTimestamp(),
+      'customer_uid': customerUid,
+      'customer_name': customerName,
+      'last_message': 'Re: $orderLabel — Ready for Pickup',
+      'last_updated': FieldValue.serverTimestamp(),
       'unread_customer': FieldValue.increment(1),
     }, SetOptions(merge: true));
 
     if (context.mounted) {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (ctx) => Scaffold(
-          backgroundColor: const Color(0xFFF7F8FA),
-          body: SafeArea(
-            child: ChatScreen(
-              customerUid:  customerUid,
-              customerName: customerName,
-              isEmployee:   true,
-              embedded:     true,
-              onClose:      () => Navigator.pop(ctx),
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (ctx) => Scaffold(
+            backgroundColor: const Color(0xFFF7F8FA),
+            body: SafeArea(
+              child: ChatScreen(
+                customerUid: customerUid,
+                customerName: customerName,
+                isEmployee: true,
+                embedded: true,
+                onClose: () => Navigator.pop(ctx),
+              ),
             ),
           ),
         ),
-      ));
+      );
     }
   }
 
@@ -3426,8 +3577,76 @@ class _ReadyOrderCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
+
+            // Action row: status/action on left, invoice + message on right
             Row(
               children: [
+                Expanded(
+                  child: !fullyPaid
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _Glass.accentAmber.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _Glass.accentAmber.withValues(alpha: 0.25),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.info_outline,
+                                color: _Glass.accentAmber,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  '₱${remaining.toStringAsFixed(2)} balance due — via POS or app payment',
+                                  style: const TextStyle(
+                                    color: _Glass.accentAmber,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : GestureDetector(
+                          onTap: () => _markCompleted(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: _Glass.solidPill(
+                              _Glass.accentEmerald,
+                              glow: true,
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.task_alt_rounded,
+                                  size: 15,
+                                  color: Colors.white,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Mark as Completed',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: () => _viewInvoice(context),
                   child: Container(
@@ -3435,7 +3654,7 @@ class _ReadyOrderCard extends StatelessWidget {
                       horizontal: 12,
                       vertical: 8,
                     ),
-                    decoration: _Glass.glass(radius: 10),
+                    decoration: _Glass.glass(radius: 99),
                     child: const Icon(
                       Icons.receipt_long_rounded,
                       size: 18,
@@ -3444,7 +3663,6 @@ class _ReadyOrderCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Message button
                 GestureDetector(
                   onTap: () => _openChat(context),
                   child: Container(
@@ -3452,7 +3670,7 @@ class _ReadyOrderCard extends StatelessWidget {
                       horizontal: 12,
                       vertical: 8,
                     ),
-                    decoration: _Glass.glass(radius: 10),
+                    decoration: _Glass.glass(radius: 99),
                     child: const Icon(
                       Icons.chat_bubble_outline_rounded,
                       size: 18,
@@ -3460,75 +3678,6 @@ class _ReadyOrderCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                if (!fullyPaid)
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _Glass.accentAmber.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: _Glass.accentAmber.withValues(alpha: 0.25),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.info_outline,
-                            color: _Glass.accentAmber,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '₱${remaining.toStringAsFixed(2)} balance due — via POS or app payment',
-                              style: const TextStyle(
-                                color: _Glass.accentAmber,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (fullyPaid)
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => _markCompleted(context),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: _Glass.solidPill(
-                          _Glass.accentEmerald,
-                          glow: true,
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.task_alt_rounded,
-                              size: 15,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              'Mark as Completed',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             ),
           ],
@@ -3539,7 +3688,7 @@ class _ReadyOrderCard extends StatelessWidget {
 }
 
 // =============================================================================
-// _QueueCard (structure unchanged, colours aligned)
+// _QueueCard
 // =============================================================================
 class _QueueCard extends StatelessWidget {
   final String queueDocId;
@@ -3582,104 +3731,246 @@ class _QueueCard extends StatelessWidget {
     final customerUid = data['customer_uid']?.toString();
     if (orderId == null) return;
 
+    String selectedReason = '';
+    String customReason = '';
+    bool isOther = false;
+    final customCtrl = TextEditingController();
+
+    const reasons = [
+      'Customer requested cancellation',
+      'Payment not received',
+      'Out of stock / materials unavailable',
+      'Design file issue',
+      'Duplicate order',
+      'Customer unresponsive',
+      'Others',
+    ];
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: _Glass.surface,
-        elevation: 24,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: _Glass.borderMid, width: 1),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Cancel Order?',
-                style: TextStyle(
-                  color: _Glass.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => Dialog(
+          backgroundColor: _Glass.surface,
+          elevation: 24,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: _Glass.borderMid, width: 1),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Cancel Order?',
+                  style: TextStyle(
+                    color: _Glass.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Are you sure you want to cancel order $orderId? This cannot be undone.',
-                style: const TextStyle(
-                  color: _Glass.textSecondary,
-                  fontSize: 13,
+                const SizedBox(height: 4),
+                Text(
+                  'Order $orderId will be moved to Cancelled.',
+                  style: const TextStyle(
+                    color: _Glass.textSecondary,
+                    fontSize: 13,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(ctx, false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 9,
-                      ),
-                      decoration: _Glass.glass(radius: 99),
-                      child: const Text(
-                        'Keep It',
-                        style: TextStyle(
-                          color: _Glass.textSecondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
+                const SizedBox(height: 16),
+                const Text(
+                  'Reason for Cancellation',
+                  style: TextStyle(
+                    color: _Glass.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: _Glass.surfaceThin,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _Glass.borderMid, width: 0.9),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: selectedReason.isEmpty ? null : selectedReason,
+                      hint: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          'Select a reason…',
+                          style: TextStyle(
+                            color: _Glass.textMuted,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
+                      isExpanded: true,
+                      dropdownColor: _Glass.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      icon: const Padding(
+                        padding: EdgeInsets.only(right: 10),
+                        child: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: _Glass.textMuted,
+                          size: 18,
+                        ),
+                      ),
+                      items: reasons
+                          .map(
+                            (r) => DropdownMenuItem(
+                              value: r,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                child: Text(
+                                  r,
+                                  style: const TextStyle(
+                                    color: _Glass.textPrimary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) {
+                        if (val == null) return;
+                        setS(() {
+                          selectedReason = val;
+                          isOther = val == 'Others';
+                          if (!isOther) {
+                            customCtrl.clear();
+                            customReason = '';
+                          }
+                        });
+                      },
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(ctx, true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 9,
+                ),
+                if (isOther) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: _Glass.surfaceThin,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _Glass.borderMid, width: 0.9),
+                    ),
+                    child: TextField(
+                      controller: customCtrl,
+                      style: const TextStyle(
+                        color: _Glass.textPrimary,
+                        fontSize: 13,
                       ),
-                      decoration: _Glass.solidPill(
-                        _Glass.accentRose,
-                        glow: true,
-                      ),
-                      child: const Text(
-                        'Yes, Cancel',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
+                      maxLines: 2,
+                      onChanged: (v) => setS(() => customReason = v.trim()),
+                      decoration: const InputDecoration(
+                        hintText: 'Describe the reason…',
+                        hintStyle: TextStyle(
+                          color: _Glass.textMuted,
                           fontSize: 13,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
                         ),
                       ),
                     ),
                   ),
                 ],
-              ),
-            ],
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.pop(ctx, false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 9,
+                        ),
+                        decoration: _Glass.glass(radius: 99),
+                        child: const Text(
+                          'Keep It',
+                          style: TextStyle(
+                            color: _Glass.textSecondary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: () {
+                        final reason = isOther ? customReason : selectedReason;
+                        if (reason.isEmpty) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Please select a cancellation reason.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                        Navigator.pop(ctx, true);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 9,
+                        ),
+                        decoration: _Glass.solidPill(
+                          _Glass.accentRose,
+                          glow: true,
+                        ),
+                        child: const Text(
+                          'Yes, Cancel',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
+
+    final finalReason = isOther ? customReason : selectedReason;
+    customCtrl.dispose();
     if (confirmed != true) return;
 
     final db = FirebaseFirestore.instance;
     final batch = db.batch();
+
     batch.update(db.collection('Order_Queue').doc(queueDocId), {
       'job_status': 'cancelled',
+      'cancel_reason': finalReason,
       'updated_at': FieldValue.serverTimestamp(),
     });
-    batch.update(db.collection('Orders').doc(orderId), {'status': 'cancelled'});
+    batch.update(db.collection('Orders').doc(orderId), {
+      'status': 'cancelled',
+      'cancel_reason': finalReason,
+    });
 
-    // Also stamp the invoice as cancelled
     final orderSnap = await db.collection('Orders').doc(orderId).get();
     final invoiceId = orderSnap.data()?['invoice_id']?.toString();
     if (invoiceId != null && invoiceId.isNotEmpty) {
       batch.update(db.collection('Invoices').doc(invoiceId), {
         'status': 'cancelled',
+        'cancel_reason': finalReason,
         'cancelled_at': FieldValue.serverTimestamp(),
       });
     }
@@ -3694,7 +3985,7 @@ class _QueueCard extends StatelessWidget {
         'sender_uid': 'system',
         'sender_role': 'system',
         'text':
-            'Your order $orderId has been cancelled. Please contact us for assistance.',
+            'Your order $orderId has been cancelled.\nReason: $finalReason\nPlease contact us for assistance.',
         'timestamp': FieldValue.serverTimestamp(),
       });
       await threadRef.set({
@@ -3758,7 +4049,9 @@ class _QueueCard extends StatelessWidget {
                     onTap: () => Navigator.pop(ctx, false),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 9),
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
                       decoration: _Glass.glass(radius: 99),
                       child: const Text(
                         'Cancel',
@@ -3775,9 +4068,13 @@ class _QueueCard extends StatelessWidget {
                     onTap: () => Navigator.pop(ctx, true),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 9),
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
                       decoration: _Glass.solidPill(
-                          _Glass.accentBlue, glow: true),
+                        _Glass.accentBlue,
+                        glow: true,
+                      ),
                       child: const Text(
                         'Start Job',
                         style: TextStyle(
@@ -3924,7 +4221,9 @@ class _QueueCard extends StatelessWidget {
                     onTap: () => Navigator.pop(ctx, false),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 9),
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
                       decoration: _Glass.glass(radius: 99),
                       child: const Text(
                         'Cancel',
@@ -3941,9 +4240,13 @@ class _QueueCard extends StatelessWidget {
                     onTap: () => Navigator.pop(ctx, true),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 9),
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
                       decoration: _Glass.solidPill(
-                          _Glass.accentEmerald, glow: true),
+                        _Glass.accentEmerald,
+                        glow: true,
+                      ),
                       child: const Text(
                         'Mark Ready',
                         style: TextStyle(
@@ -4007,16 +4310,19 @@ class _QueueCard extends StatelessWidget {
   }
 
   Future<void> _openChat(BuildContext context) async {
-    final customerUid  = data['customer_uid']?.toString() ?? '';
+    final customerUid = data['customer_uid']?.toString() ?? '';
     final customerName = data['customer_name']?.toString() ?? 'Customer';
     if (customerUid.isEmpty) return;
 
     final orderId = data['order_id']?.toString() ?? queueDocId;
-    final products = (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final products =
+        (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final productSummary = products.isNotEmpty
-        ? products.map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}').join(', ')
+        ? products
+              .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
+              .join(', ')
         : '—';
-    final total    = (data['total_price'] as num?)?.toDouble() ?? 0;
+    final total = (data['total_price'] as num?)?.toDouble() ?? 0;
     final jobStatus = data['job_status']?.toString() ?? 'pending';
     final statusLabel = jobStatus == 'active' ? 'In Production' : 'Pending';
 
@@ -4025,49 +4331,55 @@ class _QueueCard extends StatelessWidget {
     if (user != null) {
       try {
         final doc = await FirebaseFirestore.instance
-            .collection('User').doc(user.uid).get();
+            .collection('User')
+            .doc(user.uid)
+            .get();
         employeeName = doc.data()?['full_name'] ?? employeeName;
       } catch (_) {}
     }
 
     final threadRef = FirebaseFirestore.instance
-        .collection('Messages').doc('chat_$customerUid');
+        .collection('Messages')
+        .doc('chat_$customerUid');
 
-    final msgText = 'Regarding Order: $orderId\n'
+    final msgText =
+        'Regarding Order: $orderId\n'
         'Items: $productSummary\n'
         'Status: $statusLabel\n'
         'Total: ₱${total.toStringAsFixed(2)}';
 
     await threadRef.collection('chat').add({
-      'sender_uid':  user?.uid ?? 'employee',
+      'sender_uid': user?.uid ?? 'employee',
       'sender_name': employeeName,
       'sender_role': 'employee',
-      'text':        msgText,
-      'timestamp':   FieldValue.serverTimestamp(),
+      'text': msgText,
+      'timestamp': FieldValue.serverTimestamp(),
     });
     await threadRef.set({
-      'customer_uid':    customerUid,
-      'customer_name':   customerName,
-      'last_message':    'Re: $orderId — $statusLabel',
-      'last_updated':    FieldValue.serverTimestamp(),
+      'customer_uid': customerUid,
+      'customer_name': customerName,
+      'last_message': 'Re: $orderId — $statusLabel',
+      'last_updated': FieldValue.serverTimestamp(),
       'unread_customer': FieldValue.increment(1),
     }, SetOptions(merge: true));
 
     if (context.mounted) {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (ctx) => Scaffold(
-          backgroundColor: const Color(0xFFF7F8FA),
-          body: SafeArea(
-            child: ChatScreen(
-              customerUid:  customerUid,
-              customerName: customerName,
-              isEmployee:   true,
-              embedded:     true,
-              onClose:      () => Navigator.pop(ctx),
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (ctx) => Scaffold(
+            backgroundColor: const Color(0xFFF7F8FA),
+            body: SafeArea(
+              child: ChatScreen(
+                customerUid: customerUid,
+                customerName: customerName,
+                isEmployee: true,
+                embedded: true,
+                onClose: () => Navigator.pop(ctx),
+              ),
             ),
           ),
         ),
-      ));
+      );
     }
   }
 
@@ -4108,13 +4420,13 @@ class _QueueCard extends StatelessWidget {
     final productSummary = products.isEmpty
         ? null
         : products
-            .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
-            .join(', ');
+              .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
+              .join(', ');
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // ── Amber index bubble ────────────────────────────────────────────────
+        // Amber index bubble
         Container(
           width: 28,
           height: 28,
@@ -4137,7 +4449,7 @@ class _QueueCard extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        // ── Glass card ────────────────────────────────────────────────────────
+        // Glass card
         Expanded(
           child: _BlurCard(
             radius: 14,
@@ -4185,7 +4497,9 @@ class _QueueCard extends StatelessWidget {
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 11, vertical: 4),
+                        horizontal: 11,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(99),
@@ -4221,7 +4535,7 @@ class _QueueCard extends StatelessWidget {
                   DesignFilesSection(products: products),
                 ],
 
-                // Due date row
+                // Due date row (pending/active only)
                 if (estimatedCompletion != null &&
                     jobStatus != 'cancelled') ...[
                   const SizedBox(height: 6),
@@ -4232,99 +4546,208 @@ class _QueueCard extends StatelessWidget {
                 Divider(height: 0.8, color: _Glass.borderDim),
                 const SizedBox(height: 10),
 
-                // Date + total row
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today_outlined,
-                        size: 11, color: _Glass.textMuted),
-                    const SizedBox(width: 4),
-                    Text(
-                      dateStr,
-                      style: const TextStyle(
-                          color: _Glass.textMuted, fontSize: 12),
-                    ),
-                    if (turnaround != null) ...[
-                      const SizedBox(width: 8),
-                      const Icon(Icons.schedule,
-                          size: 11, color: _Glass.textMuted),
-                      const SizedBox(width: 4),
-                      Text(
-                        '~$turnaround day${turnaround == 1 ? '' : 's'}',
-                        style: const TextStyle(
-                            color: _Glass.textMuted, fontSize: 12),
-                      ),
-                    ],
-                    const Spacer(),
-                    Text(
-                      '₱${total.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: _Glass.accentAmber,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // Action buttons
-                if (jobStatus == 'cancelled')
-                  Builder(
-                    builder: (ctx) => GestureDetector(
-                      onTap: () async {
-                        final oid =
-                            data['order_id']?.toString() ?? queueDocId;
-                        final orderSnap = await FirebaseFirestore.instance
-                            .collection('Orders')
-                            .doc(oid)
-                            .get();
-                        final invId =
-                            orderSnap.data()?['invoice_id']?.toString();
-                        if (!ctx.mounted) return;
-                        if (invId != null && invId.isNotEmpty) {
-                          Navigator.of(ctx).push(MaterialPageRoute(
-                            builder: (_) =>
-                                InvoiceScreen(invoiceId: invId),
-                          ));
-                        } else {
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            const SnackBar(
-                                content: Text('No invoice for this order')),
-                          );
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 9),
-                        decoration: BoxDecoration(
-                          color: _Glass.surfaceThin,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: _Glass.borderMid, width: 0.9),
+                // Cancelled: reason + date + invoice. Pending/active: actions.
+                if (jobStatus == 'cancelled') ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Cancel reason chip
+                      if ((data['cancel_reason']?.toString() ?? '').isNotEmpty)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _Glass.accentRose.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _Glass.accentRose.withValues(alpha: 0.22),
+                              width: 0.9,
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.info_outline,
+                                size: 13,
+                                color: _Glass.accentRose,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Reason: ${data['cancel_reason']}',
+                                  style: const TextStyle(
+                                    color: _Glass.accentRose,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.receipt_long_rounded,
-                                size: 15,
-                                color: _navyBlue.withValues(alpha: 0.7)),
-                            const SizedBox(width: 6),
-                            const Text(
-                              'View Invoice',
-                              style: TextStyle(
-                                color: _Glass.textSecondary,
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.calendar_today_outlined,
+                            size: 11,
+                            color: _Glass.textMuted,
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              dateStr,
+                              style: const TextStyle(
+                                color: _Glass.textMuted,
                                 fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (turnaround != null) ...[
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.schedule,
+                              size: 11,
+                              color: _Glass.textMuted,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '~$turnaround day${turnaround == 1 ? '' : 's'}',
+                              style: const TextStyle(
+                                color: _Glass.textMuted,
+                                fontSize: 12,
                               ),
                             ),
                           ],
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Text(
+                            '₱${total.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: _Glass.accentAmber,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const Spacer(),
+                          Builder(
+                            builder: (ctx) => GestureDetector(
+                              onTap: () async {
+                                final oid =
+                                    data['order_id']?.toString() ?? queueDocId;
+                                final orderSnap = await FirebaseFirestore
+                                    .instance
+                                    .collection('Orders')
+                                    .doc(oid)
+                                    .get();
+                                final invId = orderSnap
+                                    .data()?['invoice_id']
+                                    ?.toString();
+                                if (!ctx.mounted) return;
+                                if (invId != null && invId.isNotEmpty) {
+                                  Navigator.of(ctx).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          InvoiceScreen(invoiceId: invId),
+                                    ),
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'No invoice for this order',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 9,
+                                ),
+                                decoration: _Glass.glass(radius: 99),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.receipt_long_rounded,
+                                      size: 15,
+                                      color: _Glass.textSecondary,
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'View Invoice',
+                                      style: TextStyle(
+                                        color: _Glass.textSecondary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  // Pending / Active: date + total row
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.calendar_today_outlined,
+                        size: 11,
+                        color: _Glass.textMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        dateStr,
+                        style: const TextStyle(
+                          color: _Glass.textMuted,
+                          fontSize: 12,
                         ),
                       ),
-                    ),
+                      if (turnaround != null) ...[
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.schedule,
+                          size: 11,
+                          color: _Glass.textMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '~$turnaround day${turnaround == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            color: _Glass.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      Text(
+                        '₱${total.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: _Glass.accentAmber,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                   ),
 
-                if (jobStatus != 'cancelled')
+                  const SizedBox(height: 12),
+
+                  // Action buttons for pending/active
                   Row(
                     children: [
                       if (jobStatus == 'pending')
@@ -4332,10 +4755,11 @@ class _QueueCard extends StatelessWidget {
                           child: GestureDetector(
                             onTap: () => _startJob(context),
                             child: Container(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 9),
+                              padding: const EdgeInsets.symmetric(vertical: 9),
                               decoration: _Glass.solidPill(
-                                  _Glass.accentBlue, glow: true),
+                                _Glass.accentBlue,
+                                glow: true,
+                              ),
                               child: const Center(
                                 child: Text(
                                   'Start Job',
@@ -4354,10 +4778,11 @@ class _QueueCard extends StatelessWidget {
                           child: GestureDetector(
                             onTap: () => _markReady(context),
                             child: Container(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 9),
+                              padding: const EdgeInsets.symmetric(vertical: 9),
                               decoration: _Glass.solidPill(
-                                  _Glass.accentEmerald, glow: true),
+                                _Glass.accentEmerald,
+                                glow: true,
+                              ),
                               child: const Center(
                                 child: Text(
                                   'Mark Ready',
@@ -4377,18 +4802,22 @@ class _QueueCard extends StatelessWidget {
                         onTap: () => _cancelOrder(context),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 9),
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
                           decoration: BoxDecoration(
                             color: _Glass.accentRose.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(99),
                             border: Border.all(
-                              color:
-                                  _Glass.accentRose.withValues(alpha: 0.30),
+                              color: _Glass.accentRose.withValues(alpha: 0.30),
                               width: 0.8,
                             ),
                           ),
-                          child: const Icon(Icons.cancel_outlined,
-                              size: 18, color: _Glass.accentRose),
+                          child: const Icon(
+                            Icons.cancel_outlined,
+                            size: 18,
+                            color: _Glass.accentRose,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -4396,32 +4825,41 @@ class _QueueCard extends StatelessWidget {
                       Builder(
                         builder: (ctx) => GestureDetector(
                           onTap: () async {
-                            final orderSnap = await FirebaseFirestore
-                                .instance
+                            final orderSnap = await FirebaseFirestore.instance
                                 .collection('Orders')
                                 .doc(orderId)
                                 .get();
-                            final invId =
-                                orderSnap.data()?['invoice_id']?.toString();
+                            final invId = orderSnap
+                                .data()?['invoice_id']
+                                ?.toString();
                             if (invId != null && ctx.mounted) {
-                              Navigator.of(ctx).push(MaterialPageRoute(
-                                builder: (_) =>
-                                    InvoiceScreen(invoiceId: invId),
-                              ));
+                              Navigator.of(ctx).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      InvoiceScreen(invoiceId: invId),
+                                ),
+                              );
                             } else if (ctx.mounted) {
                               ScaffoldMessenger.of(ctx).showSnackBar(
                                 const SnackBar(
-                                    content:
-                                        Text('No invoice yet for this order')),
+                                  content: Text(
+                                    'No invoice yet for this order',
+                                  ),
+                                ),
                               );
                             }
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 9),
+                              horizontal: 12,
+                              vertical: 9,
+                            ),
                             decoration: _Glass.glass(radius: 99),
-                            child: const Icon(Icons.receipt_long_rounded,
-                                size: 18, color: _Glass.textSecondary),
+                            child: const Icon(
+                              Icons.receipt_long_rounded,
+                              size: 18,
+                              color: _Glass.textSecondary,
+                            ),
                           ),
                         ),
                       ),
@@ -4431,16 +4869,20 @@ class _QueueCard extends StatelessWidget {
                         onTap: () => _openChat(context),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 9),
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
                           decoration: _Glass.glass(radius: 99),
                           child: const Icon(
-                              Icons.chat_bubble_outline_rounded,
-                              size: 18,
-                              color: _Glass.textSecondary),
+                            Icons.chat_bubble_outline_rounded,
+                            size: 18,
+                            color: _Glass.textSecondary,
+                          ),
                         ),
                       ),
                     ],
                   ),
+                ],
               ],
             ),
           ),
@@ -4459,17 +4901,18 @@ class _DueDateRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final now  = DateTime.now();
+    final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final due   = DateTime(dueDate.year, dueDate.month, dueDate.day);
-    final diff  = due.difference(today).inDays;
+    final due = DateTime(dueDate.year, dueDate.month, dueDate.day);
+    final diff = due.difference(today).inDays;
 
     final Color color;
     final String label;
 
     if (diff < 0) {
       color = _Glass.accentRose;
-      label = 'Overdue by ${-diff} day${diff == -1 ? '' : 's'} — ${_fmt(dueDate)}';
+      label =
+          'Overdue by ${-diff} day${diff == -1 ? '' : 's'} — ${_fmt(dueDate)}';
     } else if (diff == 0) {
       color = _Glass.accentRose;
       label = 'Target completion: TODAY';
@@ -4483,7 +4926,11 @@ class _DueDateRow extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(Icons.flag_rounded, size: 14, color: color.withValues(alpha: 0.85)),
+        Icon(
+          Icons.flag_rounded,
+          size: 14,
+          color: color.withValues(alpha: 0.85),
+        ),
         const SizedBox(width: 5),
         Text(
           label,
@@ -4498,8 +4945,20 @@ class _DueDateRow extends StatelessWidget {
   }
 
   String _fmt(DateTime d) {
-    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const m = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${m[d.month - 1]} ${d.day}, ${d.year}';
   }
 }
@@ -4518,7 +4977,7 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final now       = DateTime.now();
+    final now = DateTime.now();
     final threshold = now.add(const Duration(days: 2));
 
     return StreamBuilder<QuerySnapshot>(
@@ -4529,30 +4988,35 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
       builder: (ctx, snap) {
         if (!snap.hasData) return const SizedBox.shrink();
 
-        final due = snap.data!.docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final ts = data['estimated_completion'] as Timestamp?;
-          if (ts == null) return false;
-          return ts.toDate().isBefore(threshold);
-        }).toList()
-          ..sort((a, b) {
-            final ta = ((a.data() as Map)['estimated_completion'] as Timestamp?)?.toDate();
-            final tb = ((b.data() as Map)['estimated_completion'] as Timestamp?)?.toDate();
-            if (ta == null && tb == null) return 0;
-            if (ta == null) return 1;
-            if (tb == null) return -1;
-            return ta.compareTo(tb);
-          });
+        final due =
+            snap.data!.docs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final ts = data['estimated_completion'] as Timestamp?;
+              if (ts == null) return false;
+              return ts.toDate().isBefore(threshold);
+            }).toList()..sort((a, b) {
+              final ta =
+                  ((a.data() as Map)['estimated_completion'] as Timestamp?)
+                      ?.toDate();
+              final tb =
+                  ((b.data() as Map)['estimated_completion'] as Timestamp?)
+                      ?.toDate();
+              if (ta == null && tb == null) return 0;
+              if (ta == null) return 1;
+              if (tb == null) return -1;
+              return ta.compareTo(tb);
+            });
 
         if (due.isEmpty) return const SizedBox.shrink();
 
         final overdueCount = due.where((doc) {
-          final ts = ((doc.data() as Map)['estimated_completion'] as Timestamp?)?.toDate();
+          final ts = ((doc.data() as Map)['estimated_completion'] as Timestamp?)
+              ?.toDate();
           return ts != null && ts.isBefore(now);
         }).length;
 
         final isUrgent = overdueCount > 0;
-        final accent   = isUrgent ? _Glass.accentRose : _Glass.accentAmber;
+        final accent = isUrgent ? _Glass.accentRose : _Glass.accentAmber;
 
         return AnimatedSize(
           duration: const Duration(milliseconds: 200),
@@ -4576,7 +5040,9 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
                     child: Row(
                       children: [
                         Icon(
-                          isUrgent ? Icons.warning_amber_rounded : Icons.access_time_rounded,
+                          isUrgent
+                              ? Icons.warning_amber_rounded
+                              : Icons.access_time_rounded,
                           size: 14,
                           color: accent,
                         ),
@@ -4594,7 +5060,9 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
                           ),
                         ),
                         Icon(
-                          _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                          _expanded
+                              ? Icons.expand_less_rounded
+                              : Icons.expand_more_rounded,
                           size: 16,
                           color: accent.withValues(alpha: 0.7),
                         ),
@@ -4610,27 +5078,42 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: due.map((doc) {
-                          final data      = doc.data() as Map<String, dynamic>;
-                          final orderId   = data['order_id']?.toString() ?? doc.id;
-                          final customer  = data['customer_name']?.toString() ?? '—';
-                          final status    = data['status']?.toString() ?? '';
-                          final ts        = data['estimated_completion'] as Timestamp?;
-                          final dueDate   = ts?.toDate().toLocal();
-                          final isOverdue = dueDate != null && dueDate.isBefore(now);
-                          final todayMid  = DateTime(now.year, now.month, now.day);
-                          final dueMid    = dueDate != null
-                              ? DateTime(dueDate.year, dueDate.month, dueDate.day)
+                          final data = doc.data() as Map<String, dynamic>;
+                          final orderId =
+                              data['order_id']?.toString() ?? doc.id;
+                          final customer =
+                              data['customer_name']?.toString() ?? '—';
+                          final status = data['status']?.toString() ?? '';
+                          final ts = data['estimated_completion'] as Timestamp?;
+                          final dueDate = ts?.toDate().toLocal();
+                          final isOverdue =
+                              dueDate != null && dueDate.isBefore(now);
+                          final todayMid = DateTime(
+                            now.year,
+                            now.month,
+                            now.day,
+                          );
+                          final dueMid = dueDate != null
+                              ? DateTime(
+                                  dueDate.year,
+                                  dueDate.month,
+                                  dueDate.day,
+                                )
                               : null;
-                          final diff      = dueMid?.difference(todayMid).inDays;
-                          final rowColor  = isOverdue ? _Glass.accentRose : _Glass.accentAmber;
-                          final dueLabel  = dueDate == null
+                          final diff = dueMid?.difference(todayMid).inDays;
+                          final rowColor = isOverdue
+                              ? _Glass.accentRose
+                              : _Glass.accentAmber;
+                          final dueLabel = dueDate == null
                               ? '—'
                               : diff! < 0
-                                  ? 'Overdue (${_fmtBanner(dueDate)})'
-                                  : diff == 0
-                                      ? 'Due TODAY'
-                                      : 'Due ${_fmtBanner(dueDate)}';
-                          final statusLabel = status == 'in_production' ? 'Active' : 'Pending';
+                              ? 'Overdue (${_fmtBanner(dueDate)})'
+                              : diff == 0
+                              ? 'Due TODAY'
+                              : 'Due ${_fmtBanner(dueDate)}';
+                          final statusLabel = status == 'in_production'
+                              ? 'Active'
+                              : 'Pending';
 
                           return Container(
                             padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
@@ -4650,12 +5133,16 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
                                 const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: _Glass.surfaceThin,
                                     borderRadius: BorderRadius.circular(6),
                                     border: Border.all(
-                                        color: _Glass.borderMid, width: 0.7),
+                                      color: _Glass.borderMid,
+                                      width: 0.7,
+                                    ),
                                   ),
                                   child: Text(
                                     statusLabel,
@@ -4669,7 +5156,9 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
                                 const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: rowColor.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(6),
@@ -4699,8 +5188,20 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
   }
 
   String _fmtBanner(DateTime d) {
-    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const m = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${m[d.month - 1]} ${d.day}';
   }
 }

@@ -444,14 +444,11 @@ class _FeaturedSection extends StatelessWidget {
     return _FrostedSectionContainer(
       margin: EdgeInsets.fromLTRB(h, 24, h, 0),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 22, 0, 22),
+        padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: EdgeInsets.only(right: h),
-              child: const _SectionHeader(title: 'Featured Products'),
-            ),
+            const _SectionHeader(title: 'Featured Products'),
             const SizedBox(height: 18),
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -470,10 +467,9 @@ class _FeaturedSection extends StatelessWidget {
                 }
                 final docs = snapshot.data!.docs;
                 if (docs.isEmpty) {
-                  return Container(
+                  return const SizedBox(
                     height: 120,
-                    margin: EdgeInsets.only(right: h),
-                    child: const Center(
+                    child: Center(
                       child: Text(
                         'No featured products yet',
                         style: TextStyle(color: Colors.white38, fontSize: 13),
@@ -481,42 +477,56 @@ class _FeaturedSection extends StatelessWidget {
                     ),
                   );
                 }
+
                 return LayoutBuilder(
-                  builder: (_, boxConstraints) {
-                    const gap = 14.0;
-                    const listRightPadding = 20.0;
-                    final availW = boxConstraints.maxWidth - listRightPadding;
+                  builder: (_, box) {
+                    final isWideLayout = box.maxWidth >= 600;
+                    // Show 3 full cards on wide screens; 1.2 cards on mobile (peek effect)
+                    final visibleCount = isWideLayout ? 3.0 : 1.2;
+                    const gap = 12.0;
+                    final cardW =
+                        (box.maxWidth - gap * (visibleCount - 1)) /
+                        visibleCount;
+                    final imgH = cardW * 0.72;
+                    const textAreaH = 118.0;
+                    final cardH = imgH + textAreaH;
 
-                    // Fit exactly 3 cards; clamp so a single card isn't tiny
-                    final idealW = (availW - gap * 2) / 3;
-                    final cardW = idealW.clamp(200.0, 320.0);
-                    final imgH = cardW * 0.85;
+                    final scrollCtrl = ScrollController();
 
-                    // Let the ListView be as tall as the cards naturally are.
-                    // We use a fixed height derived from content so the
-                    // horizontal ListView has a bounded height, but add enough
-                    // generous buffer so content never clips
-                    const textAreaH = 140.0;
-                    final listH = imgH + textAreaH;
-
-                    return SizedBox(
-                      height: listH,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.only(right: listRightPadding),
-                        itemCount: docs.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: gap),
-                        itemBuilder: (_, i) {
-                          final d = docs[i].data() as Map<String, dynamic>;
-                          final docId = docs[i].id;
-                          return _FeaturedCard(
-                            data: d,
-                            docId: docId,
-                            cardWidth: cardW,
-                            imageHeight: imgH,
-                            totalHeight: listH,
-                          );
-                        },
+                    return Scrollbar(
+                      controller: scrollCtrl,
+                      thumbVisibility: isWideLayout,
+                      trackVisibility: isWideLayout,
+                      thickness: 4,
+                      radius: const Radius.circular(3),
+                      child: SizedBox(
+                        // Extra bottom space for scrollbar on wide screens
+                        height: cardH + (isWideLayout ? 12 : 0),
+                        child: ListView.separated(
+                          controller: scrollCtrl,
+                          scrollDirection: Axis.horizontal,
+                          // Clip so partial card on mobile shows peek effect
+                          clipBehavior: Clip.none,
+                          padding: EdgeInsets.only(
+                            bottom: isWideLayout ? 10 : 0,
+                          ),
+                          itemCount: docs.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: gap),
+                          itemBuilder: (context, i) {
+                            final d = docs[i].data() as Map<String, dynamic>;
+                            return SizedBox(
+                              width: cardW,
+                              child: _FeaturedCard(
+                                data: d,
+                                docId: docs[i].id,
+                                cardWidth: cardW,
+                                imageHeight: imgH,
+                                totalHeight: cardH,
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     );
                   },
@@ -576,7 +586,6 @@ class _FeaturedCardState extends State<_FeaturedCard> {
         onTap: () => _goToOrder(context),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: widget.cardWidth,
           height: widget.totalHeight,
           transform: Matrix4.translationValues(0, _hovered ? -5 : 0, 0),
           decoration: BoxDecoration(
@@ -653,7 +662,7 @@ class _FeaturedCardState extends State<_FeaturedCard> {
               // ── Text + Button ──
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -666,19 +675,19 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                             name,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              height: 1.35,
+                              height: 1.3,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 3),
                           Text(
                             price != null ? '₱$price' : 'See pricing',
                             style: TextStyle(
                               color: AppTheme.gold,
-                              fontSize: 15,
+                              fontSize: 13,
                               fontWeight: FontWeight.w800,
                               shadows: [
                                 Shadow(
@@ -696,7 +705,7 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                           onTap: () => _goToOrder(context),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
                               color: _hovered
                                   ? AppTheme.gold
@@ -722,14 +731,14 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                               children: [
                                 Icon(
                                   Icons.shopping_cart_outlined,
-                                  size: 14,
+                                  size: 13,
                                   color: _hovered
                                       ? const Color(0xFF1A0A00)
                                       : AppTheme.gold,
                                 ),
-                                const SizedBox(width: 5),
+                                const SizedBox(width: 4),
                                 Text(
-                                  'Add to Cart',
+                                  'Order',
                                   style: TextStyle(
                                     color: _hovered
                                         ? const Color(0xFF1A0A00)
@@ -873,52 +882,58 @@ class _ServicesSection extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            // Use LayoutBuilder + Wrap so it NEVER overflows regardless of width
             LayoutBuilder(
               builder: (context, constraints) {
                 final totalW = constraints.maxWidth;
-                // On wide screens show 3 in a row, narrow show 1 per row
-                // Breakpoint: if each card can be at least 160px wide in 3-col layout, go wide
-                final threeColMinW = 160.0 * 3 + 14.0 * 2; // 3 cards + 2 gaps
-                final useRow = totalW >= threeColMinW;
+                const gap = 12.0;
 
-                if (useRow) {
-                  const gap = 14.0;
-                  final cardW = (totalW - gap * 2) / 3;
-                  // IntrinsicHeight makes all cards match the tallest one
-                  return IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (int i = 0; i < _services.length; i++) ...[
-                          if (i > 0) const SizedBox(width: gap),
-                          SizedBox(
-                            width: cardW,
-                            child: _ServiceCard(
-                              service: _services[i],
-                              compact: false,
-                              onTap: () =>
-                                  onViewProducts(_services[i].category),
-                            ),
+                // 3-col ≥ 560px | 2-col ≥ 360px | 1-col below
+                final cols = totalW >= 560
+                    ? 3
+                    : totalW >= 360
+                    ? 2
+                    : 1;
+
+                final cardW = (totalW - gap * (cols - 1)) / cols;
+
+                // Build rows of `cols` cards
+                final rows = <Widget>[];
+                for (int i = 0; i < _services.length; i += cols) {
+                  final rowChildren = <Widget>[];
+                  for (int j = 0; j < cols; j++) {
+                    final idx = i + j;
+                    if (j > 0) rowChildren.add(const SizedBox(width: gap));
+                    if (idx < _services.length) {
+                      rowChildren.add(
+                        SizedBox(
+                          width: cardW,
+                          child: _ServiceCard(
+                            service: _services[idx],
+                            compact: cols >= 2,
+                            onTap: () =>
+                                onViewProducts(_services[idx].category),
                           ),
-                        ],
-                      ],
+                        ),
+                      );
+                    } else {
+                      // Empty spacer to keep layout stable
+                      rowChildren.add(SizedBox(width: cardW));
+                    }
+                  }
+                  rows.add(
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: rowChildren,
+                      ),
                     ),
                   );
-                } else {
-                  return Column(
-                    children: [
-                      for (int i = 0; i < _services.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 12),
-                        _ServiceCard(
-                          service: _services[i],
-                          compact: true,
-                          onTap: () => onViewProducts(_services[i].category),
-                        ),
-                      ],
-                    ],
-                  );
+                  if (i + cols < _services.length) {
+                    rows.add(const SizedBox(height: gap));
+                  }
                 }
+
+                return Column(children: rows);
               },
             ),
           ],
@@ -978,8 +993,7 @@ class _ServiceCardState extends State<_ServiceCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           transform: Matrix4.translationValues(0, _hovered ? -4 : 0, 0),
-          padding: EdgeInsets.all(widget.compact ? 16 : 20),
-          // height: double.infinity lets it stretch to IntrinsicHeight
+          padding: EdgeInsets.all(widget.compact ? 14 : 20),
           constraints: const BoxConstraints(minHeight: 0),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
@@ -1021,8 +1035,8 @@ class _ServiceCardState extends State<_ServiceCard> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(11),
                       color: s.accentColor.withValues(alpha: 0.32),
@@ -1031,7 +1045,7 @@ class _ServiceCardState extends State<_ServiceCard> {
                         width: 1,
                       ),
                     ),
-                    child: Icon(s.icon, color: s.iconColor, size: 20),
+                    child: Icon(s.icon, color: s.iconColor, size: 19),
                   ),
                   if (s.tag != null) ...[
                     const SizedBox(width: 8),
@@ -1066,23 +1080,23 @@ class _ServiceCardState extends State<_ServiceCard> {
                   ],
                 ],
               ),
-              SizedBox(height: widget.compact ? 12 : 14),
+              SizedBox(height: widget.compact ? 10 : 14),
               Text(
                 s.title,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: widget.compact ? 13 : 14,
+                  fontSize: widget.compact ? 12 : 14,
                   fontWeight: FontWeight.w700,
                   height: 1.3,
                 ),
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 4),
               Text(
                 s.subtitle,
                 style: TextStyle(
                   color: s.iconColor.withValues(alpha: 0.65),
                   fontSize: widget.compact ? 11 : 12,
-                  height: 1.5,
+                  height: 1.45,
                 ),
               ),
             ],
