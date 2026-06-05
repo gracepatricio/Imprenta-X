@@ -151,6 +151,79 @@ class _AdminProductManagementScreenState
   ];
 
   String? _categoryFilter;
+  bool _seeding = false;
+
+  Future<void> _seedProducts() async {
+    setState(() => _seeding = true);
+    try {
+      final col = FirebaseFirestore.instance.collection('Products');
+      final existing = await col.get();
+      final existingNames =
+          existing.docs.map((d) => d.data()['product_name']?.toString()).toSet();
+
+      final toAdd = _kInitialProducts
+          .where((p) => !existingNames.contains(p['product_name']))
+          .toList();
+
+      if (toAdd.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text('All products already exist — nothing to seed'),
+            backgroundColor: _Glass.accentEmerald,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            margin: const EdgeInsets.all(16),
+          ));
+        }
+        return;
+      }
+
+      // Firestore batches are capped at 500 ops; split if needed.
+      const batchSize = 400;
+      for (int start = 0; start < toAdd.length; start += batchSize) {
+        final batch = FirebaseFirestore.instance.batch();
+        final chunk = toAdd.sublist(
+            start, (start + batchSize).clamp(0, toAdd.length));
+        for (final p in chunk) {
+          final ref = col.doc();
+          batch.set(ref, {
+            ...p,
+            'product_id': ref.id,
+            'image_url': '',
+            'is_available': true,
+            'featured': false,
+            'bill_of_materials': [],
+            'bulk_pricing': [],
+            'created_at': FieldValue.serverTimestamp(),
+            'updated_at': FieldValue.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${toAdd.length} product(s) seeded'),
+          backgroundColor: _Glass.accentEmerald,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          margin: const EdgeInsets.all(16),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Seed error: $e'),
+          backgroundColor: _Glass.accentRose,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          margin: const EdgeInsets.all(16),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _seeding = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -211,6 +284,58 @@ class _AdminProductManagementScreenState
                           ],
                         ),
                       ),
+                      // Seed Products ghost pill
+                      GestureDetector(
+                        onTap: _seeding ? null : _seedProducts,
+                        child: AnimatedOpacity(
+                          opacity: _seeding ? 0.5 : 1.0,
+                          duration: const Duration(milliseconds: 150),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 9,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _Glass.surfaceThin,
+                              borderRadius: BorderRadius.circular(99),
+                              border: Border.all(
+                                color: _Glass.borderMid,
+                                width: 0.9,
+                              ),
+                              boxShadow: const [_Glass.rowShadow],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _seeding
+                                    ? const SizedBox(
+                                        width: 13,
+                                        height: 13,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: _Glass.textSecondary,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.add_box_outlined,
+                                        size: 14,
+                                        color: _Glass.textSecondary,
+                                      ),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'Seed',
+                                  style: TextStyle(
+                                    color: _Glass.textSecondary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       // Add Product pill button
                       GestureDetector(
                         onTap: () => _openProductForm(context, null),
@@ -429,13 +554,72 @@ class _AdminProductManagementScreenState
             ),
           ],
         ),
-        content: Text(
-          'Are you sure you want to delete "$name"? This cannot be undone.',
-          style: const TextStyle(
-            color: _Glass.textSecondary,
-            fontSize: 13,
-            height: 1.5,
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Delete "$name" from the product catalog?',
+              style: const TextStyle(
+                color: _Glass.textSecondary,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _Glass.accentEmerald.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _Glass.accentEmerald.withValues(alpha: 0.25),
+                ),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.check_circle_outline,
+                      color: _Glass.accentEmerald, size: 14),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Safe: existing orders, invoices, and sales records are NOT affected — '
+                      'they store a full snapshot of the product at order time.',
+                      style: TextStyle(
+                          color: _Glass.accentEmerald,
+                          fontSize: 11,
+                          height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _amber.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _amber.withValues(alpha: 0.25)),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, color: _amber, size: 14),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Note: customers who have this product in their active cart '
+                      'will see an error at checkout.',
+                      style: TextStyle(
+                          color: _amber, fontSize: 11, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           GestureDetector(
@@ -557,11 +741,22 @@ class _ProductTile extends StatelessWidget {
     final name = data['product_name']?.toString() ?? '';
     final cat = data['category']?.toString() ?? '';
     final price = data['price'];
-    final unit = data['pricing_unit']?.toString() ?? '';
+    final rawUnit = data['pricing_unit']?.toString() ?? '';
+    final pricingQty = data['pricing_qty'];
+    final unitDisplay = rawUnit == 'per_sqft'
+        ? '/ sq ft'
+        : rawUnit == 'per_sqin'
+        ? '/ sq in'
+        : rawUnit == 'per_piece'
+        ? '/ piece'
+        : rawUnit == 'per_qty'
+        ? '/ ${pricingQty ?? 100} pcs'
+        : rawUnit;
     final imageUrl = data['image_url']?.toString() ?? '';
     final isAvailable = data['is_available'] as bool? ?? false;
-    final hasOverride = data['availability_override'] != null;
     final isFeatured = data['featured'] as bool? ?? false;
+    final variants = (data['material_options'] as List?)?.cast<String>() ?? [];
+    final hasVariants = variants.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -659,11 +854,34 @@ class _ProductTile extends StatelessWidget {
                       ),
                     if (price != null)
                       Text(
-                        '₱$price${unit.isNotEmpty ? ' $unit' : ''}',
+                        '₱$price${unitDisplay.isNotEmpty ? ' $unitDisplay' : ''}',
                         style: const TextStyle(
                           color: _amber,
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    if (hasVariants)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _Glass.accentViolet.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(
+                            color: _Glass.accentViolet.withValues(alpha: 0.35),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          '${variants.length} variant${variants.length == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            color: _Glass.accentViolet,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     // Availability badge
@@ -685,8 +903,7 @@ class _ProductTile extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        '${isAvailable ? 'Available' : 'Unavailable'}'
-                        '${hasOverride ? ' (manual)' : ''}',
+                        isAvailable ? 'Available' : 'Unavailable',
                         style: TextStyle(
                           color: isAvailable
                               ? _Glass.accentEmerald
@@ -861,15 +1078,16 @@ class _ProductFormDialog extends StatefulWidget {
 class _ProductFormDialogState extends State<_ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
+  late final TextEditingController _shortDescCtrl;
   late final TextEditingController _descCtrl;
   late final TextEditingController _priceCtrl;
-  late final TextEditingController _pricingUnitCtrl;
   late final TextEditingController _minQtyCtrl;
-  late final TextEditingController _uomCtrl;
+  late final TextEditingController _pricingQtyCtrl; // only for per_qty
 
+  // 'per_sqft' | 'per_sqin' | 'per_piece' | 'per_qty'
+  String _pricingUnit = 'per_sqft';
   String? _selectedCategory;
   bool _isAvailable = true;
-  bool? _availabilityOverride;
   bool _isFeatured = false;
   String _imageUrl = '';
   Uint8List? _pickedImageBytes;
@@ -882,28 +1100,50 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   bool _materialsLoaded = false;
   List<String> _materialOptions = [];
   final List<TextEditingController> _optionControllers = [];
+  // Optional per-variant price fields (parallel to _optionControllers)
+  final List<TextEditingController> _optionPriceControllers = [];
 
   @override
   void initState() {
     super.initState();
     final e = widget.existing;
     _nameCtrl = TextEditingController(text: e?['product_name'] ?? '');
+    // Pre-fill short_description from the existing description when editing
+    // an old product that has no short_description yet.
+    final existingShort = e?['short_description']?.toString() ?? '';
+    _shortDescCtrl = TextEditingController(
+      text: existingShort.isNotEmpty
+          ? existingShort
+          : (e?['description']?.toString() ?? ''),
+    );
     _descCtrl = TextEditingController(text: e?['description'] ?? '');
     _priceCtrl = TextEditingController(text: e?['price']?.toString() ?? '');
-    _pricingUnitCtrl = TextEditingController(text: e?['pricing_unit'] ?? '');
     _minQtyCtrl = TextEditingController(
       text: e?['min_quantity']?.toString() ?? '1',
     );
-    _uomCtrl = TextEditingController(text: e?['unit_of_measurement'] ?? '');
     _selectedCategory = e?['category'];
-    // If the product has an old category not in the current list, clear it
-    // so the dropdown doesn't throw an assertion error.
+    // If the product has an old category not in the current list, clear it.
     if (_selectedCategory != null &&
         !widget.categories.contains(_selectedCategory)) {
       _selectedCategory = null;
     }
+    // Map pricing_unit string to enum (handles old free-text values too).
+    final rawUnit = e?['pricing_unit']?.toString() ?? '';
+    if (rawUnit == 'per_sqin') {
+      _pricingUnit = 'per_sqin';
+    } else if (rawUnit == 'per_qty') {
+      _pricingUnit = 'per_qty';
+    } else if (rawUnit == 'per_piece' ||
+        rawUnit.toLowerCase().contains('piece')) {
+      _pricingUnit = 'per_piece';
+    } else {
+      _pricingUnit = 'per_sqft';
+    }
+
+    _pricingQtyCtrl = TextEditingController(
+      text: (e?['pricing_qty'] as num?)?.toString() ?? '100',
+    );
     _isAvailable = e?['is_available'] as bool? ?? true;
-    _availabilityOverride = e?['availability_override'] as bool?;
     _isFeatured = e?['featured'] as bool? ?? false;
     _imageUrl = e?['image_url'] ?? '';
     _bom = List<Map<String, dynamic>>.from(
@@ -921,8 +1161,14 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _materialOptions = List<String>.from(
       (e?['material_options'] as List?)?.map((x) => x.toString()) ?? [],
     );
+    final varPrices =
+        (e?['variant_prices'] as Map?)?.cast<String, dynamic>() ?? {};
     for (final opt in _materialOptions) {
       _optionControllers.add(TextEditingController(text: opt));
+      final vp = varPrices[opt];
+      _optionPriceControllers.add(
+        TextEditingController(text: vp != null ? vp.toString() : ''),
+      );
     }
     _loadMaterials();
   }
@@ -930,12 +1176,13 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _shortDescCtrl.dispose();
     _descCtrl.dispose();
     _priceCtrl.dispose();
-    _pricingUnitCtrl.dispose();
     _minQtyCtrl.dispose();
-    _uomCtrl.dispose();
+    _pricingQtyCtrl.dispose();
     for (final c in _optionControllers) c.dispose();
+    for (final c in _optionPriceControllers) c.dispose();
     super.dispose();
   }
 
@@ -993,27 +1240,54 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
           : FirebaseFirestore.instance.collection('Products').doc().id;
 
       final uploadedUrl = await _uploadImage(docId);
-      final computedAvailable = _availabilityOverride ?? _isAvailable;
 
-      final data = {
+      // Sort bulk pricing tiers by min_quantity ascending for logical order.
+      final sortedBulk = List<Map<String, dynamic>>.from(_bulkPricing)
+        ..sort((a, b) => ((a['min_quantity'] as num?) ?? 0)
+            .compareTo((b['min_quantity'] as num?) ?? 0));
+
+      // Build variant prices map (only include variants with a price set).
+      final variantPricesMap = <String, double>{};
+      for (int i = 0; i < _optionControllers.length; i++) {
+        final name = _optionControllers[i].text.trim();
+        if (name.isEmpty) continue;
+        if (i < _optionPriceControllers.length) {
+          final p = double.tryParse(_optionPriceControllers[i].text.trim());
+          if (p != null) variantPricesMap[name] = p;
+        }
+      }
+
+      // Compute base price: lowest variant price if variants have prices,
+      // otherwise use the explicitly entered price.
+      final enteredPrice = double.tryParse(_priceCtrl.text.trim());
+      final basePrice = variantPricesMap.isNotEmpty
+          ? variantPricesMap.values.reduce((a, b) => a < b ? a : b)
+          : enteredPrice;
+
+      final data = <String, dynamic>{
         'product_name': _nameCtrl.text.trim(),
         'category': _selectedCategory,
+        'short_description': _shortDescCtrl.text.trim(),
         'description': _descCtrl.text.trim(),
-        'price': double.tryParse(_priceCtrl.text.trim()),
-        'pricing_unit': _pricingUnitCtrl.text.trim(),
+        'price': basePrice,
+        'pricing_unit': _pricingUnit,
+        if (_pricingUnit == 'per_qty')
+          'pricing_qty': int.tryParse(_pricingQtyCtrl.text.trim()) ?? 100,
         'min_quantity': int.tryParse(_minQtyCtrl.text.trim()) ?? 1,
-        'unit_of_measurement': _uomCtrl.text.trim(),
         'image_url': uploadedUrl ?? '',
-        'is_available': computedAvailable,
-        'availability_override': _availabilityOverride,
+        'is_available': _isAvailable,
         'featured': _isFeatured,
         'material_options': _optionControllers
             .map((c) => c.text.trim())
             .where((s) => s.isNotEmpty)
             .toList(),
+        if (variantPricesMap.isNotEmpty) 'variant_prices': variantPricesMap,
         'bill_of_materials': _bom,
-        'bulk_pricing': _bulkPricing,
+        'bulk_pricing': sortedBulk,
         'updated_at': FieldValue.serverTimestamp(),
+        // Remove legacy fields.
+        'availability_override': FieldValue.delete(),
+        'unit_of_measurement': FieldValue.delete(),
       };
       if (!isEdit) {
         data['created_at'] = FieldValue.serverTimestamp();
@@ -1241,17 +1515,45 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Description
-                      _SectionLabel('Description'),
+                      // Short Description
+                      _SectionLabel('Short Description'),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Shown on the product card — keep it to one line.',
+                        style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                      ),
                       const SizedBox(height: 6),
                       TextFormField(
-                        controller: _descCtrl,
-                        maxLines: 2,
+                        controller: _shortDescCtrl,
+                        maxLines: 1,
                         style: const TextStyle(
                           color: _Glass.textPrimary,
                           fontSize: 13,
                         ),
-                        decoration: _Glass.field('Brief description'),
+                        decoration: _Glass.field(
+                          'e.g. UV-resistant, waterproof tarpaulin',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Full Description
+                      _SectionLabel('Full Description'),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Detailed info shown on the order/product page.',
+                        style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _descCtrl,
+                        maxLines: 4,
+                        style: const TextStyle(
+                          color: _Glass.textPrimary,
+                          fontSize: 13,
+                        ),
+                        decoration: _Glass.field(
+                          'Detailed description, specs, notes…',
+                        ),
                       ),
                       const SizedBox(height: 12),
 
@@ -1295,21 +1597,75 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _SectionLabel('Pricing Unit'),
+                                _SectionLabel('Pricing Unit *'),
                                 const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _pricingUnitCtrl,
+                                DropdownButtonFormField<String>(
+                                  value: _pricingUnit,
+                                  dropdownColor: _Glass.surface,
                                   style: const TextStyle(
                                     color: _Glass.textPrimary,
                                     fontSize: 13,
                                   ),
-                                  decoration: _Glass.field(
-                                    'per sqft / piece / fixed',
+                                  decoration: _Glass.field(''),
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: 'per_sqft',
+                                      child: Text('per sq ft'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'per_sqin',
+                                      child: Text('per sq in'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'per_piece',
+                                      child: Text('per piece'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'per_qty',
+                                      child: Text('per qty (pcs)'),
+                                    ),
+                                  ],
+                                  onChanged: (v) => setState(
+                                    () => _pricingUnit = v ?? 'per_sqft',
                                   ),
-                                  validator: (v) => v?.trim().isEmpty == true
-                                      ? 'Required'
-                                      : null,
                                 ),
+                                if (_pricingUnit == 'per_qty') ...[
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      const Text(
+                                        'Pcs per unit:',
+                                        style: TextStyle(
+                                          color: _Glass.textMuted,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      SizedBox(
+                                        width: 80,
+                                        child: TextFormField(
+                                          controller: _pricingQtyCtrl,
+                                          keyboardType: TextInputType.number,
+                                          style: const TextStyle(
+                                            color: _Glass.textPrimary,
+                                            fontSize: 13,
+                                          ),
+                                          decoration: _Glass.field('100'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          '→ e.g. ₱${_priceCtrl.text.isEmpty ? '?' : _priceCtrl.text} per ${_pricingQtyCtrl.text} pcs',
+                                          style: const TextStyle(
+                                            color: _Glass.textMuted,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -1317,156 +1673,89 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Min Qty + UOM
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _SectionLabel('Min. Quantity'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _minQtyCtrl,
-                                  keyboardType: TextInputType.number,
-                                  style: const TextStyle(
-                                    color: _Glass.textPrimary,
-                                    fontSize: 13,
-                                  ),
-                                  decoration: _Glass.field('1'),
-                                ),
-                              ],
-                            ),
+                      // Min Quantity
+                      _SectionLabel('Minimum Order Quantity'),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        width: 160,
+                        child: TextFormField(
+                          controller: _minQtyCtrl,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(
+                            color: _Glass.textPrimary,
+                            fontSize: 13,
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _SectionLabel('Unit of Measurement'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _uomCtrl,
-                                  style: const TextStyle(
-                                    color: _Glass.textPrimary,
-                                    fontSize: 13,
-                                  ),
-                                  decoration: _Glass.field('pcs / sqft / roll'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                          decoration: _Glass.field('1'),
+                          validator: (v) {
+                            if (v != null &&
+                                v.isNotEmpty &&
+                                int.tryParse(v) == null) return 'Whole number';
+                            return null;
+                          },
+                        ),
                       ),
                       const SizedBox(height: 16),
 
                       // ── Availability ────────────────────────────────────
-                      _SectionLabel('Availability'),
-                      const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
-                          color: _Glass.surfaceThin,
+                          color: _isAvailable
+                              ? _Glass.accentEmerald.withValues(alpha: 0.06)
+                              : _Glass.accentRose.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: _Glass.borderMid,
+                            color: _isAvailable
+                                ? _Glass.accentEmerald.withValues(alpha: 0.30)
+                                : _Glass.accentRose.withValues(alpha: 0.30),
                             width: 0.9,
                           ),
                         ),
-                        child: Column(
+                        child: Row(
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: const [
-                                      Text(
-                                        'Manual override',
-                                        style: TextStyle(
-                                          color: _Glass.textPrimary,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      SizedBox(height: 2),
-                                      Text(
-                                        'Force available/unavailable, ignoring BOM check',
-                                        style: TextStyle(
-                                          color: _Glass.textMuted,
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Switch(
-                                  value: _availabilityOverride != null,
-                                  onChanged: (v) => setState(
-                                    () => _availabilityOverride = v
-                                        ? _isAvailable
-                                        : null,
-                                  ),
-                                  activeColor: _amber,
-                                ),
-                              ],
+                            Icon(
+                              _isAvailable
+                                  ? Icons.check_circle_outline_rounded
+                                  : Icons.cancel_outlined,
+                              color: _isAvailable
+                                  ? _Glass.accentEmerald
+                                  : _Glass.accentRose,
+                              size: 18,
                             ),
-                            if (_availabilityOverride != null) ...[
-                              Divider(
-                                color: _Glass.borderDim,
-                                height: 16,
-                                thickness: 0.8,
-                              ),
-                              Row(
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Expanded(
-                                    child: Text(
-                                      'Set as available',
-                                      style: TextStyle(
-                                        color: _Glass.textSecondary,
-                                        fontSize: 13,
-                                      ),
+                                  Text(
+                                    'Set as available',
+                                    style: TextStyle(
+                                      color: _isAvailable
+                                          ? _Glass.accentEmerald
+                                          : _Glass.accentRose,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  Switch(
-                                    value: _availabilityOverride == true,
-                                    onChanged: (v) => setState(
-                                      () => _availabilityOverride = v,
+                                  const Text(
+                                    'Visible to customers when enabled',
+                                    style: TextStyle(
+                                      color: _Glass.textMuted,
+                                      fontSize: 11,
                                     ),
-                                    activeColor: _Glass.accentEmerald,
                                   ),
                                 ],
                               ),
-                            ],
-                            if (_bom.isEmpty &&
-                                _availabilityOverride == null) ...[
-                              Divider(
-                                color: _Glass.borderDim,
-                                height: 16,
-                                thickness: 0.8,
-                              ),
-                              Row(
-                                children: [
-                                  const Expanded(
-                                    child: Text(
-                                      'No BOM set — toggle availability manually',
-                                      style: TextStyle(
-                                        color: _Glass.textMuted,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ),
-                                  Switch(
-                                    value: _isAvailable,
-                                    onChanged: (v) =>
-                                        setState(() => _isAvailable = v),
-                                    activeColor: _Glass.accentEmerald,
-                                  ),
-                                ],
-                              ),
-                            ],
+                            ),
+                            Switch(
+                              value: _isAvailable,
+                              onChanged: (v) =>
+                                  setState(() => _isAvailable = v),
+                              activeColor: _Glass.accentEmerald,
+                            ),
                           ],
                         ),
                       ),
@@ -1532,24 +1821,26 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 18),
 
-                      // ── Material Options ────────────────────────────────
+                      // ── Variants ────────────────────────────────────────
                       Row(
                         children: [
-                          _SectionLabel('Material Options'),
+                          _SectionLabel('Variants'),
                           const Spacer(),
                           _FormPillButton(
-                            label: 'Add Option',
+                            label: 'Add Variant',
                             icon: Icons.add_rounded,
                             onPressed: () => setState(() {
                               _materialOptions.add('');
                               _optionControllers.add(TextEditingController());
+                              _optionPriceControllers
+                                  .add(TextEditingController());
                             }),
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'e.g. "13oz", "10oz" — customers choose one when ordering.',
+                        'e.g. "13oz", "10oz" — customers select one when ordering. Each variant can have its own BOM below.',
                         style: TextStyle(color: _Glass.textMuted, fontSize: 11),
                       ),
                       const SizedBox(height: 8),
@@ -1557,20 +1848,58 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                         const Padding(
                           padding: EdgeInsets.only(bottom: 8),
                           child: Text(
-                            'No options — all customers will use the same materials.',
+                            'No variants — product has a single fixed specification.',
                             style: TextStyle(
                               color: _Glass.textMuted,
                               fontSize: 11,
                             ),
                           ),
                         ),
+                      if (_materialOptions.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: const [
+                              Expanded(
+                                flex: 5,
+                                child: Text(
+                                  'Variant name',
+                                  style: TextStyle(
+                                    color: _Glass.textMuted,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 6),
+                              SizedBox(
+                                width: 90,
+                                child: Text(
+                                  'Price (₱) — optional',
+                                  style: TextStyle(
+                                    color: _Glass.textMuted,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              SizedBox(width: 36),
+                            ],
+                          ),
+                        ),
+                      ],
                       ..._materialOptions.asMap().entries.map((entry) {
                         final ctrl = _optionControllers[entry.key];
+                        final priceCtrl = entry.key < _optionPriceControllers.length
+                            ? _optionPriceControllers[entry.key]
+                            : TextEditingController();
                         return Container(
                           margin: const EdgeInsets.only(bottom: 6),
                           child: Row(
                             children: [
                               Expanded(
+                                flex: 5,
                                 child: TextFormField(
                                   controller: ctrl,
                                   style: const TextStyle(
@@ -1578,13 +1907,28 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                     fontSize: 13,
                                   ),
                                   decoration: _Glass.field(
-                                    'Option name, e.g. 13oz',
+                                    'Variant name, e.g. 13oz',
                                   ),
                                   onChanged: (v) =>
                                       _materialOptions[entry.key] = v,
                                 ),
                               ),
                               const SizedBox(width: 6),
+                              SizedBox(
+                                width: 90,
+                                child: TextFormField(
+                                  controller: priceCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  style: const TextStyle(
+                                    color: _Glass.textPrimary,
+                                    fontSize: 13,
+                                  ),
+                                  decoration: _Glass.field('e.g. 5.00'),
+                                ),
+                              ),
+                              const SizedBox(width: 2),
                               IconButton(
                                 icon: Icon(
                                   Icons.remove_circle_outline,
@@ -1596,6 +1940,12 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                                   _optionControllers
                                       .removeAt(entry.key)
                                       .dispose();
+                                  if (entry.key <
+                                      _optionPriceControllers.length) {
+                                    _optionPriceControllers
+                                        .removeAt(entry.key)
+                                        .dispose();
+                                  }
                                 }),
                                 padding: EdgeInsets.zero,
                               ),
@@ -1888,7 +2238,7 @@ class _BomEditRowState extends State<_BomEditRow> {
       const DropdownMenuItem(
         value: '',
         child: Text(
-          'All options',
+          'All variants',
           style: TextStyle(color: _Glass.textMuted, fontSize: 12),
         ),
       ),
@@ -2054,7 +2404,7 @@ class _BomEditRowState extends State<_BomEditRow> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'For option',
+                      'For variant',
                       style: TextStyle(
                         color: _Glass.textMuted,
                         fontSize: 10,
@@ -2401,3 +2751,228 @@ class _SectionLabel extends StatelessWidget {
     ),
   );
 }
+
+// =============================================================================
+// Initial product seed data (18 products, 3 grouped with variants)
+// =============================================================================
+const _kInitialProducts = [
+  // ── Large Format & Signage ─────────────────────────────────────────────────
+  {
+    'product_name': 'Tarpaulin',
+    'category': 'Large Format & Signage',
+    'short_description': '',
+    'description': '',
+    'price': 25.0,
+    'pricing_unit': 'per_sqft',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'Panaflex',
+    'category': 'Large Format & Signage',
+    'short_description': '',
+    'description': '',
+    'price': 95.0,
+    'pricing_unit': 'per_sqft',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'Signage (face+frame+install)',
+    'category': 'Large Format & Signage',
+    'short_description': '',
+    'description': '',
+    'price': 750.0,
+    'pricing_unit': 'per_piece',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'Roll-up Banner',
+    'category': 'Large Format & Signage',
+    'short_description': '',
+    'description': '',
+    'price': 1650.0,
+    'pricing_unit': 'per_piece',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'X-banner',
+    'category': 'Large Format & Signage',
+    'short_description': '',
+    'description': '',
+    'price': 700.0,
+    'pricing_unit': 'per_piece',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'PVC Menu',
+    'category': 'Large Format & Signage',
+    'short_description': '',
+    'description': '',
+    'price': 250.0,
+    'pricing_unit': 'per_piece',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  // Acrylic Signage — grouped with variant pricing
+  {
+    'product_name': 'Acrylic Signage',
+    'category': 'Large Format & Signage',
+    'short_description': '',
+    'description': '',
+    'price': 120.0, // lowest variant price
+    'pricing_unit': 'per_sqft',
+    'min_quantity': 1,
+    'material_options': [
+      'Clear 5mm (3×8)',
+      'Chalk White (4×4)',
+      'Diffuser 3mm (4×8)',
+      'Diffuser 1.5mm (4×8)',
+      'Clear 3mm (4×8)',
+      'Clear 1.5mm (4×8)',
+    ],
+    'variant_prices': {
+      'Clear 5mm (3×8)': 310.0,
+      'Chalk White (4×4)': 200.0,
+      'Diffuser 3mm (4×8)': 210.0,
+      'Diffuser 1.5mm (4×8)': 140.0,
+      'Clear 3mm (4×8)': 190.0,
+      'Clear 1.5mm (4×8)': 120.0,
+    },
+  },
+
+  // ── Stickers & Labels ──────────────────────────────────────────────────────
+  {
+    'product_name': 'Photo Sticker',
+    'category': 'Stickers & Labels',
+    'short_description': '',
+    'description': '',
+    'price': 0.60,
+    'pricing_unit': 'per_sqin',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'Outdoor Sticker',
+    'category': 'Stickers & Labels',
+    'short_description': '',
+    'description': '',
+    'price': 0.80,
+    'pricing_unit': 'per_sqin',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'Sticker with Sintra',
+    'category': 'Stickers & Labels',
+    'short_description': '',
+    'description': '',
+    'price': 2.00,
+    'pricing_unit': 'per_sqin',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+
+  // ── Photo & Card Prints ────────────────────────────────────────────────────
+  // Photo Print — grouped with variant pricing
+  {
+    'product_name': 'Photo Print',
+    'category': 'Photo & Card Prints',
+    'short_description': '',
+    'description': '',
+    'price': 3.0, // lowest variant price
+    'pricing_unit': 'per_piece',
+    'min_quantity': 1,
+    'material_options': ['3R', '4R', '5R', '8R/A4', 'A3'],
+    'variant_prices': {
+      '3R': 5.0,
+      '4R': 8.0,
+      '5R': 3.0,
+      '8R/A4': 5.0,
+      'A3': 8.0,
+    },
+  },
+  // Photo Invite — grouped with variant pricing, min 30 pcs
+  {
+    'product_name': 'Photo Invite',
+    'category': 'Photo & Card Prints',
+    'short_description': 'Min. 30 pcs. +₱150 if under 30 pcs.',
+    'description':
+        'Minimum order of 30 pieces. Orders below 30 pcs incur a ₱150 surcharge.',
+    'price': 10.0, // lowest variant price
+    'pricing_unit': 'per_piece',
+    'min_quantity': 30,
+    'material_options': ['3R', '4R', '5R', 'Wedding/Debut 8R'],
+    'variant_prices': {
+      '3R': 10.0,
+      '4R': 12.0,
+      '5R': 15.0,
+      'Wedding/Debut 8R': 60.0,
+    },
+  },
+  {
+    'product_name': 'Calling Card Matte',
+    'category': 'Photo & Card Prints',
+    'short_description': '',
+    'description': '',
+    'price': 250.0,
+    'pricing_unit': 'per_qty',
+    'pricing_qty': 100,
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'Calling Card Glossy',
+    'category': 'Photo & Card Prints',
+    'short_description': '',
+    'description': '',
+    'price': 300.0,
+    'pricing_unit': 'per_qty',
+    'pricing_qty': 100,
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'Calling Card Back Print',
+    'category': 'Photo & Card Prints',
+    'short_description': 'Add-on for double-sided calling cards',
+    'description': '',
+    'price': 50.0,
+    'pricing_unit': 'per_piece',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'PVC ID',
+    'category': 'Photo & Card Prints',
+    'short_description': '',
+    'description': '',
+    'price': 100.0,
+    'pricing_unit': 'per_piece',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'ID Photo Package 1',
+    'category': 'Photo & Card Prints',
+    'short_description': '',
+    'description': '',
+    'price': 100.0,
+    'pricing_unit': 'per_piece',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+  {
+    'product_name': 'ID Photo Package 2',
+    'category': 'Photo & Card Prints',
+    'short_description': '',
+    'description': '',
+    'price': 100.0,
+    'pricing_unit': 'per_piece',
+    'min_quantity': 1,
+    'material_options': <String>[],
+  },
+];

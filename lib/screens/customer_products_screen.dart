@@ -762,10 +762,47 @@ class _ProductCardState extends State<_ProductCard> {
   @override
   Widget build(BuildContext context) {
     final name = widget.data['product_name']?.toString() ?? 'Product';
-    final description = widget.data['description']?.toString() ?? '';
+    // Use short_description on the card; fall back to description for old products.
+    final cardDesc = (widget.data['short_description']?.toString().isNotEmpty == true
+            ? widget.data['short_description']
+            : widget.data['description'])
+        ?.toString() ?? '';
     final price = widget.data['price'];
+    final rawUnit = widget.data['pricing_unit']?.toString() ?? '';
+    final pricingQty = widget.data['pricing_qty'];
+    final unitSuffix = rawUnit == 'per_sqft'
+        ? ' / sq ft'
+        : rawUnit == 'per_sqin'
+        ? ' / sq in'
+        : rawUnit == 'per_piece'
+        ? ' / piece'
+        : rawUnit == 'per_qty'
+        ? ' / ${pricingQty ?? 100} pcs'
+        : (rawUnit.isNotEmpty ? ' $rawUnit' : '');
+
+    // Build price display — show range when variant prices differ.
+    final variantPrices = widget.data['variant_prices'] as Map?;
+    String priceText;
+    if (variantPrices != null && variantPrices.isNotEmpty) {
+      final prices = variantPrices.values
+          .map((v) => (v as num).toDouble())
+          .toList()
+        ..sort();
+      if (prices.first == prices.last) {
+        priceText = '₱${prices.first.toStringAsFixed(prices.first % 1 == 0 ? 0 : 2)}$unitSuffix';
+      } else {
+        priceText =
+            '₱${prices.first.toStringAsFixed(prices.first % 1 == 0 ? 0 : 2)}–'
+            '₱${prices.last.toStringAsFixed(prices.last % 1 == 0 ? 0 : 2)}$unitSuffix';
+      }
+    } else if (price != null) {
+      priceText = '₱$price$unitSuffix';
+    } else {
+      priceText = 'See pricing';
+    }
     final imageUrl = widget.data['image_url']?.toString() ?? '';
     final category = widget.data['category']?.toString() ?? '';
+    final variants = (widget.data['material_options'] as List?) ?? [];
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -899,10 +936,10 @@ padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (description.isNotEmpty) ...[
+                      if (cardDesc.isNotEmpty) ...[
                         const SizedBox(height: 3),
                         Text(
-                          description,
+                          cardDesc,
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.45),
                             fontSize: 11,
@@ -912,9 +949,33 @@ padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
+                      if (variants.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 4,
+                          children: variants.take(3).map((v) => Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(99),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.20)),
+                            ),
+                            child: Text(
+                              v.toString(),
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.70),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          )).toList(),
+                        ),
+                      ],
                       const Spacer(),
                       Text(
-                        price != null ? '₱$price' : 'See pricing',
+                        priceText,
                         style: TextStyle(
                           color: AppTheme.gold,
                           fontWeight: FontWeight.w800,

@@ -51,16 +51,17 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   int    get _minQty      => (widget.product['min_quantity'] as num?)?.toInt() ?? 1;
   String get _imageUrl    => widget.product['image_url']?.toString() ?? '';
 
-  // Show size inputs only when pricing is area-based (per sq ft / sq m)
-  bool get _needsSizeInput {
-    final u = _pricingUnit.toLowerCase();
-    return u.contains('sq') || u.contains('sqft') || u.contains('sq.ft') || u.contains('per ft');
-  }
+  // Show size inputs for area-based pricing (sq ft or sq in).
+  bool get _needsSizeInput =>
+      _pricingUnit == 'per_sqft' || _pricingUnit == 'per_sqin';
 
+  // When true, size inputs are in inches; internally still stored as feet (÷12).
+  bool get _sizeInInches => _pricingUnit == 'per_sqin';
+
+  // Presets for sq ft products (in feet).
   static const _sizePresets = [
     '2×3 ft', '3×4 ft', '4×6 ft', '4×8 ft', '5×10 ft', 'Custom',
   ];
-
   static const _presetDims = {
     '2×3 ft':  (2.0, 3.0),
     '3×4 ft':  (3.0, 4.0),
@@ -69,8 +70,19 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     '5×10 ft': (5.0, 10.0),
   };
 
-  // Material options come from the product's material_options field (set in
-  // admin product management). Falls back to empty if not configured.
+  // Presets for sq in products (values stored as feet = inches÷12).
+  static const _sizePresetsIn = [
+    '4×4 in', '4×6 in', '6×8 in', '8×10 in', '10×12 in', 'Custom',
+  ];
+  static final _presetDimsIn = <String, (double, double)>{
+    '4×4 in':   (4 / 12.0,  4 / 12.0),
+    '4×6 in':   (4 / 12.0,  6 / 12.0),
+    '6×8 in':   (6 / 12.0,  8 / 12.0),
+    '8×10 in':  (8 / 12.0, 10 / 12.0),
+    '10×12 in': (10 / 12.0, 12 / 12.0),
+  };
+
+  // Material options (variants) come from product's material_options field.
   List<String> get _materialList {
     final raw = widget.product['material_options'] as List?;
     if (raw != null && raw.isNotEmpty) {
@@ -79,11 +91,33 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     return [];
   }
 
+  // Per-variant price override. Falls back to base price if no override set.
+  double get _effectiveBasePrice {
+    if (_material != null) {
+      final vp = widget.product['variant_prices'] as Map?;
+      if (vp != null) {
+        final override = vp[_material];
+        if (override != null) return (override as num).toDouble();
+      }
+    }
+    return _basePrice;
+  }
+
+  // How many pieces per pricing "unit" (for per_qty products like calling cards).
+  int get _pricingQty =>
+      (widget.product['pricing_qty'] as num?)?.toInt() ?? 100;
+
   // ── Pricing ──────────────────────────────────────────────────────────────────
 
   double get _subtotal {
-    if (_needsSizeInput) return _basePrice * _widthFt * _heightFt * _quantity;
-    return _basePrice * _quantity;
+    if (_pricingUnit == 'per_sqin') {
+      // widthFt/heightFt stored as feet; multiply ×144 for sq in.
+      return _effectiveBasePrice * _widthFt * _heightFt * 144 * _quantity;
+    }
+    if (_needsSizeInput) {
+      return _effectiveBasePrice * _widthFt * _heightFt * _quantity;
+    }
+    return _effectiveBasePrice * _quantity;
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
@@ -163,6 +197,14 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     } else {
       _quantity = _minQty;
       if (_materialList.isNotEmpty) _material = _materialList.first;
+      // For per_sqin, start at 4×4 inches (stored as feet).
+      if (_sizeInInches) {
+        _widthFt  = 4 / 12.0;
+        _heightFt = 4 / 12.0;
+        _widthCtrl.text  = '4';
+        _heightCtrl.text = '4';
+        _sizePreset = '4×4 in';
+      }
     }
   }
 
@@ -278,7 +320,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
       productName: _productName,
       category:    _category,
       imageUrl:    _imageUrl,
-      unitPrice:   _basePrice,
+      unitPrice:   _effectiveBasePrice, // uses variant price if selected
       pricingUnit: _pricingUnit,
       quantity:    _quantity,
       widthFt:     _needsSizeInput ? _widthFt  : null,
@@ -514,69 +556,100 @@ decoration: AppTheme.backgroundDecoration(context),
                 color: Colors.white,
                 fontSize: 20,
                 fontWeight: FontWeight.bold)),
-        const SizedBox(height: 2),
-        Row(
-          children: [
-            Text(_category,
-                style: const TextStyle(color: AppTheme.gold, fontSize: 12)),
-            if (_pricingUnit.isNotEmpty) ...[
-              const SizedBox(width: 8),
-              Text('₱${_basePrice.toStringAsFixed(0)} / $_pricingUnit',
-                  style: const TextStyle(
-                      color: Colors.white54, fontSize: 11)),
-            ],
-          ],
-        ),
-        if (_description.isNotEmpty) ...[
-          const SizedBox(height: 6),
+        const SizedBox(height: 4),
+        if (_description.isNotEmpty)
           Text(_description,
               style: const TextStyle(color: Colors.white60, fontSize: 12),
               maxLines: 2,
               overflow: TextOverflow.ellipsis),
-        ],
-        const SizedBox(height: 16),
-        const Divider(color: Colors.white12),
         const SizedBox(height: 12),
 
-        // ── Size (only if priced per sq ft) ──────────────────────────────
+        // ── Pricing info row ─────────────────────────────────────────────
+        if (_pricingUnit.isNotEmpty) ...[
+          Row(
+            children: [
+              Text(_category,
+                  style: const TextStyle(color: AppTheme.gold, fontSize: 12)),
+              const SizedBox(width: 8),
+              Text(
+                _pricingUnit == 'per_qty'
+                    ? '₱${_effectiveBasePrice.toStringAsFixed(0)} per $_pricingQty pcs'
+                    : _pricingUnit == 'per_sqin'
+                    ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq in'
+                    : _pricingUnit == 'per_sqft'
+                    ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq ft'
+                    : '₱${_effectiveBasePrice.toStringAsFixed(2)} / piece',
+                style: const TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(color: Colors.white12),
+          const SizedBox(height: 12),
+        ],
+
+        // ── Size (sq ft or sq in products) ───────────────────────────────
         if (_needsSizeInput) ...[
-          _label('Size (in feet)'),
+          _label(_sizeInInches ? 'Size (in inches)' : 'Size (in feet)'),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children: _sizePresets.map((p) => _chip(p, _sizePreset == p, () {
-              final dims = _presetDims[p];
-              setState(() {
-                _sizePreset = p;
-                if (dims != null) {
-                  _widthFt  = dims.$1;
-                  _heightFt = dims.$2;
-                  _widthCtrl.text  = dims.$1.toString();
-                  _heightCtrl.text = dims.$2.toString();
-                }
-              });
-            })).toList(),
+            children: (_sizeInInches ? _sizePresetsIn : _sizePresets)
+                .map((p) => _chip(p, _sizePreset == p, () {
+                      final dims = _sizeInInches
+                          ? _presetDimsIn[p]
+                          : _presetDims[p];
+                      setState(() {
+                        _sizePreset = p;
+                        if (dims != null) {
+                          _widthFt  = dims.$1;
+                          _heightFt = dims.$2;
+                          // Display in the appropriate unit.
+                          _widthCtrl.text  = _sizeInInches
+                              ? (dims.$1 * 12).toStringAsFixed(0)
+                              : dims.$1.toString();
+                          _heightCtrl.text = _sizeInInches
+                              ? (dims.$2 * 12).toStringAsFixed(0)
+                              : dims.$2.toString();
+                        }
+                      });
+                    }))
+                .toList(),
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: _dimField('Width', _widthCtrl, (v) {
-                final d = double.tryParse(v);
-                if (d != null && d > 0) { _widthFt = d; setState(() {}); }
-              })),
+              Expanded(child: _dimField(
+                _sizeInInches ? 'Width (in)' : 'Width',
+                _widthCtrl,
+                (v) {
+                  final d = double.tryParse(v);
+                  if (d != null && d > 0) {
+                    _widthFt = _sizeInInches ? d / 12.0 : d;
+                    setState(() {});
+                  }
+                },
+              )),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 10),
                 child: Text('×',
                     style: TextStyle(color: Colors.white54, fontSize: 20)),
               ),
-              Expanded(child: _dimField('Height', _heightCtrl, (v) {
-                final d = double.tryParse(v);
-                if (d != null && d > 0) { _heightFt = d; setState(() {}); }
-              })),
+              Expanded(child: _dimField(
+                _sizeInInches ? 'Height (in)' : 'Height',
+                _heightCtrl,
+                (v) {
+                  final d = double.tryParse(v);
+                  if (d != null && d > 0) {
+                    _heightFt = _sizeInInches ? d / 12.0 : d;
+                    setState(() {});
+                  }
+                },
+              )),
             ],
           ),
-          if (_needsSizeInput &&
+          if (!_sizeInInches &&
               _category.toLowerCase().contains('large format') &&
               !_sizeIsValid) ...[
             const SizedBox(height: 6),
@@ -595,7 +668,9 @@ decoration: AppTheme.backgroundDecoration(context),
         ],
 
         // ── Quantity ─────────────────────────────────────────────────────
-        _label('Quantity'),
+        _label(_pricingUnit == 'per_qty'
+            ? 'Quantity (units of $_pricingQty pcs)'
+            : 'Quantity'),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -610,15 +685,19 @@ decoration: AppTheme.backgroundDecoration(context),
             const SizedBox(width: 16),
             _qtyBtn(Icons.add, () => setState(() => _quantity++)),
             const SizedBox(width: 10),
-            Text('min. $_minQty',
-                style: const TextStyle(color: Colors.white38, fontSize: 11)),
+            Text(
+              _pricingUnit == 'per_qty'
+                  ? 'min. $_minQty unit = ${_minQty * _pricingQty} pcs'
+                  : 'min. $_minQty',
+              style: const TextStyle(color: Colors.white38, fontSize: 11),
+            ),
           ],
         ),
         const SizedBox(height: 16),
 
-        // ── Material ─────────────────────────────────────────────────────
+        // ── Variant / Material ────────────────────────────────────────────
         if (_materialList.isNotEmpty) ...[
-          _label('Material / Finish'),
+          _label('Variant'),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -744,9 +823,19 @@ decoration: AppTheme.backgroundDecoration(context),
                 fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         if (_needsSizeInput)
-          _sumRow('Size', '${_widthFt}ft × ${_heightFt}ft'),
-        _sumRow('Qty', '$_quantity'),
-        if (_material != null) _sumRow('Material', _material!),
+          _sumRow(
+            'Size',
+            _sizeInInches
+                ? '${(_widthFt * 12).toStringAsFixed(0)}in × ${(_heightFt * 12).toStringAsFixed(0)}in'
+                : '${_widthFt}ft × ${_heightFt}ft',
+          ),
+        _sumRow(
+          'Qty',
+          _pricingUnit == 'per_qty'
+              ? '$_quantity unit${_quantity == 1 ? '' : 's'} = ${_quantity * _pricingQty} pcs'
+              : '$_quantity',
+        ),
+        if (_material != null) _sumRow('Variant', _material!),
         _sumRow('Shipping', 'Pick-Up'),
         _sumRow('Turnaround', _turnaroundLabel),
         const Divider(color: Colors.white12, height: 16),

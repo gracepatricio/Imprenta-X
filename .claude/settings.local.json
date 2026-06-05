@@ -44,7 +44,8 @@
       "Bash(findstr /V \"^\\\\s*//\")",
       "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\ADMIN\\\\AndroidStudioProjects\\\\Imprenta-X-main\" -Force | Select-Object Name, @{Name=\"Type\"; Expression={if\\($_.PSIsContainer\\){\"DIR\"}else{\"FILE\"}}} | Format-Table -AutoSize)",
       "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\ADMIN\\\\AndroidStudioProjects\\\\Imprenta-X-main\\\\web\" -Force | Select-Object Name, @{Name=\"Type\"; Expression={if\\($_.PSIsContainer\\){\"DIR\"}else{\"FILE\"}}} | Format-Table -AutoSize)",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\ADMIN\\\\AndroidStudioProjects\\\\Imprenta-X-main\\\\functions\" -Force | Select-Object Name, @{Name=\"Type\"; Expression={if\\($_.PSIsContainer\\){\"DIR\"}else{\"FILE\"}}} | Format-Table -AutoSize)"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\ADMIN\\\\AndroidStudioProjects\\\\Imprenta-X-main\\\\functions\" -Force | Select-Object Name, @{Name=\"Type\"; Expression={if\\($_.PSIsContainer\\){\"DIR\"}else{\"FILE\"}}} | Format-Table -AutoSize)",
+      "Bash(powershell -command \"\\(Get-Content 'lib\\\\screens\\\\admin_product_management_screen.dart' | Measure-Object -Line\\).Lines\")"
     ]
   }
 }

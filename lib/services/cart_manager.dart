@@ -40,10 +40,28 @@ class CartItem {
   });
 
   bool get hasSizeInput => widthFt != null && heightFt != null;
-  String get sizeLabel  => hasSizeInput ? '${widthFt}ft x ${heightFt}ft' : '';
+
+  // widthFt/heightFt are always stored in FEET.
+  // For per_sqin products, the raw inch values are divided by 12 on input,
+  // so the label converts back to inches for display.
+  String get sizeLabel {
+    if (!hasSizeInput) return '';
+    if (pricingUnit == 'per_sqin') {
+      final wIn = (widthFt! * 12).toStringAsFixed(0);
+      final hIn = (heightFt! * 12).toStringAsFixed(0);
+      return '${wIn}in × ${hIn}in';
+    }
+    return '${widthFt}ft × ${heightFt}ft';
+  }
 
   double get subtotal {
-    if (hasSizeInput) return unitPrice * widthFt! * heightFt! * quantity;
+    if (hasSizeInput) {
+      // per_sqin: area is in sq ft internally, but price is per sq in → × 144.
+      if (pricingUnit == 'per_sqin') {
+        return unitPrice * widthFt! * heightFt! * 144 * quantity;
+      }
+      return unitPrice * widthFt! * heightFt! * quantity;
+    }
     return unitPrice * quantity;
   }
 
