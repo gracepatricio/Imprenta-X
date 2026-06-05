@@ -6,13 +6,20 @@ import 'app_theme.dart';
 
 /// Inventory Forecast Screen — Employee side
 ///
-/// Design aligned with the Admin inventory forecast screen (Liquid Glass tokens).
-/// Algorithm and data structure are unchanged from the original employee screen.
+/// Forecasting aligned with the TechnoTams thesis specification:
+///   • Double Exponential Smoothing (DES) — Brown's method
+///       S'_t  = α·X_t  + (1−α)·S'_{t-1}
+///       S''_t = α·S'_t + (1−α)·S''_{t-1}
+///       a_t   = 2·S'_t − S''_t
+///       b_t   = α/(1−α) · (S'_t − S''_t)
+///       F_{t+m} = a_t + b_t · m
+///   • MAPE = (1/n) Σ |X_t − F_t| / X_t × 100%
+///     (accumulated over one-step-ahead DES forecasts, not naïve period diff)
 
-// ── Liquid Glass Design Tokens (mirrored from admin screen) ──────────────────
+// ── Liquid Glass Design Tokens ───────────────────────────────────────────────
 class _Glass {
-  static const Color surface    = Color(0xF8FFFFFF);
-  static const Color surfaceMid = Color(0xF0FFFFFF);
+  static const Color surface     = Color(0xF8FFFFFF);
+  static const Color surfaceMid  = Color(0xF0FFFFFF);
   static const Color surfaceThin = Color(0xA0FFFFFF);
 
   static const Color borderMid = Color(0x70FFFFFF);
@@ -64,8 +71,120 @@ class _Glass {
       );
 }
 
-const Color _navyBlue = Color(0xFF0F1A2E);
+const Color _navyBlue   = Color(0xFF0F1A2E);
 final _blurFilter = ImageFilter.blur(sigmaX: 14, sigmaY: 14);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DES helper
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Result of running DES over a series of observations.
+class _DesResult {
+  /// Level component at the last fitted data point.
+  final double aLast;
+
+  /// Trend component at the last fitted data point.
+  final double bLast;
+
+  /// MAPE (%) over the one-step-ahead in-sample forecasts.
+  /// Null when there are fewer than 2 data points (no forecast comparisons).
+  final double? mape;
+
+  /// One-step-ahead DES forecasts for t = 2 … n  (same length as [actuals]).
+  final List<double> forecasts;
+
+  /// Actual values for t = 2 … n, paired with [forecasts].
+  final List<double> actuals;
+
+  const _DesResult({
+    required this.aLast,
+    required this.bLast,
+    required this.mape,
+    required this.forecasts,
+    required this.actuals,
+  });
+
+  /// DES forecast m periods ahead from the last fitted point.
+  ///   F_{last+m} = a_last + b_last × m
+  double forecastAhead(int m) => aLast + bLast * m;
+}
+
+/// Runs Double Exponential Smoothing (Brown's method) over [series].
+///
+/// Formulas from the TechnoTams thesis (Pradnyani et al., 2024):
+///   S'_t  = α·X_t  + (1−α)·S'_{t-1}        — first smoothing
+///   S''_t = α·S'_t + (1−α)·S''_{t-1}        — second smoothing
+///   a_t   = 2·S'_t  − S''_t                  — level estimate
+///   b_t   = α/(1−α) · (S'_t − S''_t)         — trend estimate
+///   F_{t+m} = a_t + b_t · m                  — m-step-ahead forecast
+///   MAPE  = (1/n) Σ |X_t − F_t| / X_t × 100 — accuracy metric
+///
+/// Initialization: S'_1 = S''_1 = X_1  (standard Brown initialization).
+/// [alpha] must be in the open interval (0, 1).
+_DesResult _runDes(List<double> series, {double alpha = 0.5}) {
+  assert(alpha > 0 && alpha < 1,
+  'Smoothing constant α must be in (0, 1). Got: $alpha');
+
+  final n = series.length;
+  if (n == 0) {
+    return const _DesResult(
+      aLast: 0, bLast: 0, mape: null, forecasts: [], actuals: [],
+    );
+  }
+
+  // ── Initialization: S'_1 = S''_1 = X_1 ───────────────────────────────────
+  double sp  = series[0]; // S'_t
+  double spp = series[0]; // S''_t
+
+  // Compute a_1, b_1 from initialization
+  double a = 2 * sp - spp;
+  double b = (alpha / (1 - alpha)) * (sp - spp);
+
+  final forecasts = <double>[];
+  final actuals   = <double>[];
+  final apes      = <double>[];
+
+  // ── Iterate t = 2 … n ─────────────────────────────────────────────────────
+  for (int t = 1; t < n; t++) {
+    // One-step-ahead forecast using level & trend from previous step (m = 1)
+    final double forecastT = a + b * 1;
+    final double actualT   = series[t];
+
+    forecasts.add(forecastT);
+    actuals.add(actualT);
+
+    // APE for this step: |X_t − F_t| / X_t × 100
+    // Guard against division by zero when actual consumption is essentially 0
+    if (actualT > 0.001) {
+      apes.add(((actualT - forecastT) / actualT).abs() * 100);
+    }
+
+    // ── Update smoothing values ─────────────────────────────────────────────
+    // S'_t  = α·X_t  + (1−α)·S'_{t-1}
+    sp  = alpha * actualT + (1 - alpha) * sp;
+    // S''_t = α·S'_t + (1−α)·S''_{t-1}
+    spp = alpha * sp      + (1 - alpha) * spp;
+
+    // ── Recompute level and trend ───────────────────────────────────────────
+    // a_t = 2·S'_t − S''_t
+    a = 2 * sp - spp;
+    // b_t = α/(1−α) · (S'_t − S''_t)
+    b = (alpha / (1 - alpha)) * (sp - spp);
+  }
+
+  // MAPE = (1/n) Σ APE_t
+  final double? mape = apes.isEmpty
+      ? null
+      : apes.reduce((x, y) => x + y) / apes.length;
+
+  return _DesResult(
+    aLast: a,
+    bLast: b,
+    mape: mape,
+    forecasts: forecasts,
+    actuals: actuals,
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
@@ -94,6 +213,9 @@ class _EmployeeInventoryForecastScreenState
   static const _windowDays = 90;
   static const _periodDays = 30;
 
+  /// DES smoothing constant α — fixed in (0, 1) per thesis specification.
+  static const double _alpha = 0.5;
+
   @override
   void initState() {
     super.initState();
@@ -116,7 +238,7 @@ class _EmployeeInventoryForecastScreenState
       final p2Start = Timestamp.fromDate(now.subtract(const Duration(days: 60)));
       final p3Start = Timestamp.fromDate(now.subtract(const Duration(days: 90)));
 
-      final matSnap  = await db.collection('RawMaterials').get();
+      final matSnap   = await db.collection('RawMaterials').get();
       final materials = {
         for (final d in matSnap.docs) d.id: d.data(),
       };
@@ -133,11 +255,11 @@ class _EmployeeInventoryForecastScreenState
       }
 
       void accumulateOrders(
-        List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-        Timestamp from,
-        Timestamp to,
-        Map<String, double> target,
-      ) {
+          List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+          Timestamp from,
+          Timestamp to,
+          Map<String, double> target,
+          ) {
         for (final orderDoc in docs) {
           final createdAt = orderDoc.data()['created_at'] as Timestamp?;
           if (createdAt == null) continue;
@@ -195,28 +317,41 @@ class _EmployeeInventoryForecastScreenState
         final stock   = (data['current_stock'] as num?)?.toDouble() ?? 0;
         final restock = (data['restock_level'] as num?)?.toDouble() ?? 0;
 
-        final c1 = consumedP1[matId] ?? 0.0;
-        final c2 = consumedP2[matId] ?? 0.0;
-        final c3 = consumedP3[matId] ?? 0.0;
+        // ── Period consumption totals ──────────────────────────────────────
+        final c1 = consumedP1[matId] ?? 0.0; // last 30 d
+        final c2 = consumedP2[matId] ?? 0.0; // 30–60 d ago
+        final c3 = consumedP3[matId] ?? 0.0; // 60–90 d ago
 
-        final r1 = c1 / _periodDays;
-        final r2 = c2 / _periodDays;
-        final r3 = c3 / _periodDays;
+        // Average daily rates per period (these are X_t for DES)
+        final r1 = c1 / _periodDays; // X_3 — most recent (last 30 d)
+        final r2 = c2 / _periodDays; // X_2 — middle period
+        final r3 = c3 / _periodDays; // X_1 — oldest period
 
+        // ── Double Exponential Smoothing ───────────────────────────────────
+        // Series fed chronologically oldest → newest: [r3, r2, r1]
+        // DES needs at least 2 non-zero points to produce a meaningful model.
+        final hasSufficientData = (r3 > 0.001 || r2 > 0.001 || r1 > 0.001);
+        final desSeries = [r3, r2, r1];
+        final des = hasSufficientData
+            ? _runDes(desSeries, alpha: _alpha)
+            : _DesResult(
+            aLast: 0, bLast: 0, mape: null, forecasts: [], actuals: []);
+
+        // ── Daily rate for stockout / restock estimates ────────────────────
+        // Use the DES one-step-ahead forecast for next period as the forward
+        // rate; fall back to the raw 90-day average when DES has no data.
         final totalConsumed = c1 + c2 + c3;
         final replenished   = replenishedPerMaterial[matId] ?? 0;
-        final dailyRate = totalConsumed > 0
-            ? totalConsumed / _windowDays
-            : (replenished > 0 ? replenished / _windowDays : 0.0);
 
-        double? mape;
-        {
-          final errors = <double>[];
-          if (r2 > 0.001 && r3 > 0) errors.add(((r2 - r3) / r2).abs() * 100);
-          if (r1 > 0.001 && r2 > 0) errors.add(((r1 - r2) / r1).abs() * 100);
-          if (errors.isNotEmpty) {
-            mape = errors.reduce((a, b) => a + b) / errors.length;
-          }
+        double dailyRate;
+        if (hasSufficientData) {
+          // DES forecast 1 period ahead (= next 30 d), converted to daily
+          final forecastNext30 = des.forecastAhead(1).clamp(0.0, double.infinity);
+          dailyRate = forecastNext30 / _periodDays;
+        } else {
+          dailyRate = totalConsumed > 0
+              ? totalConsumed / _windowDays
+              : (replenished > 0 ? replenished / _windowDays : 0.0);
         }
 
         final daysUntilStockout = dailyRate > 0.001
@@ -226,9 +361,12 @@ class _EmployeeInventoryForecastScreenState
             ? ((stock - restock) / dailyRate)
             : (stock <= restock ? 0.0 : double.infinity);
 
-        final recommended30 = dailyRate > 0
-            ? math.max(0.0, (dailyRate * 30) - stock)
-            : 0.0;
+        // ── 30-day recommended order quantity ─────────────────────────────
+        // Based on the DES forecast for the next period minus current stock.
+        final forecastNext30 = hasSufficientData
+            ? des.forecastAhead(1).clamp(0.0, double.infinity)
+            : dailyRate * 30;
+        final recommended30 = math.max(0.0, forecastNext30 - stock);
 
         items.add(_ForecastItem(
           materialId:        matId,
@@ -245,7 +383,7 @@ class _EmployeeInventoryForecastScreenState
           consumed90d:       totalConsumed,
           replenished90d:    replenished,
           recommended30:     recommended30,
-          mape:              mape,
+          desResult:         des,
         ));
       }
 
@@ -430,7 +568,7 @@ class _EmployeeInventoryForecastScreenState
                               ),
                               SizedBox(height: 1),
                               Text(
-                                'Based on last 90 days · MAPE accuracy',
+                                'DES model · 90-day history · MAPE accuracy',
                                 style: TextStyle(
                                     color: _Glass.textMuted, fontSize: 11),
                               ),
@@ -480,7 +618,7 @@ class _EmployeeInventoryForecastScreenState
                             icon: Icons.warning_amber_rounded,
                             isActive: _filter == 'Critical',
                             onTap: () => setState(() => _filter =
-                                _filter == 'Critical' ? 'All' : 'Critical'),
+                            _filter == 'Critical' ? 'All' : 'Critical'),
                           ),
                           _SummaryTile(
                             label: 'At Risk',
@@ -489,7 +627,7 @@ class _EmployeeInventoryForecastScreenState
                             icon: Icons.access_time_rounded,
                             isActive: _filter == 'At Risk',
                             onTap: () => setState(() => _filter =
-                                _filter == 'At Risk' ? 'All' : 'At Risk'),
+                            _filter == 'At Risk' ? 'All' : 'At Risk'),
                           ),
                           _SummaryTile(
                             label: 'Healthy',
@@ -498,7 +636,7 @@ class _EmployeeInventoryForecastScreenState
                             icon: Icons.check_circle_outline_rounded,
                             isActive: _filter == 'Healthy',
                             onTap: () => setState(() => _filter =
-                                _filter == 'Healthy' ? 'All' : 'Healthy'),
+                            _filter == 'Healthy' ? 'All' : 'Healthy'),
                           ),
                           _SummaryTile(
                             label: 'No Data',
@@ -539,7 +677,7 @@ class _EmployeeInventoryForecastScreenState
                                 border: Border.all(
                                   color: _sort == s
                                       ? Colors.white
-                                          .withValues(alpha: 0.20)
+                                      .withValues(alpha: 0.20)
                                       : _Glass.borderMid,
                                   width: 0.8,
                                 ),
@@ -599,25 +737,25 @@ class _EmployeeInventoryForecastScreenState
               Expanded(
                 child: filtered.isEmpty
                     ? Center(
-                        child: Text(
-                          'No materials in "$_filter" category',
-                          style: const TextStyle(
-                              color: _Glass.textMuted, fontSize: 13),
-                        ),
-                      )
+                  child: Text(
+                    'No materials in "$_filter" category',
+                    style: const TextStyle(
+                        color: _Glass.textMuted, fontSize: 13),
+                  ),
+                )
                     : RefreshIndicator(
-                        onRefresh: _load,
-                        color: _navyBlue,
-                        backgroundColor: _Glass.surface,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.all(14),
-                          itemCount: filtered.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 8),
-                          itemBuilder: (_, i) =>
-                              _ForecastCard(item: filtered[i]),
-                        ),
-                      ),
+                  onRefresh: _load,
+                  color: _navyBlue,
+                  backgroundColor: _Glass.surface,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(14),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) =>
+                    const SizedBox(height: 8),
+                    itemBuilder: (_, i) =>
+                        _ForecastCard(item: filtered[i]),
+                  ),
+                ),
               ),
             ],
           ),
@@ -628,20 +766,27 @@ class _EmployeeInventoryForecastScreenState
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Data model  (unchanged)
+// Data model
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum _Urgency { critical, atRisk, healthy, noData }
+enum _Urgency   { critical, atRisk, healthy, noData }
 enum _MapeGrade { excellent, good, fair, poor, unavailable }
 
 class _ForecastItem {
   final String materialId, name, unit;
   final double currentStock, restockLevel;
+
+  /// Forward daily rate derived from the DES forecast for the next period.
   final double dailyRate;
+
+  /// Raw daily rates per 30-day window (used for the trend display).
   final double dailyRateP1, dailyRateP2, dailyRateP3;
+
   final double daysUntilStockout, daysUntilRestock;
   final double consumed90d, replenished90d, recommended30;
-  final double? mape;
+
+  /// Full DES result (forecasts, actuals, MAPE, level/trend).
+  final _DesResult desResult;
 
   const _ForecastItem({
     required this.materialId,
@@ -658,8 +803,12 @@ class _ForecastItem {
     required this.consumed90d,
     required this.replenished90d,
     required this.recommended30,
-    required this.mape,
+    required this.desResult,
   });
+
+  // ── Convenience passthrough ────────────────────────────────────────────────
+
+  double? get mape => desResult.mape;
 
   _Urgency get urgency {
     if (dailyRate < 0.001) return _Urgency.noData;
@@ -781,8 +930,8 @@ class _ForecastCardState extends State<_ForecastCard> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: color.withValues(alpha: 0.10),
-                      border:
-                          Border.all(color: color.withValues(alpha: 0.35)),
+                      border: Border.all(
+                          color: color.withValues(alpha: 0.35)),
                     ),
                     child: Center(
                       child: Column(
@@ -793,7 +942,7 @@ class _ForecastCardState extends State<_ForecastCard> {
                             style: TextStyle(
                               color: color,
                               fontSize:
-                                  it.daysLabel.length > 3 ? 9 : 13,
+                              it.daysLabel.length > 3 ? 9 : 13,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
@@ -862,7 +1011,7 @@ class _ForecastCardState extends State<_ForecastCard> {
                             backgroundColor: _Glass.borderMid
                                 .withValues(alpha: 0.4),
                             valueColor:
-                                AlwaysStoppedAnimation<Color>(color),
+                            AlwaysStoppedAnimation<Color>(color),
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -964,8 +1113,8 @@ class _ForecastCardState extends State<_ForecastCard> {
                           value: it.dailyRate < 0.001
                               ? '—'
                               : it.daysUntilRestock <= 0
-                                  ? 'Already below!'
-                                  : '~${it.daysUntilRestock.toStringAsFixed(0)} days',
+                              ? 'Already below!'
+                              : '~${it.daysUntilRestock.toStringAsFixed(0)} days',
                           color: _Glass.accentAmber,
                         ),
                         _StatChip(
@@ -986,6 +1135,13 @@ class _ForecastCardState extends State<_ForecastCard> {
                           label: 'Restock Level',
                           value: _fmtNum(it.restockLevel),
                           color: _Glass.textSecondary,
+                        ),
+                        _StatChip(
+                          label: 'DES Next-30d Forecast',
+                          value: it.desResult.aLast > 0.001 || it.desResult.bLast.abs() > 0.001
+                              ? '${_fmtNum(it.desResult.forecastAhead(1).clamp(0, double.infinity))} ${it.unit}'
+                              : 'Insufficient data',
+                          color: _navyBlue,
                         ),
                       ],
                     ),
@@ -1041,7 +1197,7 @@ class _ForecastCardState extends State<_ForecastCard> {
                             Expanded(
                               child: Text(
                                 'No consumption data in the last 90 days. '
-                                'Forecast will update once orders using this material are completed.',
+                                    'Forecast will update once orders using this material are completed.',
                                 style: TextStyle(
                                     color: _Glass.textMuted,
                                     fontSize: 11,
@@ -1073,20 +1229,20 @@ class _ForecastCardState extends State<_ForecastCard> {
     if (it.urgency == _Urgency.critical) {
       return 'Urgent: $daysStr$mapeNote. '
           'Order at least ${_fmtNum(orderQty)} ${it.unit} immediately '
-          'to cover 30 days at current usage rate.';
+          'to cover the next 30 days per DES forecast.';
     }
     if (it.urgency == _Urgency.atRisk) {
       return 'Reorder soon — $daysStr$mapeNote. '
-          'Recommended order quantity for a 30-day buffer: '
+          'DES-recommended order for a 30-day buffer: '
           '${_fmtNum(orderQty)} ${it.unit}.';
     }
     return 'Stock is healthy ($daysStr)$mapeNote. '
-        'Next 30-day top-up (if needed): ${_fmtNum(orderQty)} ${it.unit}.';
+        'DES next-30d top-up (if needed): ${_fmtNum(orderQty)} ${it.unit}.';
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAPE accuracy panel
+// MAPE accuracy panel  — now shows true DES one-step-ahead APE breakdown
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _MapePanel extends StatelessWidget {
@@ -1159,12 +1315,12 @@ class _MapePanel extends StatelessWidget {
                     borderRadius: BorderRadius.circular(3),
                     child: FractionallySizedBox(
                       widthFactor:
-                          (item.mape! / 100).clamp(0.0, 1.0),
+                      (item.mape! / 100).clamp(0.0, 1.0),
                       child: Container(
                         height: 6,
                         decoration: const BoxDecoration(
                           borderRadius:
-                              BorderRadius.all(Radius.circular(3)),
+                          BorderRadius.all(Radius.circular(3)),
                           gradient: LinearGradient(
                             colors: [
                               Color(0xFF10B981),
@@ -1195,35 +1351,36 @@ class _MapePanel extends StatelessWidget {
             const Row(
               children: [
                 Text('0%',
-                    style: TextStyle(
-                        color: _Glass.textMuted, fontSize: 8)),
+                    style:
+                    TextStyle(color: _Glass.textMuted, fontSize: 8)),
                 Spacer(),
                 Text('10',
-                    style: TextStyle(
-                        color: _Glass.textMuted, fontSize: 8)),
+                    style:
+                    TextStyle(color: _Glass.textMuted, fontSize: 8)),
                 SizedBox(width: 24),
                 Text('25',
-                    style: TextStyle(
-                        color: _Glass.textMuted, fontSize: 8)),
+                    style:
+                    TextStyle(color: _Glass.textMuted, fontSize: 8)),
                 SizedBox(width: 24),
                 Text('50',
-                    style: TextStyle(
-                        color: _Glass.textMuted, fontSize: 8)),
+                    style:
+                    TextStyle(color: _Glass.textMuted, fontSize: 8)),
                 Spacer(),
                 Text('100%',
-                    style: TextStyle(
-                        color: _Glass.textMuted, fontSize: 8)),
+                    style:
+                    TextStyle(color: _Glass.textMuted, fontSize: 8)),
               ],
             ),
 
             const SizedBox(height: 6),
 
-            // Period-by-period APE breakdown
-            _ApeBreakdown(item: item),
+            // DES one-step-ahead APE breakdown
+            _DesApeBreakdown(item: item),
 
             const SizedBox(height: 4),
             Text(
-              'MAPE = avg |actual − forecast| / actual × 100 across 30-day windows.',
+              'MAPE = (1/n) Σ |X_t − F_t| / X_t × 100  '
+                  'where F_t is the DES one-step-ahead forecast  (α = 0.5).',
               style: TextStyle(
                   color: color.withValues(alpha: 0.65),
                   fontSize: 9,
@@ -1245,9 +1402,10 @@ class _MapePanel extends StatelessWidget {
   }
 }
 
-class _ApeBreakdown extends StatelessWidget {
+/// Shows each DES one-step-ahead APE, sourced directly from [_DesResult].
+class _DesApeBreakdown extends StatelessWidget {
   final _ForecastItem item;
-  const _ApeBreakdown({required this.item});
+  const _DesApeBreakdown({required this.item});
 
   Color _apeColor(double v) {
     if (v < 10) return _Glass.accentEmerald;
@@ -1258,75 +1416,83 @@ class _ApeBreakdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final r1 = item.dailyRateP1;
-    final r2 = item.dailyRateP2;
-    final r3 = item.dailyRateP3;
+    final des      = item.desResult;
+    final sfx      = item.unit.isNotEmpty ? ' ${item.unit}/d' : '/d';
 
-    final ape1 = (r2 > 0.001 && r3 > 0)
-        ? ((r2 - r3) / r2).abs() * 100
-        : null;
-    final ape2 = (r1 > 0.001 && r2 > 0)
-        ? ((r1 - r2) / r1).abs() * 100
-        : null;
+    // forecasts[i] and actuals[i] are paired; actuals[0]=r2, actuals[1]=r1
+    // label index: step 0 = t2 (30–60d), step 1 = t3 (last 30d)
+    final stepLabels = ['60–90d → 30–60d', '30–60d → last 30d'];
 
-    if (ape1 == null && ape2 == null) return const SizedBox.shrink();
+    if (des.forecasts.isEmpty) return const SizedBox.shrink();
 
     String f(double v) => v.toStringAsFixed(2);
-    final sfx = item.unit.isNotEmpty ? ' ${item.unit}/d' : '/d';
-
-    Widget row(String lbl, double fc, double ac, double ape) =>
-        Padding(
-          padding: const EdgeInsets.only(bottom: 3),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(lbl,
-                    style: const TextStyle(
-                        color: _Glass.textMuted, fontSize: 9)),
-              ),
-              Text('F: ${f(fc)}$sfx',
-                  style: const TextStyle(
-                      color: _Glass.textMuted, fontSize: 9)),
-              const SizedBox(width: 5),
-              Text('A: ${f(ac)}$sfx',
-                  style: const TextStyle(
-                      color: _Glass.textSecondary, fontSize: 9)),
-              const SizedBox(width: 5),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: _apeColor(ape).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'APE ${ape.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                      color: _apeColor(ape),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-        );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Period breakdown:',
-            style:
-                TextStyle(color: _Glass.textMuted, fontSize: 9)),
+        const Text('DES one-step APE breakdown:',
+            style: TextStyle(color: _Glass.textMuted, fontSize: 9)),
         const SizedBox(height: 3),
-        if (ape1 != null) row('60–90 d → 30–60 d', r3, r2, ape1),
-        if (ape2 != null) row('30–60 d → last 30 d', r2, r1, ape2),
+        for (int i = 0; i < des.forecasts.length; i++) ...[
+          Builder(builder: (_) {
+            final forecast = des.forecasts[i];
+            final actual   = des.actuals[i];
+            final ape      = actual > 0.001
+                ? ((actual - forecast) / actual).abs() * 100
+                : null;
+            final label    = i < stepLabels.length
+                ? stepLabels[i]
+                : 'Step ${i + 1}';
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(label,
+                        style: const TextStyle(
+                            color: _Glass.textMuted, fontSize: 9)),
+                  ),
+                  Text('F: ${f(forecast)}$sfx',
+                      style: const TextStyle(
+                          color: _Glass.textMuted, fontSize: 9)),
+                  const SizedBox(width: 5),
+                  Text('A: ${f(actual)}$sfx',
+                      style: const TextStyle(
+                          color: _Glass.textSecondary, fontSize: 9)),
+                  const SizedBox(width: 5),
+                  if (ape != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: _apeColor(ape).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'APE ${ape.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                            color: _apeColor(ape),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    )
+                  else
+                    const Text('APE —',
+                        style: TextStyle(
+                            color: _Glass.textMuted, fontSize: 9)),
+                ],
+              ),
+            );
+          }),
+        ],
       ],
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Period trend widget
+// Period trend widget  — now shows DES forecast alongside actual
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _PeriodTrend extends StatelessWidget {
@@ -1338,9 +1504,18 @@ class _PeriodTrend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final r3 = item.dailyRateP3;
-    final r2 = item.dailyRateP2;
-    final r1 = item.dailyRateP1;
+    final r3 = item.dailyRateP3; // X_1 — oldest
+    final r2 = item.dailyRateP2; // X_2
+    final r1 = item.dailyRateP1; // X_3 — most recent
+
+    // DES forecasts for t=2 and t=3 (one-step-ahead)
+    final des       = item.desResult;
+    final f2 = des.forecasts.isNotEmpty ? des.forecasts[0] : null; // forecast for X_2 period
+    final f3 = des.forecasts.length > 1  ? des.forecasts[1] : null; // forecast for X_3 period
+    // DES forecast one period beyond available data (next 30d)
+    final fNext = (r3 > 0.001 || r2 > 0.001 || r1 > 0.001)
+        ? des.forecastAhead(1).clamp(0.0, double.infinity)
+        : null;
 
     String arrow(double prev, double curr) {
       if (prev < 0.001 || curr < 0.001) return '•';
@@ -1367,16 +1542,17 @@ class _PeriodTrend extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Consumption trend  (avg daily rate per 30-day period)',
+            'Consumption trend  (avg daily rate per 30-day window)',
             style: TextStyle(color: _Glass.textMuted, fontSize: 9),
           ),
           const SizedBox(height: 6),
           Row(
             children: [
               _TrendCell(
-                  label: '60–90 d ago',
-                  rate: _fmtRate(r3),
-                  unit: item.unit),
+                label: '60–90 d ago',
+                rate: _fmtRate(r3),
+                unit: item.unit,
+              ),
               Text(
                 ' ${arrow(r3, r2)} ',
                 style: TextStyle(
@@ -1386,9 +1562,11 @@ class _PeriodTrend extends StatelessWidget {
                 ),
               ),
               _TrendCell(
-                  label: '30–60 d ago',
-                  rate: _fmtRate(r2),
-                  unit: item.unit),
+                label: '30–60 d ago',
+                rate: _fmtRate(r2),
+                unit: item.unit,
+                desRate: f2 != null ? _fmtRate(f2) : null,
+              ),
               Text(
                 ' ${arrow(r2, r1)} ',
                 style: TextStyle(
@@ -1398,10 +1576,28 @@ class _PeriodTrend extends StatelessWidget {
                 ),
               ),
               _TrendCell(
-                  label: 'Last 30 d',
-                  rate: _fmtRate(r1),
-                  unit: item.unit,
-                  highlight: true),
+                label: 'Last 30 d',
+                rate: _fmtRate(r1),
+                unit: item.unit,
+                highlight: true,
+                desRate: f3 != null ? _fmtRate(f3) : null,
+              ),
+              Text(
+                ' → ',
+                style: TextStyle(
+                  color: _navyBlue.withValues(alpha: 0.5),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              _TrendCell(
+                label: 'Next 30 d (DES)',
+                rate: fNext != null
+                    ? _fmtRate(fNext / 30) // convert period total back to daily
+                    : '—',
+                unit: item.unit,
+                isDes: true,
+              ),
             ],
           ),
         ],
@@ -1412,31 +1608,47 @@ class _PeriodTrend extends StatelessWidget {
 
 class _TrendCell extends StatelessWidget {
   final String label, rate, unit;
+  final String? desRate; // DES one-step forecast for this cell's period
   final bool highlight;
+  final bool isDes;      // true for the forward-looking DES cell
+
   const _TrendCell({
     required this.label,
     required this.rate,
     required this.unit,
+    this.desRate,
     this.highlight = false,
+    this.isDes = false,
   });
 
   @override
   Widget build(BuildContext context) => Expanded(
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 5),
-      decoration: highlight
+      decoration: isDes
           ? BoxDecoration(
-              color: _navyBlue.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: _Glass.borderMid, width: 0.8),
-            )
+        color: _navyBlue.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+            color: _navyBlue.withValues(alpha: 0.25), width: 0.8),
+      )
+          : highlight
+          ? BoxDecoration(
+        color: _navyBlue.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(6),
+        border:
+        Border.all(color: _Glass.borderMid, width: 0.8),
+      )
           : null,
       child: Column(
         children: [
+          // Actual rate
           Text(
             rate,
             style: TextStyle(
-              color: highlight
+              color: isDes
+                  ? _navyBlue
+                  : highlight
                   ? _Glass.textPrimary
                   : _Glass.textSecondary,
               fontSize: 12,
@@ -1446,14 +1658,27 @@ class _TrendCell extends StatelessWidget {
           const SizedBox(height: 1),
           Text(
             '${unit.isNotEmpty ? '$unit/' : ''}day',
-            style: const TextStyle(
-                color: _Glass.textMuted, fontSize: 7),
+            style: const TextStyle(color: _Glass.textMuted, fontSize: 7),
           ),
+          // DES forecast sub-label (shown on actual-period cells)
+          if (desRate != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              'F: $desRate',
+              style: TextStyle(
+                color: _navyBlue.withValues(alpha: 0.6),
+                fontSize: 7,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
           const SizedBox(height: 1),
           Text(
             label,
             style: TextStyle(
-              color: highlight
+              color: isDes
+                  ? _navyBlue.withValues(alpha: 0.7)
+                  : highlight
                   ? _Glass.textSecondary
                   : _Glass.textMuted,
               fontSize: 7,
@@ -1566,8 +1791,8 @@ class _StatChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(8),
-        border:
-            Border.all(color: color.withValues(alpha: 0.20), width: 0.8),
+        border: Border.all(
+            color: color.withValues(alpha: 0.20), width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
