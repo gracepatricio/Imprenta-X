@@ -1179,7 +1179,6 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
     }
 
     final totalCollected = filtered.fold<double>(0, (s, g) => s + g.totalPaid);
-    final allTotal = allGroups.fold<double>(0, (s, g) => s + g.totalPaid);
 
     // Sum remaining balance from all grouped orders still on 'downpayment' status
     // (i.e. order_total - totalPaid for every group whose latest payment is a downpayment)
@@ -1214,14 +1213,6 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                   fg: const Color(0xFF374151),
                   bg: _T.headerBg,
                   border: _T.divider,
-                ),
-                const SizedBox(width: 8),
-                _SummaryChip(
-                  label: 'All-Time',
-                  value: '₱${allTotal.toStringAsFixed(2)}',
-                  fg: const Color(0xFF6D28D9),
-                  bg: const Color(0xFFF5F3FF),
-                  border: const Color(0xFFDDD6FE),
                 ),
                 const SizedBox(width: 8),
                 _SummaryChip(

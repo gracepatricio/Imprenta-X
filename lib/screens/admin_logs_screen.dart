@@ -1700,7 +1700,7 @@ class _PayChip extends StatelessWidget {
 // =============================================================================
 // Sales Record Sub-Tab
 // =============================================================================
-enum _SalesSubTab { record, excelFile, report }
+enum _SalesSubTab { record, report }
 
 class _SalesRecordSubTab extends StatefulWidget {
   const _SalesRecordSubTab();
@@ -1739,13 +1739,6 @@ class _SalesRecordSubTabState extends State<_SalesRecordSubTab> {
                     ),
                     const SizedBox(width: 4),
                     _SalesPillTab(
-                      label: 'Excel File',
-                      icon: Icons.insert_drive_file_outlined,
-                      isActive: _sub == _SalesSubTab.excelFile,
-                      onTap: () => setState(() => _sub = _SalesSubTab.excelFile),
-                    ),
-                    const SizedBox(width: 4),
-                    _SalesPillTab(
                       label: 'Sales Report',
                       icon: Icons.bar_chart_rounded,
                       isActive: _sub == _SalesSubTab.report,
@@ -1755,18 +1748,15 @@ class _SalesRecordSubTabState extends State<_SalesRecordSubTab> {
                 ),
               ),
               const Spacer(),
-              if (_sub == _SalesSubTab.record || _sub == _SalesSubTab.excelFile)
-                const SalesImportButton(),
+              if (_sub == _SalesSubTab.record) const SalesImportButton(),
             ],
           ),
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: switch (_sub) {
-            _SalesSubTab.record    => const SalesRecordTable(),
-            _SalesSubTab.excelFile => const SalesExcelViewer(),
-            _SalesSubTab.report    => const AdminSalesReportView(),
-          },
+          child: _sub == _SalesSubTab.record
+              ? const SalesRecordTable()
+              : const AdminSalesReportView(),
         ),
       ],
     );
