@@ -6,7 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'app_theme.dart';
 
 // ── Breakpoints ───────────────────────────────────────────────────────────────
-const double _kTableMinWidth = 560.0;
+const double _kTableMinWidth = 548.0;
 
 // ── Shared colour constants (same as product management & admin logs) ─────────
 const Color _amber = Color(0xFFB45309);
@@ -119,9 +119,24 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
   Future<void> _seedInitialData() async {
     setState(() => _seeding = true);
     try {
-      final batch = FirebaseFirestore.instance.batch();
       final col = FirebaseFirestore.instance.collection('RawMaterials');
-      for (final mat in _kInitialMaterials) {
+
+      // Only seed materials that do not already exist — never overwrite
+      // existing documents so configured dimensions and stock are preserved.
+      final existingSnap = await col.get();
+      final existingIds = existingSnap.docs.map((d) => d.id).toSet();
+
+      final missing = _kInitialMaterials
+          .where((m) => !existingIds.contains(m['material_id'] as String))
+          .toList();
+
+      if (missing.isEmpty) {
+        if (mounted) _snack('All materials already exist — nothing to seed', _Glass.accentEmerald);
+        return;
+      }
+
+      final batch = FirebaseFirestore.instance.batch();
+      for (final mat in missing) {
         batch.set(col.doc(mat['material_id'] as String), {
           ...mat,
           'current_stock': 0.0,
@@ -131,7 +146,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
         });
       }
       await batch.commit();
-      if (mounted) _snack('29 raw materials seeded', _Glass.accentEmerald);
+      if (mounted) _snack('${missing.length} missing material(s) added', _Glass.accentEmerald);
     } catch (e) {
       if (mounted) _snack('Seed error: $e', _Glass.accentRose);
     } finally {
@@ -158,6 +173,16 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     barrierColor: Colors.black.withValues(alpha: 0.25),
     builder: (_) =>
         _AddMaterialDialog(onAdded: (msg) => _snack(msg, _Glass.accentEmerald)),
+  );
+
+  void _handleEditMaterial(Map<String, dynamic> m) => showDialog(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: Colors.black.withValues(alpha: 0.25),
+    builder: (_) => _EditMaterialDialog(
+      data: m,
+      onSaved: (msg) => _snack(msg, _Glass.accentEmerald),
+    ),
   );
 
   // ── build ───────────────────────────────────────────────────────────────────
@@ -544,82 +569,60 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
             filter: _blurFilter,
             child: Container(
               decoration: _Glass.glass(radius: 20, elevated: true),
-              child: Column(
-                children: [
-                  // ── Column header ─────────────────────────────────────────
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xF2F4F6F8),
-                      border: Border(
-                        bottom: BorderSide(color: _Glass.borderDim, width: 0.8),
+              child: LayoutBuilder(
+                builder: (_, c) {
+                  if (filtered.isEmpty) {
+                    return Center(
+                      child: Text(
+                        _statusFilter != null
+                            ? 'No "$_statusFilter" materials'
+                            : 'No materials found',
+                        style: const TextStyle(
+                          color: _Glass.textMuted,
+                          fontSize: 13,
+                        ),
                       ),
-                    ),
-                    child: LayoutBuilder(
-                      builder: (_, c) {
-                        if (c.maxWidth < _kTableMinWidth) {
-                          return SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SizedBox(
-                              width: _kTableMinWidth.clamp(
-                                c.maxWidth,
-                                double.infinity,
-                              ),
-                              child: const _TableHeader(),
+                    );
+                  }
+                  Widget buildTable() => ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: filtered.length + 1,
+                    itemBuilder: (_, i) {
+                      if (i == 0) {
+                        return Container(
+                          decoration: const BoxDecoration(
+                            color: Color(0xF2F4F6F8),
+                            border: Border(
+                              bottom: BorderSide(color: _Glass.borderDim, width: 0.8),
                             ),
-                          );
-                        }
-                        return const _TableHeader();
-                      },
-                    ),
-                  ),
-
-                  // ── Rows ──────────────────────────────────────────────────
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? Center(
-                            child: Text(
-                              _statusFilter != null
-                                  ? 'No "$_statusFilter" materials'
-                                  : 'No materials found',
-                              style: const TextStyle(
-                                color: _Glass.textMuted,
-                                fontSize: 13,
-                              ),
-                            ),
-                          )
-                        : LayoutBuilder(
-                            builder: (_, c) {
-                              Widget list = ListView.builder(
-                                padding: EdgeInsets.zero,
-                                itemCount: filtered.length,
-                                itemBuilder: (_, i) => _MaterialRow(
-                                  data: filtered[i],
-                                  isLast: i == filtered.length - 1,
-                                  statusColor: _statusColor(
-                                    filtered[i]['_status'] as String,
-                                  ),
-                                  onQrTap: () => _showQr(context, filtered[i]),
-                                  onDeleteTap: () =>
-                                      _confirmDelete(context, filtered[i]),
-                                ),
-                              );
-                              if (c.maxWidth < _kTableMinWidth) {
-                                return SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: SizedBox(
-                                    width: _kTableMinWidth.clamp(
-                                      c.maxWidth,
-                                      double.infinity,
-                                    ),
-                                    child: list,
-                                  ),
-                                );
-                              }
-                              return list;
-                            },
                           ),
-                  ),
-                ],
+                          child: const _TableHeader(),
+                        );
+                      }
+                      final idx = i - 1;
+                      return _MaterialRow(
+                        data: filtered[idx],
+                        isLast: idx == filtered.length - 1,
+                        statusColor: _statusColor(
+                          filtered[idx]['_status'] as String,
+                        ),
+                        onQrTap: () => _showQr(context, filtered[idx]),
+                        onEditTap: () => _handleEditMaterial(filtered[idx]),
+                        onDeleteTap: () => _confirmDelete(context, filtered[idx]),
+                      );
+                    },
+                  );
+                  if (c.maxWidth < _kTableMinWidth) {
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: _kTableMinWidth,
+                        child: buildTable(),
+                      ),
+                    );
+                  }
+                  return buildTable();
+                },
               ),
             ),
           ),
@@ -989,18 +992,14 @@ class _TableHeader extends StatelessWidget {
         SizedBox(width: 74, child: Text('Code', style: _h)),
         Expanded(child: Text('Material', style: _h)),
         SizedBox(
-          width: 72,
-          child: Text('Stock', style: _h, textAlign: TextAlign.center),
-        ),
-        SizedBox(
-          width: 80,
-          child: Text('Restock At', style: _h, textAlign: TextAlign.center),
+          width: 150,
+          child: Text('Available Stock', style: _h, textAlign: TextAlign.center),
         ),
         SizedBox(
           width: 90,
           child: Text('Status', style: _h, textAlign: TextAlign.center),
         ),
-        SizedBox(width: 60),
+        SizedBox(width: 96),
       ],
     ),
   );
@@ -1014,26 +1013,63 @@ class _MaterialRow extends StatelessWidget {
   final Color statusColor;
   final bool isLast;
   final VoidCallback onQrTap;
+  final VoidCallback onEditTap;
   final VoidCallback onDeleteTap;
   const _MaterialRow({
     required this.data,
     required this.statusColor,
     required this.onQrTap,
+    required this.onEditTap,
     required this.onDeleteTap,
     this.isLast = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final id = data['material_id']?.toString() ?? '';
-    final name = data['material_name']?.toString() ?? '';
-    final unit = data['unit_description']?.toString() ?? '';
-    final current = (data['current_stock'] as num?) ?? 0;
-    final restock = (data['restock_level'] as num?) ?? 0;
+    final id     = data['material_id']?.toString() ?? '';
+    final name   = data['material_name']?.toString() ?? '';
     final status = data['_status']?.toString() ?? '';
+    final current  = (data['current_stock'] as num?)?.toDouble() ?? 0;
+    final su       = data['stocking_unit']?.toString() ?? '';
+    final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
+    final subLine    = _buildMatSubLine(data);
+    final isStructured = su.isNotEmpty;
+    final isPiece      = su == 'Piece';
 
-    String fmt(num v) =>
-        v == v.toInt() ? v.toInt().toString() : v.toStringAsFixed(2);
+    // Available stock display
+    Widget stockCell;
+    if (!isStructured) {
+      stockCell = Text(
+        _fmtNum(current),
+        style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+        textAlign: TextAlign.center,
+      );
+    } else if (isPiece) {
+      stockCell = Text(
+        '${_fmtNum(current)} pcs',
+        style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+        textAlign: TextAlign.center,
+      );
+    } else {
+      final stockUnits = unitSqft > 0 ? current / unitSqft : 0.0;
+      final label = _stockUnitLabel(su);
+      stockCell = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            '${_fmtNum(current)} sqft',
+            style: const TextStyle(color: _Glass.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
+            textAlign: TextAlign.center,
+          ),
+          Text(
+            '${_fmtNum(stockUnits)} ${label}s',
+            style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1059,7 +1095,7 @@ class _MaterialRow extends StatelessWidget {
               ),
             ),
           ),
-          // Name + unit
+          // Name + sub-line
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1075,41 +1111,18 @@ class _MaterialRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (unit.isNotEmpty) ...[
+                if (subLine.isNotEmpty) ...[
                   const SizedBox(height: 1),
                   Text(
-                    unit,
-                    style: const TextStyle(
-                      color: _Glass.textMuted,
-                      fontSize: 11,
-                    ),
+                    subLine,
+                    style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
                   ),
                 ],
               ],
             ),
           ),
-          // Stock
-          SizedBox(
-            width: 72,
-            child: Text(
-              fmt(current),
-              style: const TextStyle(
-                color: _Glass.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          // Restock at
-          SizedBox(
-            width: 80,
-            child: Text(
-              fmt(restock),
-              style: const TextStyle(color: _Glass.textSecondary, fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-          ),
+          // Available stock
+          SizedBox(width: 150, child: Center(child: stockCell)),
           // Status badge
           SizedBox(
             width: 90,
@@ -1119,40 +1132,27 @@ class _MaterialRow extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(99),
-                  border: Border.all(
-                    color: statusColor.withValues(alpha: 0.35),
-                    width: 0.8,
-                  ),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.35), width: 0.8),
                 ),
                 child: Text(
                   status,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w700),
                 ),
               ),
             ),
           ),
           // Actions
           SizedBox(
-            width: 60,
+            width: 96,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                _IconAction(
-                  icon: Icons.qr_code_rounded,
-                  color: _navyBlue,
-                  onTap: onQrTap,
-                ),
+                _IconAction(icon: Icons.qr_code_rounded,       color: _navyBlue,          onTap: onQrTap),
                 const SizedBox(width: 4),
-                _IconAction(
-                  icon: Icons.delete_outline_rounded,
-                  color: _Glass.accentRose,
-                  onTap: onDeleteTap,
-                ),
+                _IconAction(icon: Icons.edit_outlined,          color: _amber,             onTap: onEditTap),
+                const SizedBox(width: 4),
+                _IconAction(icon: Icons.delete_outline_rounded, color: _Glass.accentRose,  onTap: onDeleteTap),
               ],
             ),
           ),
@@ -1208,18 +1208,39 @@ class _AddMaterialDialog extends StatefulWidget {
 }
 
 class _AddMaterialDialogState extends State<_AddMaterialDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _idCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
-  final _unitCtrl = TextEditingController();
+  final _formKey   = GlobalKey<FormState>();
+  final _idCtrl    = TextEditingController();
+  final _nameCtrl  = TextEditingController();
+  String _su       = 'Roll'; // stocking unit
+  final _wCtrl     = TextEditingController();
+  String _wUnit    = 'ft';
+  final _lCtrl     = TextEditingController();
+  String _lUnit    = 'm';
   final _restockCtrl = TextEditingController(text: '5');
-  final _stockCtrl = TextEditingController(text: '0');
+  final _stockCtrl   = TextEditingController(text: '0');
   bool _saving = false;
+
+  bool get _isPiece => _su == 'Piece';
+
+  double get _unitSizeSqft {
+    if (_isPiece) return 1.0;
+    final wv = double.tryParse(_wCtrl.text) ?? 0;
+    final lv = double.tryParse(_lCtrl.text) ?? 0;
+    return _calcUnitSqft(wv, _wUnit, lv, _lUnit);
+  }
+
+  String get _unitSizeDisplay {
+    if (_isPiece) return '1 pc / pc';
+    final s = _unitSizeSqft;
+    return '${_fmtNum(s)} sqft / ${_stockUnitLabel(_su)}';
+  }
 
   @override
   void initState() {
     super.initState();
     _autoId();
+    _wCtrl.addListener(() => setState(() {}));
+    _lCtrl.addListener(() => setState(() {}));
   }
 
   Future<void> _autoId() async {
@@ -1240,16 +1261,15 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
 
   @override
   void dispose() {
-    _idCtrl.dispose();
-    _nameCtrl.dispose();
-    _unitCtrl.dispose();
-    _restockCtrl.dispose();
-    _stockCtrl.dispose();
+    _idCtrl.dispose(); _nameCtrl.dispose();
+    _wCtrl.dispose();  _lCtrl.dispose();
+    _restockCtrl.dispose(); _stockCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final unitLabel = _isPiece ? 'pcs' : '${_stockUnitLabel(_su)}s';
     return Dialog(
       backgroundColor: _Glass.surface,
       elevation: 32,
@@ -1259,231 +1279,217 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
         side: const BorderSide(color: _Glass.borderMid, width: 1),
       ),
       child: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Title bar
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: _navyBlue,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.add_box_outlined,
-                      color: Colors.white,
-                      size: 15,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Add Raw Material',
-                      style: TextStyle(
-                        color: _Glass.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: _Glass.surfaceThin,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: _Glass.borderMid, width: 0.9),
-                      ),
-                      child: const Icon(
-                        Icons.close_rounded,
-                        color: _Glass.textMuted,
-                        size: 15,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(color: _Glass.borderMid, height: 16, thickness: 0.8),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Title bar ─────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+                child: Row(
                   children: [
-                    _SectionLabel('Material ID'),
-                    const SizedBox(height: 6),
-                    _GlassField(
-                      controller: _idCtrl,
-                      hint: 'e.g. RM-030',
-                      icon: Icons.tag_rounded,
-                      validator: (v) =>
-                          v?.trim().isEmpty == true ? 'Required' : null,
+                    Container(
+                      width: 34, height: 34,
+                      decoration: BoxDecoration(color: _navyBlue, borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.add_box_outlined, color: Colors.white, size: 15),
                     ),
-                    const SizedBox(height: 12),
-                    _SectionLabel('Material Name *'),
-                    const SizedBox(height: 6),
-                    _GlassField(
-                      controller: _nameCtrl,
-                      hint: 'e.g. Tarpaulin 13oz',
-                      icon: Icons.inventory_2_outlined,
-                      validator: (v) =>
-                          v?.trim().isEmpty == true ? 'Required' : null,
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text('Add Raw Material',
+                          style: TextStyle(color: _Glass.textPrimary, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                     ),
-                    const SizedBox(height: 12),
-                    _SectionLabel('Unit Description *'),
-                    const SizedBox(height: 6),
-                    _GlassField(
-                      controller: _unitCtrl,
-                      hint: 'e.g. 1 roll, 4x8ft sheet',
-                      icon: Icons.straighten_rounded,
-                      validator: (v) =>
-                          v?.trim().isEmpty == true ? 'Required' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _SectionLabel('Restock At'),
-                              const SizedBox(height: 6),
-                              _GlassField(
-                                controller: _restockCtrl,
-                                hint: '5',
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
-                                validator: (v) {
-                                  if (v?.trim().isEmpty == true)
-                                    return 'Required';
-                                  if (double.tryParse(v!.trim()) == null)
-                                    return 'Invalid';
-                                  return null;
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _SectionLabel('Initial Stock'),
-                              const SizedBox(height: 6),
-                              _GlassField(
-                                controller: _stockCtrl,
-                                hint: '0',
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
-                                validator: (v) {
-                                  if (v?.trim().isEmpty == true)
-                                    return 'Required';
-                                  if (double.tryParse(v!.trim()) == null)
-                                    return 'Invalid';
-                                  return null;
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        width: 32, height: 32,
+                        decoration: BoxDecoration(color: _Glass.surfaceThin, shape: BoxShape.circle,
+                            border: Border.all(color: _Glass.borderMid, width: 0.9)),
+                        child: const Icon(Icons.close_rounded, color: _Glass.textMuted, size: 15),
+                      ),
                     ),
                   ],
                 ),
               ),
-            ),
+              const Divider(color: _Glass.borderMid, height: 16, thickness: 0.8),
 
-            // Action bar
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-              decoration: const BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: _Glass.borderMid, width: 0.9),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  GestureDetector(
-                    onTap: _saving ? null : () => Navigator.pop(context),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 9,
+              // ── Form ──────────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ID
+                      _SectionLabel('Material ID'),
+                      const SizedBox(height: 6),
+                      _GlassField(controller: _idCtrl, hint: 'e.g. RM-030', icon: Icons.tag_rounded,
+                          validator: (v) => v?.trim().isEmpty == true ? 'Required' : null),
+                      const SizedBox(height: 12),
+
+                      // Name
+                      _SectionLabel('Material Name *'),
+                      const SizedBox(height: 6),
+                      _GlassField(controller: _nameCtrl, hint: 'e.g. Tarpaulin 13oz', icon: Icons.inventory_2_outlined,
+                          validator: (v) => v?.trim().isEmpty == true ? 'Required' : null),
+                      const SizedBox(height: 12),
+
+                      // Stocking unit
+                      _SectionLabel('Stocking Unit *'),
+                      const SizedBox(height: 6),
+                      _GlassDropdown<String>(
+                        value: _su,
+                        items: const ['Roll', 'Sheet', 'Piece'],
+                        onChanged: (v) => setState(() => _su = v!),
                       ),
-                      decoration: _Glass.glass(radius: 99),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          color: _Glass.textSecondary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: _saving ? null : _save,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 9,
-                      ),
-                      decoration: _Glass.solidPill(_navyBlue, glow: true),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_saving)
-                            const SizedBox(
-                              width: 13,
-                              height: 13,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
+                      const SizedBox(height: 12),
+
+                      // Width + Length (only for Roll/Sheet)
+                      if (!_isPiece) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _SectionLabel('Width *'),
+                                  const SizedBox(height: 6),
+                                  _DimensionRow(ctrl: _wCtrl, unit: _wUnit,
+                                      onUnitChanged: (u) => setState(() => _wUnit = u)),
+                                ],
                               ),
-                            )
-                          else
-                            const Icon(
-                              Icons.check_rounded,
-                              size: 14,
-                              color: Colors.white,
                             ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'Add Material',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _SectionLabel('Length *'),
+                                  const SizedBox(height: 6),
+                                  _DimensionRow(ctrl: _lCtrl, unit: _lUnit,
+                                      onUnitChanged: (u) => setState(() => _lUnit = u)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+
+                        // Computed unit size chip
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _navyBlue.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: _navyBlue.withValues(alpha: 0.15), width: 0.9),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calculate_outlined, size: 14, color: _Glass.textMuted),
+                              const SizedBox(width: 7),
+                              Text('Unit size: ', style: const TextStyle(color: _Glass.textMuted, fontSize: 12)),
+                              Text(_unitSizeDisplay,
+                                  style: const TextStyle(color: _Glass.textPrimary, fontSize: 12, fontWeight: FontWeight.w700)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Restock At + Initial Stock
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _SectionLabel('Restock At ($unitLabel)'),
+                                const SizedBox(height: 6),
+                                _GlassField(
+                                  controller: _restockCtrl, hint: '5',
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  validator: (v) {
+                                    if (v?.trim().isEmpty == true) return 'Required';
+                                    if (double.tryParse(v!.trim()) == null) return 'Invalid';
+                                    return null;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _SectionLabel('Initial Stock ($unitLabel)'),
+                                const SizedBox(height: 6),
+                                _GlassField(
+                                  controller: _stockCtrl, hint: '0',
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  validator: (v) {
+                                    if (v?.trim().isEmpty == true) return 'Required';
+                                    if (double.tryParse(v!.trim()) == null) return 'Invalid';
+                                    return null;
+                                  },
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+
+              // ── Action bar ────────────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                decoration: const BoxDecoration(
+                    border: Border(top: BorderSide(color: _Glass.borderMid, width: 0.9))),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    GestureDetector(
+                      onTap: _saving ? null : () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                        decoration: _Glass.glass(radius: 99),
+                        child: const Text('Cancel',
+                            style: TextStyle(color: _Glass.textSecondary, fontSize: 13, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: _saving ? null : _save,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                        decoration: _Glass.solidPill(_navyBlue, glow: true),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_saving)
+                              const SizedBox(width: 13, height: 13,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            else
+                              const Icon(Icons.check_rounded, size: 14, color: Colors.white),
+                            const SizedBox(width: 6),
+                            const Text('Add Material',
+                                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1491,16 +1497,46 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!_isPiece) {
+      final wv = double.tryParse(_wCtrl.text) ?? 0;
+      final lv = double.tryParse(_lCtrl.text) ?? 0;
+      if (wv <= 0 || lv <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Width and Length must be greater than 0'),
+          backgroundColor: _Glass.accentRose,
+          behavior: SnackBarBehavior.floating,
+        ));
+        return;
+      }
+    }
     setState(() => _saving = true);
     final nav = Navigator.of(context);
     try {
-      final id = _idCtrl.text.trim();
+      final id   = _idCtrl.text.trim();
+      final name = _nameCtrl.text.trim();
+      final stockInput  = double.tryParse(_stockCtrl.text) ?? 0.0;
+      final restockInput = double.tryParse(_restockCtrl.text) ?? 5.0;
+      final sqft = _unitSizeSqft;
+      final currentBase = _isPiece ? stockInput : stockInput * sqft;
+      final restockBase  = _isPiece ? restockInput : restockInput * sqft;
+      final wv = _isPiece ? 0.0 : (double.tryParse(_wCtrl.text) ?? 0.0);
+      final lv = _isPiece ? 0.0 : (double.tryParse(_lCtrl.text) ?? 0.0);
+      final unitDesc = _isPiece
+          ? 'Piece'
+          : '$_su (${_fmtNum(wv)}$_wUnit × ${_fmtNum(lv)}$_lUnit)';
+
       await FirebaseFirestore.instance.collection('RawMaterials').doc(id).set({
         'material_id': id,
-        'material_name': _nameCtrl.text.trim(),
-        'unit_description': _unitCtrl.text.trim(),
-        'restock_level': double.tryParse(_restockCtrl.text) ?? 5.0,
-        'current_stock': double.tryParse(_stockCtrl.text) ?? 0.0,
+        'material_name': name,
+        'stocking_unit': _su,
+        'width_value':  _isPiece ? null : wv,
+        'width_unit':   _isPiece ? null : _wUnit,
+        'length_value': _isPiece ? null : lv,
+        'length_unit':  _isPiece ? null : _lUnit,
+        'unit_size_sqft': sqft,
+        'unit_description': unitDesc,
+        'restock_level': restockBase,
+        'current_stock': currentBase,
         'last_updated': null,
         'last_updated_by': '',
         'last_updated_by_uid': '',
@@ -1508,17 +1544,350 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
       nav.pop();
       widget.onAdded('$id added to inventory');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error: $e'),
+        backgroundColor: _Glass.accentRose,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        margin: const EdgeInsets.all(16),
+      ));
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+}
+
+// =============================================================================
+// Edit Material Dialog
+// =============================================================================
+class _EditMaterialDialog extends StatefulWidget {
+  final Map<String, dynamic> data;
+  final void Function(String) onSaved;
+  const _EditMaterialDialog({required this.data, required this.onSaved});
+  @override
+  State<_EditMaterialDialog> createState() => _EditMaterialDialogState();
+}
+
+class _EditMaterialDialogState extends State<_EditMaterialDialog> {
+  final _formKey  = GlobalKey<FormState>();
+  late final TextEditingController _nameCtrl;
+  late String _su;
+  late final TextEditingController _wCtrl;
+  late String _wUnit;
+  late final TextEditingController _lCtrl;
+  late String _lUnit;
+  late final TextEditingController _restockCtrl;
+  bool _saving = false;
+
+  bool get _isPiece => _su == 'Piece';
+
+  double get _unitSizeSqft {
+    if (_isPiece) return 1.0;
+    final wv = double.tryParse(_wCtrl.text) ?? 0;
+    final lv = double.tryParse(_lCtrl.text) ?? 0;
+    return _calcUnitSqft(wv, _wUnit, lv, _lUnit);
+  }
+
+  String get _unitSizeDisplay {
+    if (_isPiece) return '1 pc / pc';
+    final s = _unitSizeSqft;
+    return '${_fmtNum(s)} sqft / ${_stockUnitLabel(_su)}';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final d = widget.data;
+    _nameCtrl = TextEditingController(text: d['material_name']?.toString() ?? '');
+    _su       = d['stocking_unit']?.toString().isNotEmpty == true
+                  ? d['stocking_unit'] as String
+                  : 'Roll';
+    _wCtrl    = TextEditingController(
+        text: (d['width_value'] as num?)?.toString() ?? '');
+    _wUnit    = d['width_unit']?.toString().isNotEmpty == true
+                  ? d['width_unit'] as String
+                  : 'ft';
+    _lCtrl    = TextEditingController(
+        text: (d['length_value'] as num?)?.toString() ?? '');
+    _lUnit    = d['length_unit']?.toString().isNotEmpty == true
+                  ? d['length_unit'] as String
+                  : 'm';
+
+    // Pre-fill restock in stock units (reverse-convert from sqft)
+    final currentSqft = (d['unit_size_sqft'] as num?)?.toDouble() ?? 0;
+    final restockBase  = (d['restock_level'] as num?)?.toDouble() ?? 0;
+    double restockDisplay;
+    if (_su == 'Piece' || currentSqft <= 0) {
+      restockDisplay = restockBase;
+    } else {
+      restockDisplay = restockBase / currentSqft;
+    }
+    _restockCtrl = TextEditingController(text: _fmtNum(restockDisplay));
+
+    _wCtrl.addListener(() => setState(() {}));
+    _lCtrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose(); _wCtrl.dispose(); _lCtrl.dispose(); _restockCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unitLabel = _isPiece ? 'pcs' : '${_stockUnitLabel(_su)}s';
+    final docId = widget.data['material_id']?.toString() ?? '';
+    return Dialog(
+      backgroundColor: _Glass.surface,
+      elevation: 32,
+      shadowColor: Colors.black.withValues(alpha: 0.3),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: _Glass.borderMid, width: 1)),
+      child: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Title bar
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 34, height: 34,
+                      decoration: BoxDecoration(color: _amber, borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.edit_outlined, color: Colors.white, size: 15),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Edit Raw Material',
+                              style: TextStyle(color: _Glass.textPrimary, fontSize: 15,
+                                  fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                          Text(docId,
+                              style: const TextStyle(color: _Glass.textMuted, fontSize: 11,
+                                  fontFamily: 'monospace')),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        width: 32, height: 32,
+                        decoration: BoxDecoration(color: _Glass.surfaceThin, shape: BoxShape.circle,
+                            border: Border.all(color: _Glass.borderMid, width: 0.9)),
+                        child: const Icon(Icons.close_rounded, color: _Glass.textMuted, size: 15),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: _Glass.borderMid, height: 16, thickness: 0.8),
+
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Name
+                      _SectionLabel('Material Name *'),
+                      const SizedBox(height: 6),
+                      _GlassField(controller: _nameCtrl, hint: 'Material name',
+                          icon: Icons.inventory_2_outlined,
+                          validator: (v) => v?.trim().isEmpty == true ? 'Required' : null),
+                      const SizedBox(height: 12),
+
+                      // Stocking unit
+                      _SectionLabel('Stocking Unit *'),
+                      const SizedBox(height: 6),
+                      _GlassDropdown<String>(
+                        value: _su,
+                        items: const ['Roll', 'Sheet', 'Piece'],
+                        onChanged: (v) => setState(() => _su = v!),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Width + Length
+                      if (!_isPiece) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _SectionLabel('Width *'),
+                                  const SizedBox(height: 6),
+                                  _DimensionRow(ctrl: _wCtrl, unit: _wUnit,
+                                      onUnitChanged: (u) => setState(() => _wUnit = u)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _SectionLabel('Length *'),
+                                  const SizedBox(height: 6),
+                                  _DimensionRow(ctrl: _lCtrl, unit: _lUnit,
+                                      onUnitChanged: (u) => setState(() => _lUnit = u)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _navyBlue.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: _navyBlue.withValues(alpha: 0.15), width: 0.9),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calculate_outlined, size: 14, color: _Glass.textMuted),
+                              const SizedBox(width: 7),
+                              const Text('Unit size: ',
+                                  style: TextStyle(color: _Glass.textMuted, fontSize: 12)),
+                              Text(_unitSizeDisplay,
+                                  style: const TextStyle(color: _Glass.textPrimary, fontSize: 12,
+                                      fontWeight: FontWeight.w700)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Restock level
+                      _SectionLabel('Restock At ($unitLabel)'),
+                      const SizedBox(height: 6),
+                      _GlassField(
+                        controller: _restockCtrl, hint: '5',
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        validator: (v) {
+                          if (v?.trim().isEmpty == true) return 'Required';
+                          if (double.tryParse(v!.trim()) == null) return 'Invalid';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Note: current stock level is managed through inventory logs and is not changed here.',
+                        style: TextStyle(color: _Glass.textMuted, fontSize: 10, height: 1.4),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Action bar
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                decoration: const BoxDecoration(
+                    border: Border(top: BorderSide(color: _Glass.borderMid, width: 0.9))),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    GestureDetector(
+                      onTap: _saving ? null : () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                        decoration: _Glass.glass(radius: 99),
+                        child: const Text('Cancel',
+                            style: TextStyle(color: _Glass.textSecondary, fontSize: 13,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: _saving ? null : _save,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                        decoration: _Glass.solidPill(_amber, glow: true),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_saving)
+                              const SizedBox(width: 13, height: 13,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            else
+                              const Icon(Icons.check_rounded, size: 14, color: Colors.white),
+                            const SizedBox(width: 6),
+                            const Text('Save Changes',
+                                style: TextStyle(color: Colors.white, fontSize: 13,
+                                    fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!_isPiece) {
+      final wv = double.tryParse(_wCtrl.text) ?? 0;
+      final lv = double.tryParse(_lCtrl.text) ?? 0;
+      if (wv <= 0 || lv <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Width and Length must be greater than 0'),
           backgroundColor: _Glass.accentRose,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
+        ));
+        return;
+      }
+    }
+    setState(() => _saving = true);
+    final nav = Navigator.of(context);
+    try {
+      final docId       = widget.data['material_id']?.toString() ?? '';
+      final name        = _nameCtrl.text.trim();
+      final restockInput = double.tryParse(_restockCtrl.text) ?? 5.0;
+      final sqft        = _unitSizeSqft;
+      final restockBase  = _isPiece ? restockInput : restockInput * sqft;
+      final wv = _isPiece ? 0.0 : (double.tryParse(_wCtrl.text) ?? 0.0);
+      final lv = _isPiece ? 0.0 : (double.tryParse(_lCtrl.text) ?? 0.0);
+      final unitDesc = _isPiece
+          ? 'Piece'
+          : '$_su (${_fmtNum(wv)}$_wUnit × ${_fmtNum(lv)}$_lUnit)';
+
+      await FirebaseFirestore.instance.collection('RawMaterials').doc(docId).update({
+        'material_name': name,
+        'stocking_unit': _su,
+        'width_value':  _isPiece ? null : wv,
+        'width_unit':   _isPiece ? null : _wUnit,
+        'length_value': _isPiece ? null : lv,
+        'length_unit':  _isPiece ? null : _lUnit,
+        'unit_size_sqft': sqft,
+        'unit_description': unitDesc,
+        'restock_level': restockBase,
+      });
+      nav.pop();
+      widget.onSaved('$docId updated');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error: $e'),
+        backgroundColor: _Glass.accentRose,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        margin: const EdgeInsets.all(16),
+      ));
       if (mounted) setState(() => _saving = false);
     }
   }
@@ -1588,6 +1957,116 @@ class _SectionLabel extends StatelessWidget {
       fontSize: 12,
       fontWeight: FontWeight.w700,
     ),
+  );
+}
+
+// Styled dropdown matching _GlassField appearance.
+class _GlassDropdown<T> extends StatelessWidget {
+  final T value;
+  final List<T> items;
+  final ValueChanged<T?> onChanged;
+  const _GlassDropdown({required this.value, required this.items, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) => DropdownButtonFormField<T>(
+    value: value,
+    onChanged: onChanged,
+    dropdownColor: _Glass.surface,
+    style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+    decoration: InputDecoration(
+      filled: true,
+      fillColor: _Glass.surfaceThin,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _Glass.borderMid, width: 0.9)),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: _amber.withValues(alpha: 0.7))),
+    ),
+    items: items.map((e) => DropdownMenuItem<T>(
+      value: e,
+      child: Text(e.toString(), style: const TextStyle(color: _Glass.textPrimary, fontSize: 13)),
+    )).toList(),
+  );
+}
+
+// Number field + unit dropdown side-by-side for width/length inputs.
+class _DimensionRow extends StatelessWidget {
+  final TextEditingController ctrl;
+  final String unit;
+  final ValueChanged<String> onUnitChanged;
+  const _DimensionRow({required this.ctrl, required this.unit, required this.onUnitChanged});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: TextFormField(
+          controller: ctrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+          validator: (v) {
+            if (v?.trim().isEmpty == true) return 'Required';
+            final n = double.tryParse(v!.trim());
+            if (n == null || n <= 0) return 'Invalid';
+            return null;
+          },
+          decoration: InputDecoration(
+            hintText: '0',
+            hintStyle: const TextStyle(color: _Glass.textMuted, fontSize: 13),
+            filled: true,
+            fillColor: _Glass.surfaceThin,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(10), bottomLeft: Radius.circular(10)),
+                borderSide: const BorderSide(color: _Glass.borderMid, width: 0.9)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(10), bottomLeft: Radius.circular(10)),
+                borderSide: BorderSide(color: _amber.withValues(alpha: 0.7))),
+            errorBorder: OutlineInputBorder(
+                borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(10), bottomLeft: Radius.circular(10)),
+                borderSide: const BorderSide(color: _Glass.accentRose)),
+            focusedErrorBorder: OutlineInputBorder(
+                borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(10), bottomLeft: Radius.circular(10)),
+                borderSide: const BorderSide(color: _Glass.accentRose)),
+            errorStyle: const TextStyle(fontSize: 10, color: _Glass.accentRose),
+          ),
+        ),
+      ),
+      Container(
+        decoration: BoxDecoration(
+          color: _Glass.surfaceThin,
+          borderRadius: const BorderRadius.only(
+              topRight: Radius.circular(10), bottomRight: Radius.circular(10)),
+          border: const Border(
+            top:    BorderSide(color: _Glass.borderMid, width: 0.9),
+            right:  BorderSide(color: _Glass.borderMid, width: 0.9),
+            bottom: BorderSide(color: _Glass.borderMid, width: 0.9),
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: unit,
+            dropdownColor: _Glass.surface,
+            style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+            onChanged: (v) { if (v != null) onUnitChanged(v); },
+            items: ['in', 'ft', 'm'].map((u) => DropdownMenuItem(
+              value: u,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(u, style: const TextStyle(color: _Glass.textPrimary, fontSize: 13)),
+              ),
+            )).toList(),
+          ),
+        ),
+      ),
+    ],
   );
 }
 
@@ -3065,6 +3544,41 @@ class _FLDot extends StatelessWidget {
       Text(label, style: const TextStyle(color: _Glass.textMuted, fontSize: 9)),
     ],
   );
+}
+
+// =============================================================================
+// Inventory dimension helpers
+// =============================================================================
+
+double _toFeet(double v, String unit) {
+  if (unit == 'in') return v / 12.0;
+  if (unit == 'm') return v * 3.28084;
+  return v; // 'ft'
+}
+
+double _calcUnitSqft(double wV, String wU, double lV, String lU) =>
+    _toFeet(wV, wU) * _toFeet(lV, lU);
+
+String _fmtNum(double v) =>
+    v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+
+String _stockUnitLabel(String su) {
+  if (su == 'Sheet') return 'sheet';
+  if (su == 'Roll') return 'roll';
+  return 'pc';
+}
+
+// Builds the sub-line shown under the material name in the table.
+// Only shows structured data — empty string if not yet configured.
+String _buildMatSubLine(Map<String, dynamic> data) {
+  final su = data['stocking_unit']?.toString();
+  if (su == null || su.isEmpty) return '';
+  if (su == 'Piece') return 'Piece';
+  final wv = (data['width_value'] as num?)?.toDouble() ?? 0;
+  final wu = data['width_unit']?.toString() ?? 'ft';
+  final lv = (data['length_value'] as num?)?.toDouble() ?? 0;
+  final lu = data['length_unit']?.toString() ?? 'm';
+  return '$su (${_fmtNum(wv)}$wu × ${_fmtNum(lv)}$lu)';
 }
 
 // =============================================================================

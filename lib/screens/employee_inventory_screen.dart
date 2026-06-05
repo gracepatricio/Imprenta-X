@@ -68,7 +68,34 @@ class _Glass {
 final _blurFilter = ImageFilter.blur(sigmaX: 14, sigmaY: 14);
 
 // ── Breakpoint ────────────────────────────────────────────────────────────────
-const double _kTableMinWidth = 560.0;
+const double _kTableMinWidth = 500.0;
+
+// ── Dimension helpers (mirrors admin screen) ──────────────────────────────────
+double _toFeet(double v, String unit) {
+  if (unit == 'in') return v / 12.0;
+  if (unit == 'm') return v * 3.28084;
+  return v;
+}
+
+String _fmtNum(double v) =>
+    v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+
+String _stockUnitLabel(String su) {
+  if (su == 'Sheet') return 'sheet';
+  if (su == 'Roll') return 'roll';
+  return 'pc';
+}
+
+String _buildMatSubLine(Map<String, dynamic> data) {
+  final su = data['stocking_unit']?.toString();
+  if (su == null || su.isEmpty) return '';
+  if (su == 'Piece') return 'Piece';
+  final wv = (data['width_value'] as num?)?.toDouble() ?? 0;
+  final wu = data['width_unit']?.toString() ?? 'ft';
+  final lv = (data['length_value'] as num?)?.toDouble() ?? 0;
+  final lu = data['length_unit']?.toString() ?? 'm';
+  return '$su (${_fmtNum(wv)}$wu × ${_fmtNum(lv)}$lu)';
+}
 
 // ── Sub-tab enum (mirrors admin) ──────────────────────────────────────────────
 enum _InventoryTab { inventory, forecast }
@@ -1432,84 +1459,62 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
             filter: _blurFilter,
             child: Container(
               decoration: _Glass.glass(radius: 20, elevated: true),
-              child: Column(
-                children: [
-                  // Column header
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xF2F4F6F8),
-                      border: Border(
-                        bottom: BorderSide(color: _Glass.borderDim, width: 0.8),
+              child: LayoutBuilder(
+                builder: (_, c) {
+                  if (filtered.isEmpty) {
+                    return Center(
+                      child: Text(
+                        _statusFilter != null
+                            ? 'No "$_statusFilter" materials'
+                            : 'No materials found',
+                        style: const TextStyle(
+                          color: _Glass.textMuted,
+                          fontSize: 13,
+                        ),
                       ),
-                    ),
-                    child: LayoutBuilder(
-                      builder: (_, c) {
-                        if (c.maxWidth < _kTableMinWidth) {
-                          return SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SizedBox(
-                              width: _kTableMinWidth.clamp(
-                                c.maxWidth,
-                                double.infinity,
-                              ),
-                              child: const _TableHeader(),
+                    );
+                  }
+                  Widget buildTable() => ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: filtered.length + 1,
+                    itemBuilder: (_, i) {
+                      if (i == 0) {
+                        return Container(
+                          decoration: const BoxDecoration(
+                            color: Color(0xF2F4F6F8),
+                            border: Border(
+                              bottom: BorderSide(color: _Glass.borderDim, width: 0.8),
                             ),
-                          );
-                        }
-                        return const _TableHeader();
-                      },
-                    ),
-                  ),
-
-                  // Rows
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? Center(
-                            child: Text(
-                              _statusFilter != null
-                                  ? 'No "$_statusFilter" materials'
-                                  : 'No materials found',
-                              style: const TextStyle(
-                                color: _Glass.textMuted,
-                                fontSize: 13,
-                              ),
-                            ),
-                          )
-                        : LayoutBuilder(
-                            builder: (_, c) {
-                              Widget list = ListView.builder(
-                                padding: EdgeInsets.zero,
-                                itemCount: filtered.length,
-                                itemBuilder: (_, i) => _TableRow(
-                                  data: filtered[i],
-                                  isLast: i == filtered.length - 1,
-                                  statusColor: _statusColor(
-                                    filtered[i]['_status'] as String,
-                                  ),
-                                  onEdit: () => _showReplenishDialog(
-                                    filtered[i]['doc_id'] as String,
-                                    filtered[i],
-                                    method: 'manual',
-                                  ),
-                                ),
-                              );
-                              if (c.maxWidth < _kTableMinWidth) {
-                                return SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: SizedBox(
-                                    width: _kTableMinWidth.clamp(
-                                      c.maxWidth,
-                                      double.infinity,
-                                    ),
-                                    child: list,
-                                  ),
-                                );
-                              }
-                              return list;
-                            },
                           ),
-                  ),
-                ],
+                          child: const _TableHeader(),
+                        );
+                      }
+                      final idx = i - 1;
+                      return _TableRow(
+                        data: filtered[idx],
+                        isLast: idx == filtered.length - 1,
+                        statusColor: _statusColor(
+                          filtered[idx]['_status'] as String,
+                        ),
+                        onEdit: () => _showReplenishDialog(
+                          filtered[idx]['doc_id'] as String,
+                          filtered[idx],
+                          method: 'manual',
+                        ),
+                      );
+                    },
+                  );
+                  if (c.maxWidth < _kTableMinWidth) {
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: _kTableMinWidth,
+                        child: buildTable(),
+                      ),
+                    );
+                  }
+                  return buildTable();
+                },
               ),
             ),
           ),
@@ -1717,14 +1722,10 @@ class _TableHeader extends StatelessWidget {
     child: Row(
       children: [
         SizedBox(width: 74, child: Text('Code', style: _h)),
-        Expanded(child: Text('Material Name', style: _h)),
+        Expanded(child: Text('Material', style: _h)),
         SizedBox(
-          width: 72,
-          child: Text('Stock', style: _h, textAlign: TextAlign.center),
-        ),
-        SizedBox(
-          width: 80,
-          child: Text('Restock At', style: _h, textAlign: TextAlign.center),
+          width: 150,
+          child: Text('Available Stock', style: _h, textAlign: TextAlign.center),
         ),
         SizedBox(
           width: 90,
@@ -1754,15 +1755,45 @@ class _TableRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final id = data['material_id']?.toString() ?? '';
-    final name = data['material_name']?.toString() ?? '';
-    final unit = data['unit_description']?.toString() ?? '';
-    final current = (data['current_stock'] as num?) ?? 0;
-    final restock = (data['restock_level'] as num?) ?? 0;
-    final status = data['_status']?.toString() ?? '';
+    final id      = data['material_id']?.toString() ?? '';
+    final name    = data['material_name']?.toString() ?? '';
+    final status  = data['_status']?.toString() ?? '';
+    final current = (data['current_stock'] as num?)?.toDouble() ?? 0;
+    final su       = data['stocking_unit']?.toString() ?? '';
+    final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
+    final subLine  = _buildMatSubLine(data);
+    final isStructured = su.isNotEmpty;
+    final isPiece      = su == 'Piece';
 
-    String fmt(num v) =>
-        v == v.toInt() ? v.toInt().toString() : v.toStringAsFixed(2);
+    // Available stock cell
+    Widget stockCell;
+    if (!isStructured) {
+      stockCell = Text(
+        _fmtNum(current),
+        style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+        textAlign: TextAlign.center,
+      );
+    } else if (isPiece) {
+      stockCell = Text(
+        '${_fmtNum(current)} pcs',
+        style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+        textAlign: TextAlign.center,
+      );
+    } else {
+      final stockUnits = unitSqft > 0 ? current / unitSqft : 0.0;
+      final label = _stockUnitLabel(su);
+      stockCell = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('${_fmtNum(current)} sqft',
+              style: const TextStyle(color: _Glass.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center),
+          Text('${_fmtNum(stockUnits)} ${label}s',
+              style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+              textAlign: TextAlign.center),
+        ],
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1777,64 +1808,30 @@ class _TableRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 74,
-            child: Text(
-              id,
-              style: const TextStyle(
-                color: _Glass.textMuted,
-                fontSize: 12,
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            child: Text(id,
+                style: const TextStyle(
+                    color: _Glass.textMuted, fontSize: 12,
+                    fontFamily: 'monospace', fontWeight: FontWeight.w600)),
           ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    color: _Glass.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (unit.isNotEmpty) ...[
-                  const SizedBox(height: 1),
-                  Text(
-                    unit,
+                Text(name,
                     style: const TextStyle(
-                      color: _Glass.textMuted,
-                      fontSize: 11,
-                    ),
-                  ),
+                        color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                if (subLine.isNotEmpty) ...[
+                  const SizedBox(height: 1),
+                  Text(subLine,
+                      style: const TextStyle(color: _Glass.textMuted, fontSize: 11)),
                 ],
               ],
             ),
           ),
-          SizedBox(
-            width: 72,
-            child: Text(
-              fmt(current),
-              style: const TextStyle(
-                color: _Glass.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          SizedBox(
-            width: 80,
-            child: Text(
-              fmt(restock),
-              style: const TextStyle(color: _Glass.textSecondary, fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-          ),
+          SizedBox(width: 150, child: Center(child: stockCell)),
           SizedBox(
             width: 90,
             child: Center(
@@ -1843,20 +1840,12 @@ class _TableRow extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(99),
-                  border: Border.all(
-                    color: statusColor.withValues(alpha: 0.35),
-                    width: 0.8,
-                  ),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.35), width: 0.8),
                 ),
-                child: Text(
-                  status,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                child: Text(status,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: statusColor, fontSize: 10, fontWeight: FontWeight.w700)),
               ),
             ),
           ),
@@ -1866,29 +1855,17 @@ class _TableRow extends StatelessWidget {
               child: GestureDetector(
                 onTap: onEdit,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 5,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                   decoration: BoxDecoration(
                     color: _navyBlue,
                     borderRadius: BorderRadius.circular(99),
                     boxShadow: [
-                      BoxShadow(
-                        color: _navyBlue.withValues(alpha: 0.22),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
+                      BoxShadow(color: _navyBlue.withValues(alpha: 0.22),
+                          blurRadius: 10, offset: const Offset(0, 4)),
                     ],
                   ),
-                  child: const Text(
-                    'Edit',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child: const Text('Edit',
+                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
                 ),
               ),
             ),
