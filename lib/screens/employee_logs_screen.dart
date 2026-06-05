@@ -1205,6 +1205,7 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                             invoiceId: invoiceId,
                             cancelReason:
                                 data['cancel_reason']?.toString() ?? '',
+                            notes: data['notes']?.toString() ?? '',
                           ),
                         ),
                       ],
@@ -1229,6 +1230,7 @@ class _OrderHistoryCard extends StatelessWidget {
   final List<Map<String, dynamic>> products;
   final String? invoiceId;
   final String cancelReason;
+  final String notes;
 
   const _OrderHistoryCard({
     required this.doc,
@@ -1245,6 +1247,7 @@ class _OrderHistoryCard extends StatelessWidget {
     required this.dateStr,
     this.invoiceId,
     this.cancelReason = '',
+    this.notes = '',
   });
 
   @override
@@ -1333,6 +1336,21 @@ class _OrderHistoryCard extends StatelessWidget {
               ),
               DesignFilesSection(products: products),
             ],
+            // Special instructions
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.notes_outlined, size: 12, color: _Glass.textMuted),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    'Special Instructions: ${notes.isNotEmpty ? notes : 'None'}',
+                    style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
             // Cancellation reason banner (cancelled orders only)
             if (cancelReason.isNotEmpty && status == 'cancelled') ...[
               const SizedBox(height: 6),
@@ -4535,6 +4553,22 @@ class _QueueCard extends StatelessWidget {
                   DesignFilesSection(products: products),
                 ],
 
+                // Special instructions
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.notes_outlined, size: 12, color: _Glass.textMuted),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        'Special Instructions: ${(data['notes'] as String?)?.isNotEmpty == true ? data['notes'] : 'None'}',
+                        style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+
                 // Due date row (pending/active only)
                 if (estimatedCompletion != null &&
                     jobStatus != 'cancelled') ...[
@@ -4796,30 +4830,32 @@ class _QueueCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                      const SizedBox(width: 8),
-                      // Cancel button
-                      GestureDetector(
-                        onTap: () => _cancelOrder(context),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 9,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _Glass.accentRose.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(99),
-                            border: Border.all(
-                              color: _Glass.accentRose.withValues(alpha: 0.30),
-                              width: 0.8,
+                      if (jobStatus != 'active') ...[
+                        const SizedBox(width: 8),
+                        // Cancel button
+                        GestureDetector(
+                          onTap: () => _cancelOrder(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 9,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _Glass.accentRose.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(99),
+                              border: Border.all(
+                                color: _Glass.accentRose.withValues(alpha: 0.30),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.cancel_outlined,
+                              size: 18,
+                              color: _Glass.accentRose,
                             ),
                           ),
-                          child: const Icon(
-                            Icons.cancel_outlined,
-                            size: 18,
-                            color: _Glass.accentRose,
-                          ),
                         ),
-                      ),
+                      ],
                       const SizedBox(width: 8),
                       // Invoice button
                       Builder(

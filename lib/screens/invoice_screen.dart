@@ -283,7 +283,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                             font: bold,
                             fontSize: 9,
                             color: isCancelledPdf
-                                ? const PdfColor.fromInt(0xFFEF4444)
+                                ? const PdfColor.fromInt(0xFFFCA5A5)
                                 : isFullyPaid
                                 ? paidGreen
                                 : dueTint,
@@ -749,13 +749,16 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0F1E),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F1A2E),
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
         leading: widget.fromPayment
             ? IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
+                icon: const Icon(Icons.close, color: Color(0xFF1E293B)),
                 tooltip: 'View My Orders',
                 onPressed: () => Navigator.of(context).pop(),
               )
@@ -766,7 +769,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
             Text(
               widget.invoiceId,
               style: const TextStyle(
-                color: Colors.white,
+                color: Color(0xFF1E293B),
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
               ),
@@ -775,7 +778,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
               widget.fromPayment
                   ? 'Payment Confirmed ✓'
                   : 'Official Sales Invoice',
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
+              style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
             ),
           ],
         ),
@@ -862,12 +865,9 @@ class _InvoiceView extends StatelessWidget {
           // ── Header band ────────────────────────────────────────────────────
           Container(
             width: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF0F1A2E), Color(0xFF1A2E4A)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
             ),
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
             child: Column(
@@ -894,7 +894,7 @@ class _InvoiceView extends StatelessWidget {
                           const Text(
                             _bizTagline,
                             style: TextStyle(
-                              color: Colors.white38,
+                              color: Color(0xFF94A3B8),
                               fontSize: 11,
                             ),
                           ),
@@ -947,13 +947,13 @@ class _InvoiceView extends StatelessWidget {
                 const SizedBox(height: 10),
                 Container(
                   height: 1,
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: const Color(0xFFE2E8F0),
                 ),
                 const SizedBox(height: 10),
                 const Text(
                   '$_bizAddr1\n$_bizAddr2',
                   style: TextStyle(
-                    color: Colors.white54,
+                    color: Color(0xFF64748B),
                     fontSize: 11,
                     height: 1.5,
                   ),
@@ -964,14 +964,14 @@ class _InvoiceView extends StatelessWidget {
                     const Text(
                       'TIN: ',
                       style: TextStyle(
-                        color: Colors.white38,
+                        color: Color(0xFF94A3B8),
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const Text(
                       _bizTin,
-                      style: TextStyle(color: Colors.white54, fontSize: 11),
+                      style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
                     ),
                   ],
                 ),
@@ -980,7 +980,7 @@ class _InvoiceView extends StatelessWidget {
                 const SizedBox(height: 16),
                 Container(
                   height: 1,
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: const Color(0xFFE2E8F0),
                 ),
                 const SizedBox(height: 14),
 
@@ -1039,7 +1039,7 @@ class _InvoiceView extends StatelessWidget {
           // ── Bill To strip ───────────────────────────────────────────────────
           Container(
             width: double.infinity,
-            color: const Color(0xFF111827),
+            color: const Color(0xFFF1F5F9),
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1051,7 +1051,7 @@ class _InvoiceView extends StatelessWidget {
                       const Text(
                         'BILL TO',
                         style: TextStyle(
-                          color: Colors.white38,
+                          color: Color(0xFF94A3B8),
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 1,
@@ -1061,7 +1061,7 @@ class _InvoiceView extends StatelessWidget {
                       Text(
                         inv['customer_name']?.toString() ?? '—',
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: Color(0xFF1E293B),
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1069,7 +1069,7 @@ class _InvoiceView extends StatelessWidget {
                       Text(
                         inv['customer_email']?.toString() ?? '—',
                         style: const TextStyle(
-                          color: Colors.white54,
+                          color: Color(0xFF64748B),
                           fontSize: 11,
                         ),
                       ),
@@ -1079,7 +1079,7 @@ class _InvoiceView extends StatelessWidget {
                 Container(
                   width: 1,
                   height: 48,
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: const Color(0xFFD1D5DB),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -1089,7 +1089,7 @@ class _InvoiceView extends StatelessWidget {
                       const Text(
                         'ISSUED BY',
                         style: TextStyle(
-                          color: Colors.white38,
+                          color: Color(0xFF94A3B8),
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 1,
@@ -1099,14 +1099,14 @@ class _InvoiceView extends StatelessWidget {
                       const Text(
                         _bizName,
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Color(0xFF1E293B),
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       const Text(
                         'TIN: $_bizTin',
-                        style: TextStyle(color: Colors.white54, fontSize: 11),
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
                       ),
                     ],
                   ),
@@ -1127,7 +1127,7 @@ class _InvoiceView extends StatelessWidget {
                 // Table header
                 Container(
                   decoration: const BoxDecoration(
-                    color: Color(0xFF0F1A2E),
+                    color: Color(0xFF1E3A5F),
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(10),
                       topRight: Radius.circular(10),
@@ -1190,8 +1190,8 @@ class _InvoiceView extends StatelessWidget {
                   return Container(
                     decoration: BoxDecoration(
                       color: idx.isEven
-                          ? const Color(0xFF0D1424)
-                          : const Color(0xFF111828),
+                          ? const Color(0xFFF8FAFC)
+                          : Colors.white,
                       borderRadius: isLast
                           ? const BorderRadius.only(
                               bottomLeft: Radius.circular(10),
@@ -1201,9 +1201,7 @@ class _InvoiceView extends StatelessWidget {
                       border: Border(
                         bottom: isLast
                             ? BorderSide.none
-                            : BorderSide(
-                                color: Colors.white.withValues(alpha: 0.05),
-                              ),
+                            : const BorderSide(color: Color(0xFFE2E8F0)),
                       ),
                     ),
                     padding: const EdgeInsets.symmetric(
@@ -1221,7 +1219,7 @@ class _InvoiceView extends StatelessWidget {
                               Text(
                                 name,
                                 style: const TextStyle(
-                                  color: Colors.white,
+                                  color: Color(0xFF1E293B),
                                   fontWeight: FontWeight.w600,
                                   fontSize: 13,
                                 ),
@@ -1233,7 +1231,7 @@ class _InvoiceView extends StatelessWidget {
                                     if (mat != null) mat,
                                   ].join(' · '),
                                   style: const TextStyle(
-                                    color: Colors.white38,
+                                    color: Color(0xFF64748B),
                                     fontSize: 11,
                                   ),
                                 ),
@@ -1241,7 +1239,7 @@ class _InvoiceView extends StatelessWidget {
                                 Text(
                                   'Note: $notes',
                                   style: const TextStyle(
-                                    color: Colors.white24,
+                                    color: Color(0xFF94A3B8),
                                     fontSize: 11,
                                   ),
                                 ),
@@ -1252,7 +1250,7 @@ class _InvoiceView extends StatelessWidget {
                         Text(
                           '×$qty',
                           style: const TextStyle(
-                            color: Colors.white54,
+                            color: Color(0xFF64748B),
                             fontSize: 12,
                           ),
                         ),
@@ -1271,7 +1269,7 @@ class _InvoiceView extends StatelessWidget {
                             Text(
                               '@ ₱${unit.toStringAsFixed(2)}',
                               style: const TextStyle(
-                                color: Colors.white24,
+                                color: Color(0xFF94A3B8),
                                 fontSize: 10,
                               ),
                             ),
@@ -1346,11 +1344,9 @@ class _InvoiceView extends StatelessWidget {
                 const SizedBox(height: 10),
                 Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0D1424),
+                    color: const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.07),
-                    ),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
                   clipBehavior: Clip.hardEdge,
                   child: Column(
@@ -1358,7 +1354,7 @@ class _InvoiceView extends StatelessWidget {
                       // Header
                       Container(
                         width: double.infinity,
-                        color: const Color(0xFF0F1A2E),
+                        color: const Color(0xFF1E3A5F),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 18,
                           vertical: 10,
@@ -1380,7 +1376,7 @@ class _InvoiceView extends StatelessWidget {
                             _PayRow(
                               label: 'Order Total',
                               value: total,
-                              color: Colors.white70,
+                              color: const Color(0xFF374151),
                               large: false,
                             ),
                             const SizedBox(height: 10),
@@ -1391,8 +1387,8 @@ class _InvoiceView extends StatelessWidget {
                               large: false,
                             ),
                             const SizedBox(height: 10),
-                            Divider(
-                              color: Colors.white.withValues(alpha: 0.08),
+                            const Divider(
+                              color: Color(0xFFE2E8F0),
                               height: 1,
                             ),
                             const SizedBox(height: 10),
@@ -1456,11 +1452,9 @@ class _InvoiceView extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0D1424),
+                    color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.05),
-                    ),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1477,7 +1471,7 @@ class _InvoiceView extends StatelessWidget {
                                 child: Text(
                                   t,
                                   style: const TextStyle(
-                                    color: Colors.white38,
+                                    color: Color(0xFF64748B),
                                     fontSize: 11,
                                     height: 1.4,
                                   ),
@@ -1495,15 +1489,16 @@ class _InvoiceView extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0F1A2E),
+                    color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
                   child: Column(
                     children: [
                       Text(
                         '$_bizName  ·  TIN: $_bizTin',
                         style: const TextStyle(
-                          color: Colors.white54,
+                          color: Color(0xFF475569),
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1512,13 +1507,13 @@ class _InvoiceView extends StatelessWidget {
                       const SizedBox(height: 4),
                       const Text(
                         '$_bizAddr1, $_bizAddr2',
-                        style: TextStyle(color: Colors.white24, fontSize: 10),
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'This is an official electronic invoice issued by Imprenta Inc.',
-                        style: TextStyle(color: Colors.white24, fontSize: 10),
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -1563,7 +1558,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     text,
     style: const TextStyle(
-      color: Colors.white38,
+      color: Color(0xFF64748B),
       fontSize: 10,
       fontWeight: FontWeight.w700,
       letterSpacing: 1.2,
@@ -1582,7 +1577,7 @@ class _InvDetail extends StatelessWidget {
       Text(
         label,
         style: const TextStyle(
-          color: Colors.white38,
+          color: Color(0xFF94A3B8),
           fontSize: 9,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.8,
@@ -1592,7 +1587,7 @@ class _InvDetail extends StatelessWidget {
       Text(
         value,
         style: const TextStyle(
-          color: Colors.white,
+          color: Color(0xFF1E293B),
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
@@ -1620,7 +1615,7 @@ class _PayRow extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            color: Colors.white70,
+            color: const Color(0xFF374151),
             fontSize: large ? 13 : 12,
             fontWeight: large ? FontWeight.w600 : FontWeight.normal,
           ),

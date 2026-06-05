@@ -663,40 +663,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 ],
               ),
             ),
-            // Active badge — standalone only
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: _G.accentEmerald.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(99),
-                border: Border.all(
-                  color: _G.accentEmerald.withValues(alpha: 0.40),
-                  width: 1.0,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _G.accentEmerald,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  const Text(
-                    'Active',
-                    style: TextStyle(
-                      color: _G.accentEmerald,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),

@@ -1418,6 +1418,45 @@ class _OrderCard extends StatelessWidget {
                 ),
               );
             }),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.notes_outlined, size: 12, color: _G.textMuted),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    'Special Instructions: ${(data['notes'] as String?)?.isNotEmpty == true ? data['notes'] : 'None'}',
+                    style: const TextStyle(color: _G.textMuted, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+            if (status == 'cancelled' && (data['cancel_reason']?.toString() ?? '').isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.22)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.cancel_outlined, size: 13, color: Color(0xFFEF4444)),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        'Cancellation Reason: ${data['cancel_reason']}',
+                        style: const TextStyle(color: Color(0xFFEF4444), fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             Divider(color: Colors.white.withValues(alpha: 0.10), height: 1),
             const SizedBox(height: 10),
