@@ -281,17 +281,29 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
     required String method,
   }) {
     final qtyCtrl = TextEditingController();
-    final name = material['material_name']?.toString() ?? '';
-    final unit = material['unit_description']?.toString() ?? '';
-    final stockUnit = material['stock_unit']?.toString() ?? 'pcs';
-    final pieceToSqft = (material['piece_to_sqft'] as num?)?.toDouble();
-    final isSqft = stockUnit == 'sqft';
-    final current = (material['current_stock'] as num?) ?? 0;
+    final name     = material['material_name']?.toString() ?? '';
+    final unitDesc = material['unit_description']?.toString() ?? '';
+    final su       = material['stocking_unit']?.toString() ?? 'Piece';
+    final baseUom  = material['base_uom']?.toString() ??
+        (su == 'Piece' ? 'pc' : 'sqft');
+    final unitSize = (material['unit_size_sqft'] as num?)?.toDouble() ?? 1.0;
+    final current  = (material['current_stock'] as num?) ?? 0;
+    final isPiece  = su == 'Piece';
+    final isPack   = isPiece && baseUom == 'sheet';
+    final isSqft   = !isPiece;
+    // Label for one stocking unit (e.g. "roll", "sheet", "pack", "pc")
+    final suLabel  = isPack ? 'pack' : (isPiece ? 'pc' : _stockUnitLabel(su));
     bool saving = false;
 
-    String fmt(num v) {
-      final s = v == v.toInt() ? v.toInt().toString() : v.toStringAsFixed(1);
-      return '$s $stockUnit';
+    // Format a base-unit quantity for display.
+    String fmtBase(num v) {
+      final s = v == v.toInt() ? v.toInt().toString() : v.toStringAsFixed(2);
+      return '$s $baseUom';
+    }
+    // Format a stocking-unit quantity for display.
+    String fmtStock(double v) {
+      final s = v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+      return '$s ${suLabel}s';
     }
 
     showDialog(
@@ -399,10 +411,10 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            if (unit.isNotEmpty) ...[
+                            if (unitDesc.isNotEmpty) ...[
                               const SizedBox(height: 2),
                               Text(
-                                unit,
+                                unitDesc,
                                 style: const TextStyle(
                                   color: _Glass.textMuted,
                                   fontSize: 12,
@@ -420,13 +432,55 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                                   ),
                                 ),
                                 Text(
-                                  fmt(current),
+                                  fmtBase(current),
                                   style: const TextStyle(
                                     color: _Glass.accentEmerald,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
+                                if (isSqft && unitSize > 0) ...[
+                                  const Text(
+                                    '  (',
+                                    style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 12),
+                                  ),
+                                  Text(
+                                    fmtStock(
+                                        (current as double) / unitSize),
+                                    style: const TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 12),
+                                  ),
+                                  const Text(
+                                    ')',
+                                    style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 12),
+                                  ),
+                                ],
+                                if (isPack && unitSize > 0) ...[
+                                  const Text(
+                                    '  (',
+                                    style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 12),
+                                  ),
+                                  Text(
+                                    fmtStock(
+                                        (current as double) / unitSize),
+                                    style: const TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 12),
+                                  ),
+                                  const Text(
+                                    ')',
+                                    style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 12),
+                                  ),
+                                ],
                               ],
                             ),
                           ],
@@ -435,15 +489,15 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                       const SizedBox(height: 14),
 
                       _SectionLabel(
-                        isSqft && pieceToSqft != null
-                            ? 'Number of pieces to add (rolls / sheets)'
-                            : 'Quantity to add (${isSqft ? 'sqft' : 'pcs'})',
+                        isPiece && !isPack
+                            ? 'Quantity to add (pcs)'
+                            : 'Number of ${suLabel}s to add',
                       ),
-                      if (isSqft && pieceToSqft != null) ...[
+                      if (unitSize > 1) ...[
                         const SizedBox(height: 3),
                         Text(
-                          '1 piece = ${pieceToSqft.toStringAsFixed(1)} sqft  •  '
-                          'e.g. enter 1 to add ${pieceToSqft.toStringAsFixed(0)} sqft',
+                          '1 $suLabel = ${_fmtNum(unitSize)} $baseUom'
+                          '  •  e.g. enter 2 to add ${_fmtNum(unitSize * 2)} $baseUom',
                           style: const TextStyle(
                             color: _Glass.accentEmerald,
                             fontSize: 11,
@@ -458,9 +512,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                           children: [
                             _GlassField(
                               controller: qtyCtrl,
-                              hint: isSqft && pieceToSqft != null
-                                  ? 'e.g. 1 (roll/sheet)'
-                                  : 'e.g. 2',
+                              hint: 'e.g. 1',
                               icon: Icons.add_circle_outline_rounded,
                               keyboardType:
                                   const TextInputType.numberWithOptions(
@@ -468,17 +520,15 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                                   ),
                               onChanged: (_) => setQty(() {}),
                             ),
-                            if (isSqft &&
-                                pieceToSqft != null &&
-                                qtyCtrl.text.isNotEmpty) ...[
+                            if (unitSize > 1 && qtyCtrl.text.isNotEmpty) ...[
                               const SizedBox(height: 6),
                               Builder(
                                 builder: (_) {
-                                  final pieces =
+                                  final qty =
                                       double.tryParse(qtyCtrl.text.trim()) ?? 0;
-                                  final sqft = pieces * pieceToSqft;
+                                  final total = qty * unitSize;
                                   return Text(
-                                    '= ${sqft.toStringAsFixed(1)} sqft will be added',
+                                    '= ${_fmtNum(total)} $baseUom will be added',
                                     style: const TextStyle(
                                       color: _Glass.accentEmerald,
                                       fontSize: 12,
@@ -573,10 +623,10 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                                   );
                                   return;
                                 }
-                                final actualQty =
-                                    (isSqft && pieceToSqft != null)
-                                    ? inputQty * pieceToSqft
-                                    : inputQty;
+                                // Universal conversion: input × unit_size
+                                // Works for all types: rolls (→sqft),
+                                // sheets (→sqft), packs (→sheets), pcs (×1).
+                                final actualQty = inputQty * unitSize;
                                 setDlg(() => saving = true);
                                 await _commitReplenish(
                                   docId,
@@ -686,8 +736,8 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            '$materialName updated: +$qty → $newStock '
-            '${material['unit_description'] ?? ''}',
+            '$materialName: +${_fmtNum(qty)} → ${_fmtNum(newStock)} '
+            '${(material['base_uom'] ?? material['unit_description'] ?? '')}',
           ),
           backgroundColor: _Glass.accentEmerald,
           behavior: SnackBarBehavior.floating,

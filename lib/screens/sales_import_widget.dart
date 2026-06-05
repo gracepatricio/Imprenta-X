@@ -1,13 +1,21 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:excel/excel.dart' hide Border;
-import 'package:intl/intl.dart';
 import '../services/sales_file_picker.dart';
+
+// Storage path where the historical Excel file lives.
+const kSalesExcelStoragePath = 'sales_records/historical_sales.xlsx';
+
+const _kExpectedHeaders = [
+  'invoice_number', 'sale_date',    'order_date',     'customer_name',
+  'product_name',   'type',         'size',            'quantity',
+  'unit_price',     'item_total',   'total_amount',    'order_status',
+  'payment_status', 'source',       'is_historical',
+];
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 class _G {
-  static const Color primary    = Color(0xFF1A1A2E);
+  static const Color primary       = Color(0xFF1A1A2E);
   static const Color textPrimary   = Color(0xFF111827);
   static const Color textSecondary = Color(0xFF4B5563);
   static const Color textMuted     = Color(0xFF9CA3AF);
@@ -19,16 +27,8 @@ class _G {
   );
 }
 
-// ── Column mapping ────────────────────────────────────────────────────────────
-const _kExpectedHeaders = [
-  'invoice_number', 'sale_date',    'order_date',     'customer_name',
-  'product_name',   'type',         'size',            'quantity',
-  'unit_price',     'item_total',   'total_amount',    'order_status',
-  'payment_status', 'source',       'is_historical',
-];
-
 // =============================================================================
-// Public entry-point
+// Public entry-point button
 // =============================================================================
 class SalesImportButton extends StatelessWidget {
   const SalesImportButton({super.key});
@@ -50,7 +50,7 @@ class SalesImportButton extends StatelessWidget {
             Icon(Icons.upload_file_rounded, size: 14, color: Colors.white),
             SizedBox(width: 7),
             Text(
-              'Import Records',
+              'Upload Excel',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 12,
@@ -66,7 +66,7 @@ class SalesImportButton extends StatelessWidget {
 }
 
 // =============================================================================
-// Show the import bottom sheet
+// Show the upload bottom sheet
 // =============================================================================
 Future<void> showSalesImportSheet(BuildContext context) {
   return showModalBottomSheet(
@@ -79,9 +79,9 @@ Future<void> showSalesImportSheet(BuildContext context) {
 }
 
 // =============================================================================
-// Import Sheet
+// Upload Sheet — picks file and uploads directly to Firebase Storage
 // =============================================================================
-enum _ImportStep { idle, parsing, preview, uploading, done, error }
+enum _UploadStep { idle, uploading, done, error }
 
 class _SalesImportSheet extends StatefulWidget {
   const _SalesImportSheet();
@@ -90,209 +90,57 @@ class _SalesImportSheet extends StatefulWidget {
 }
 
 class _SalesImportSheetState extends State<_SalesImportSheet> {
-  _ImportStep _step = _ImportStep.idle;
-  String? _fileName;
-  String? _errorMsg;
-  List<_SalesRow> _rows = [];
-  int _uploadedCount = 0;
-  int _skippedCount  = 0;
-  final Set<int> _selected = {};
+  _UploadStep _step     = _UploadStep.idle;
+  String?     _fileName;
+  String?     _errorMsg;
+  double?     _progress; // null = indeterminate
 
-  // ── Date string → Firestore Timestamp (date only) ─────────────────────────
-  static Timestamp? _toTimestamp(String raw) {
-    if (raw.isEmpty) return null;
-    try {
-      final d = DateTime.parse(raw);
-      return Timestamp.fromDate(DateTime(d.year, d.month, d.day));
-    } catch (_) {
-      final fmts = ['dd/MM/yyyy', 'MM-dd-yyyy', 'MM/dd/yyyy', 'd/M/yyyy'];
-      for (final fmt in fmts) {
-        try {
-          final d = DateFormat(fmt).parseStrict(raw);
-          return Timestamp.fromDate(DateTime(d.year, d.month, d.day));
-        } catch (_) {}
-      }
-      return null;
-    }
-  }
-
-  // ── File pick + parse ──────────────────────────────────────────────────────
-  Future<void> _pickFile() async {
+  Future<void> _pickAndUpload() async {
     final picked = await pickSalesFile();
     if (picked == null) return;
 
     final (fileName, bytes) = picked;
     setState(() {
-      _step     = _ImportStep.parsing;
+      _step     = _UploadStep.uploading;
       _fileName = fileName;
       _errorMsg = null;
-      _rows     = [];
+      _progress = null;
     });
 
     try {
-      List<_SalesRow> parsed;
-      if (fileName.toLowerCase().endsWith('.csv')) {
-        parsed = _parseCsv(utf8.decode(bytes));
-      } else {
-        parsed = _parseXlsx(bytes);
-      }
+      final ref  = FirebaseStorage.instance.ref(kSalesExcelStoragePath);
+      final task = ref.putData(
+        bytes,
+        SettableMetadata(
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          customMetadata: {'originalName': fileName},
+        ),
+      );
 
-      if (parsed.isEmpty) throw Exception('No valid data rows found.');
-
-      setState(() {
-        _rows = parsed;
-        _step = _ImportStep.preview;
-        _selected.addAll(List.generate(parsed.length, (i) => i));
+      task.snapshotEvents.listen((snap) {
+        if (!mounted) return;
+        setState(() {
+          _progress = snap.totalBytes > 0
+              ? snap.bytesTransferred / snap.totalBytes
+              : null;
+        });
       });
+
+      await task;
+      if (mounted) setState(() => _step = _UploadStep.done);
     } catch (e) {
-      setState(() {
-        _step     = _ImportStep.error;
+      if (mounted) setState(() {
+        _step     = _UploadStep.error;
         _errorMsg = e.toString();
       });
     }
   }
 
-  // ── XLSX parser ────────────────────────────────────────────────────────────
-  List<_SalesRow> _parseXlsx(List<int> bytes) {
-    final excel = Excel.decodeBytes(bytes);
-    final sheet = excel.tables[excel.tables.keys.first]!;
-    final rows  = sheet.rows;
-    if (rows.isEmpty) return [];
-
-    int headerIdx = 0;
-    Map<String, int> colMap = {};
-    for (int r = 0; r < rows.length.clamp(0, 5); r++) {
-      final map = _buildColMap(rows[r]);
-      if (map.length >= 5) { headerIdx = r; colMap = map; break; }
-    }
-    if (colMap.isEmpty) {
-      throw Exception(
-        'Could not detect header row.\nExpected columns like: invoice_number, sale_date, customer_name …',
-      );
-    }
-
-    final result = <_SalesRow>[];
-    for (int r = headerIdx + 1; r < rows.length; r++) {
-      final row = rows[r];
-      final inv = _SalesRow._s(row, colMap['invoice_number']);
-      if (inv.isEmpty) continue;
-      result.add(_SalesRow.fromCells(row, colMap));
-    }
-    return result;
-  }
-
-  // ── CSV parser ─────────────────────────────────────────────────────────────
-  List<_SalesRow> _parseCsv(String content) {
-    final lines = const LineSplitter().convert(content);
-    if (lines.isEmpty) return [];
-    final headers = _splitCsvLine(lines[0]);
-    final colMap  = <String, int>{};
-    for (int i = 0; i < headers.length; i++) {
-      final key = headers[i].trim().toLowerCase().replaceAll(' ', '_');
-      colMap[key] = i;
-    }
-    if (colMap.length < 5) throw Exception('CSV header row not recognised.');
-
-    final result = <_SalesRow>[];
-    for (int i = 1; i < lines.length; i++) {
-      final cells = _splitCsvLine(lines[i]);
-      if (cells.isEmpty || cells.first.trim().isEmpty) continue;
-      result.add(_SalesRow.fromList(cells, colMap));
-    }
-    return result;
-  }
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  Map<String, int> _buildColMap(List<Data?> row) {
-    final map = <String, int>{};
-    for (int i = 0; i < row.length; i++) {
-      final val = _SalesRow._s(row, i).toLowerCase().replaceAll(' ', '_');
-      if (_kExpectedHeaders.contains(val)) map[val] = i;
-    }
-    return map;
-  }
-
-  List<String> _splitCsvLine(String line) {
-    final result = <String>[];
-    final buffer = StringBuffer();
-    bool inQuotes = false;
-    for (int i = 0; i < line.length; i++) {
-      final c = line[i];
-      if (c == '"') { inQuotes = !inQuotes; continue; }
-      if (c == ',' && !inQuotes) { result.add(buffer.toString()); buffer.clear(); continue; }
-      buffer.write(c);
-    }
-    result.add(buffer.toString());
-    return result;
-  }
-
-  // ── Upload selected rows to Firestore ──────────────────────────────────────
-  Future<void> _upload() async {
-    setState(() { _step = _ImportStep.uploading; _uploadedCount = 0; _skippedCount = 0; });
-
-    final fs = FirebaseFirestore.instance;
-    final toUpload = _selected.map((i) => _rows[i]).toList();
-
-    final invoiceMap = <String, List<_SalesRow>>{};
-    for (final row in toUpload) {
-      invoiceMap.putIfAbsent(row.invoiceNumber, () => []).add(row);
-    }
-
-    int uploaded = 0, skipped = 0;
-
-    for (final entry in invoiceMap.entries) {
-      final invoiceId = entry.key;
-      final rows      = entry.value;
-      final first     = rows.first;
-      final orderId   = invoiceId.replaceFirst('INV-', 'ORD-');
-
-      final existing = await fs.collection('Sales_Records')
-          .where('invoice_number', isEqualTo: invoiceId)
-          .limit(1)
-          .get();
-      if (existing.docs.isNotEmpty) { skipped += rows.length; continue; }
-
-      final products = rows.map((r) => {
-        'name'       : r.productName,
-        'type'       : r.type,
-        'size'       : r.size,
-        'qty'        : r.quantity,
-        'unit_price' : r.unitPrice,
-        'item_total' : r.itemTotal,
-      }).toList();
-
-      await fs.collection('Sales_Records').doc(orderId).set({
-        'order_id'              : orderId,
-        'customer_name'         : first.customerName,
-        'order_total'           : first.totalAmount,
-        'sale_amount'           : first.totalAmount,
-        'payment_method'        : first.source,
-        'payment_type'          : 'full',
-        'sale_date'             : _toTimestamp(first.saleDate),
-        'order_status'          : first.orderStatus,
-        'payment_status'        : first.paymentStatus,
-        'is_historical'         : first.isHistorical,
-        'products'              : products,
-        'transaction_reference' : 'imported',
-        'imported_at'           : FieldValue.serverTimestamp(),
-        'import_source'         : 'manual_xlsx_import',
-      });
-      uploaded += rows.length;
-    }
-
-    setState(() {
-      _uploadedCount = uploaded;
-      _skippedCount  = skipped;
-      _step          = _ImportStep.done;
-    });
-  }
-
-  // ── UI ─────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     return Container(
-      height: mq.size.height * 0.88,
+      height: mq.size.height * 0.58,
       decoration: const BoxDecoration(
         color: Color(0xFFFAFAFC),
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -339,10 +187,10 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Import Sales Records',
+              Text('Upload Sales Excel',
                   style: TextStyle(color: _G.textPrimary, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
               SizedBox(height: 1),
-              Text('Upload an XLSX or CSV file to inject historical records',
+              Text('File is stored in cloud and read on demand — no row limit',
                   style: TextStyle(color: _G.textMuted, fontSize: 11)),
             ],
           ),
@@ -357,16 +205,13 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
 
   Widget _buildBody() {
     switch (_step) {
-      case _ImportStep.idle:      return _buildIdle();
-      case _ImportStep.parsing:   return _buildLoading('Parsing file…');
-      case _ImportStep.preview:   return _buildPreview();
-      case _ImportStep.uploading: return _buildLoading('Uploading records…');
-      case _ImportStep.done:      return _buildDone();
-      case _ImportStep.error:     return _buildError();
+      case _UploadStep.idle:      return _buildIdle();
+      case _UploadStep.uploading: return _buildUploading();
+      case _UploadStep.done:      return _buildDone();
+      case _UploadStep.error:     return _buildError();
     }
   }
 
-  // ── Idle ──────────────────────────────────────────────────────────────────
   Widget _buildIdle() => Center(
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -381,26 +226,31 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
           child: const Icon(Icons.table_chart_outlined, size: 36, color: _G.primary),
         ),
         const SizedBox(height: 22),
-        const Text('No file selected',
+        const Text('No file uploaded',
             style: TextStyle(color: _G.textPrimary, fontSize: 17, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
-        const Text('Supports .xlsx, .xls, and .csv files\nColumns: invoice_number, sale_date, customer_name …',
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 32),
+          child: Text(
+            'Choose your .xlsx file and it will be stored in the cloud.\nView it anytime under the "Excel File" tab — no row limit.',
             style: TextStyle(color: _G.textMuted, fontSize: 12, height: 1.6),
-            textAlign: TextAlign.center),
+            textAlign: TextAlign.center,
+          ),
+        ),
         const SizedBox(height: 28),
         _PillButton(
-          label: 'Choose File',
-          icon: Icons.folder_open_rounded,
-          onTap: _pickFile,
+          label: 'Choose & Upload',
+          icon: Icons.cloud_upload_rounded,
+          onTap: _pickAndUpload,
           color: _G.primary,
         ),
-        const SizedBox(height: 12),
-        _buildFormatHint(),
+        const SizedBox(height: 16),
+        _buildHint(),
       ],
     ),
   );
 
-  Widget _buildFormatHint() => Container(
+  Widget _buildHint() => Container(
     margin: const EdgeInsets.symmetric(horizontal: 32),
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
@@ -415,7 +265,7 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
         SizedBox(width: 8),
         Expanded(
           child: Text(
-            'Required columns (in any order):\ninvoice_number · sale_date · customer_name · product_name · total_amount · order_status',
+            'Uploading replaces any previously uploaded file.\nRequired columns: invoice_number · sale_date · customer_name · product_name · total_amount',
             style: TextStyle(color: _G.amber, fontSize: 11, height: 1.5),
           ),
         ),
@@ -423,210 +273,38 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
     ),
   );
 
-  // ── Loading ────────────────────────────────────────────────────────────────
-  Widget _buildLoading(String msg) => Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const CircularProgressIndicator(strokeWidth: 2.5, color: _G.primary),
-        const SizedBox(height: 20),
-        Text(msg, style: const TextStyle(color: _G.textSecondary, fontSize: 13)),
-      ],
-    ),
-  );
-
-  // ── Preview ────────────────────────────────────────────────────────────────
-  Widget _buildPreview() {
-    final selectedCount = _selected.length;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF3F4F6),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.insert_drive_file_outlined, size: 13, color: _G.textMuted),
-                    const SizedBox(width: 5),
-                    Text(_fileName ?? '', style: const TextStyle(color: _G.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFBBF7D0)),
-                ),
-                child: Text('${_rows.length} rows found',
-                    style: const TextStyle(color: _G.green, fontSize: 12, fontWeight: FontWeight.w700)),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: _pickFile,
-                child: const Text('Change file',
-                    style: TextStyle(color: _G.primary, fontSize: 12, fontWeight: FontWeight.w600, decoration: TextDecoration.underline)),
-              ),
-            ],
-          ),
-        ),
-
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Row(
-            children: [
-              Checkbox(
-                value: selectedCount == _rows.length
-                    ? true
-                    : selectedCount == 0 ? false : null,
-                tristate: true,
-                activeColor: _G.primary,
-                onChanged: (_) {
-                  setState(() {
-                    if (selectedCount == _rows.length) {
-                      _selected.clear();
-                    } else {
-                      _selected.addAll(List.generate(_rows.length, (i) => i));
-                    }
-                  });
-                },
-              ),
-              Text('Select all  ($selectedCount / ${_rows.length} selected)',
-                  style: const TextStyle(color: _G.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
-              const Spacer(),
-              Text('Duplicates will be skipped automatically',
-                  style: const TextStyle(color: _G.textMuted, fontSize: 10)),
-            ],
-          ),
-        ),
-
-        _buildTableHeader(),
-
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
-            itemCount: _rows.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 4),
-            itemBuilder: (_, i) => _buildPreviewRow(i),
-          ),
-        ),
-
-        _buildImportBar(selectedCount),
-      ],
-    );
-  }
-
-  Widget _buildTableHeader() => Container(
-    margin: const EdgeInsets.symmetric(horizontal: 16),
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF3F4F6),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: const Color(0xFFE5E7EB)),
-    ),
-    child: const Row(
-      children: [
-        SizedBox(width: 32),
-        Expanded(flex: 2, child: _TH('Invoice')),
-        Expanded(flex: 3, child: _TH('Customer')),
-        Expanded(flex: 2, child: _TH('Date')),
-        Expanded(flex: 2, child: _TH('Product')),
-        SizedBox(width: 80, child: _TH('Total', right: true)),
-        SizedBox(width: 70, child: _TH('Status', center: true)),
-      ],
-    ),
-  );
-
-  Widget _buildPreviewRow(int i) {
-    final row = _rows[i];
-    final isSelected = _selected.contains(i);
-    return GestureDetector(
-      onTap: () => setState(() => isSelected ? _selected.remove(i) : _selected.add(i)),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFF0F4FF) : Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? const Color(0xFFBFCFFF) : const Color(0xFFE5E7EB),
-          ),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 32,
-              child: Checkbox(
-                value: isSelected, activeColor: _G.primary,
-                onChanged: (_) => setState(() => isSelected ? _selected.remove(i) : _selected.add(i)),
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            Expanded(flex: 2, child: _Cell(row.invoiceNumber, mono: true)),
-            Expanded(flex: 3, child: _Cell(row.customerName)),
-            Expanded(flex: 2, child: _Cell(row.saleDate)),
-            Expanded(flex: 2, child: _Cell(row.productName, muted: true)),
-            SizedBox(
-              width: 80,
-              child: Text(
-                row.totalAmount > 0 ? '₱${row.totalAmount.toStringAsFixed(2)}' : '—',
-                style: const TextStyle(color: _G.amber, fontSize: 12, fontWeight: FontWeight.w700),
-                textAlign: TextAlign.right,
-              ),
-            ),
-            SizedBox(width: 70, child: _StatusPill(row.orderStatus)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildImportBar(int count) => Container(
-    padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-    decoration: const BoxDecoration(
-      color: Colors.white,
-      border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
-    ),
-    child: SafeArea(
-      top: false,
-      child: Row(
+  Widget _buildUploading() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('$count record${count == 1 ? '' : 's'} selected',
-                    style: const TextStyle(color: _G.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
-                const Text('Existing invoices will be skipped',
-                    style: TextStyle(color: _G.textMuted, fontSize: 11)),
-              ],
+          SizedBox(
+            width: 56, height: 56,
+            child: CircularProgressIndicator(
+              value: _progress,
+              strokeWidth: 3,
+              color: _G.primary,
             ),
           ),
-          const SizedBox(width: 12),
-          _PillButton(
-            label: 'Import Now',
-            icon: Icons.cloud_upload_rounded,
-            onTap: count == 0 ? null : _upload,
-            color: _G.green,
+          const SizedBox(height: 20),
+          Text(
+            'Uploading${_fileName != null ? ' $_fileName' : ''}…',
+            style: const TextStyle(color: _G.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
           ),
+          if (_progress != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              '${(_progress! * 100).toStringAsFixed(0)}%',
+              style: const TextStyle(color: _G.textMuted, fontSize: 12),
+            ),
+          ],
         ],
       ),
     ),
   );
 
-  // ── Done ──────────────────────────────────────────────────────────────────
   Widget _buildDone() => Center(
     child: Padding(
       padding: const EdgeInsets.all(32),
@@ -643,21 +321,25 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
             child: const Icon(Icons.check_circle_rounded, color: _G.green, size: 36),
           ),
           const SizedBox(height: 20),
-          const Text('Import Complete!',
+          const Text('Upload Complete!',
               style: TextStyle(color: _G.textPrimary, fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
-          _StatRow(label: 'Records imported', value: '$_uploadedCount', color: _G.green),
-          const SizedBox(height: 6),
-          if (_skippedCount > 0)
-            _StatRow(label: 'Duplicates skipped', value: '$_skippedCount', color: _G.amber),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Your Excel file is saved in the cloud.\nSwitch to the "Excel File" tab to browse and search all records.',
+              style: TextStyle(color: _G.textSecondary, fontSize: 12, height: 1.6),
+              textAlign: TextAlign.center,
+            ),
+          ),
           const SizedBox(height: 28),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _PillButton(
-                label: 'Import Another',
+                label: 'Upload Another',
                 icon: Icons.upload_file_rounded,
-                onTap: () => setState(() { _step = _ImportStep.idle; _rows = []; _selected.clear(); }),
+                onTap: () => setState(() { _step = _UploadStep.idle; }),
                 color: _G.primary,
               ),
               const SizedBox(width: 10),
@@ -675,7 +357,6 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
     ),
   );
 
-  // ── Error ─────────────────────────────────────────────────────────────────
   Widget _buildError() => Center(
     child: Padding(
       padding: const EdgeInsets.all(32),
@@ -692,7 +373,7 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
             child: const Icon(Icons.error_outline_rounded, color: _G.red, size: 36),
           ),
           const SizedBox(height: 20),
-          const Text('Parse Error',
+          const Text('Upload Failed',
               style: TextStyle(color: _G.textPrimary, fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
           Text(_errorMsg ?? 'Unknown error',
@@ -702,7 +383,7 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
           _PillButton(
             label: 'Try Again',
             icon: Icons.refresh_rounded,
-            onTap: () => setState(() { _step = _ImportStep.idle; _errorMsg = null; }),
+            onTap: () => setState(() { _step = _UploadStep.idle; _errorMsg = null; }),
             color: _G.primary,
           ),
         ],
@@ -712,116 +393,457 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
 }
 
 // =============================================================================
-// Data model for a parsed row
+// Excel Viewer — downloads from Storage and shows paginated records
 // =============================================================================
-class _SalesRow {
+class _ExcelRecord {
   final String invoiceNumber;
   final String saleDate;
-  final String orderDate;
   final String customerName;
   final String productName;
-  final String type;
-  final String size;
-  final int    quantity;
-  final double unitPrice;
-  final double itemTotal;
   final double totalAmount;
   final String orderStatus;
-  final String paymentStatus;
-  final String source;
-  final bool   isHistorical;
 
-  _SalesRow({
+  const _ExcelRecord({
     required this.invoiceNumber,
     required this.saleDate,
-    required this.orderDate,
     required this.customerName,
     required this.productName,
-    required this.type,
-    required this.size,
-    required this.quantity,
-    required this.unitPrice,
-    required this.itemTotal,
     required this.totalAmount,
     required this.orderStatus,
-    required this.paymentStatus,
-    required this.source,
-    required this.isHistorical,
   });
+}
 
-  // ── Unwrap CellValue → String ──────────────────────────────────────────────
-  static String _s(List<Data?> row, int? idx) {
+enum _ViewState { loading, loaded, empty, error }
+
+class SalesExcelViewer extends StatefulWidget {
+  const SalesExcelViewer({super.key});
+
+  @override
+  State<SalesExcelViewer> createState() => _SalesExcelViewerState();
+}
+
+class _SalesExcelViewerState extends State<SalesExcelViewer> {
+  _ViewState           _state   = _ViewState.loading;
+  List<_ExcelRecord>   _allRows = [];
+  String               _search  = '';
+  int                  _page    = 0;
+  String?              _errorMsg;
+  String?              _uploadedName;
+  final _searchCtrl = TextEditingController();
+
+  static const int _perPage = 100;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() { _state = _ViewState.loading; _allRows = []; _page = 0; });
+
+    try {
+      final ref = FirebaseStorage.instance.ref(kSalesExcelStoragePath);
+
+      // Check if file exists
+      FullMetadata? meta;
+      try { meta = await ref.getMetadata(); } catch (_) {}
+      if (meta == null) {
+        setState(() => _state = _ViewState.empty);
+        return;
+      }
+
+      _uploadedName = meta.customMetadata?['originalName'];
+
+      final bytes = await ref.getData(50 * 1024 * 1024); // 50 MB max
+      if (bytes == null || bytes.isEmpty) {
+        setState(() => _state = _ViewState.empty);
+        return;
+      }
+
+      final rows = _parseBytes(bytes);
+      setState(() {
+        _allRows = rows;
+        _state   = rows.isEmpty ? _ViewState.empty : _ViewState.loaded;
+      });
+    } catch (e) {
+      setState(() {
+        _state    = _ViewState.error;
+        _errorMsg = e.toString();
+      });
+    }
+  }
+
+  // ── Parse Excel bytes → list of display records ────────────────────────────
+  List<_ExcelRecord> _parseBytes(List<int> bytes) {
+    final excel = Excel.decodeBytes(bytes);
+    final sheet = excel.tables[excel.tables.keys.first]!;
+    final rows  = sheet.rows;
+    if (rows.isEmpty) return [];
+
+    // Detect header row (check first 5 rows)
+    int headerIdx = 0;
+    Map<String, int> colMap = {};
+    for (int r = 0; r < rows.length.clamp(0, 5); r++) {
+      final map = _buildColMap(rows[r]);
+      if (map.length >= 3) { headerIdx = r; colMap = map; break; }
+    }
+    if (colMap.isEmpty) return [];
+
+    final result = <_ExcelRecord>[];
+    for (int r = headerIdx + 1; r < rows.length; r++) {
+      try {
+        final row = rows[r];
+        final inv = _cs(row, colMap['invoice_number']);
+        if (inv.isEmpty) continue;
+        result.add(_ExcelRecord(
+          invoiceNumber: inv,
+          saleDate     : _cs(row, colMap['sale_date']),
+          customerName : _cs(row, colMap['customer_name']),
+          productName  : _cs(row, colMap['product_name']),
+          totalAmount  : _cn(row, colMap['total_amount']),
+          orderStatus  : _cs(row, colMap['order_status']),
+        ));
+      } catch (_) {
+        // skip rows that can't be parsed
+      }
+    }
+    return result;
+  }
+
+  Map<String, int> _buildColMap(List<Data?> row) {
+    final map = <String, int>{};
+    for (int i = 0; i < row.length; i++) {
+      final val = _cs(row, i).toLowerCase().replaceAll(' ', '_');
+      if (_kExpectedHeaders.contains(val)) map[val] = i;
+    }
+    return map;
+  }
+
+  static String _cs(List<Data?> row, int? idx) {
     if (idx == null || idx >= row.length) return '';
     final cell = row[idx];
     if (cell == null) return '';
     if (cell.value is IntCellValue)    return (cell.value as IntCellValue).value.toString();
     if (cell.value is DoubleCellValue) return (cell.value as DoubleCellValue).value.toString();
     if (cell.value is DateCellValue)   return (cell.value as DateCellValue).asDateTimeLocal().toIso8601String();
-    // For TextCellValue and anything else, use the cell's own toString override
-    final raw = cell.value?.toString() ?? '';
-    // strip Flutter's TextSpan debug representation if present
+    final raw   = cell.value?.toString() ?? '';
     final match = RegExp(r'«(.*?)»').firstMatch(raw);
     return (match?.group(1) ?? raw).trim();
   }
 
-  static double _num(List<Data?> row, int? idx) {
+  static double _cn(List<Data?> row, int? idx) {
     if (idx == null || idx >= row.length) return 0;
     final cell = row[idx];
     if (cell == null) return 0;
     if (cell.value is IntCellValue)    return (cell.value as IntCellValue).value.toDouble();
     if (cell.value is DoubleCellValue) return (cell.value as DoubleCellValue).value;
-    return double.tryParse(_s(row, idx).replaceAll(',', '')) ?? 0;
+    return double.tryParse(_cs(row, idx).replaceAll(',', '')) ?? 0;
   }
 
-  // ── CSV string cell ────────────────────────────────────────────────────────
-  static String _sl(List<String> cells, int? idx) {
-    if (idx == null || idx >= cells.length) return '';
-    return cells[idx].trim();
+  // ── Filtered + paginated view ──────────────────────────────────────────────
+  List<_ExcelRecord> get _filtered {
+    if (_search.isEmpty) return _allRows;
+    final q = _search.toLowerCase();
+    return _allRows.where((r) =>
+        r.invoiceNumber.toLowerCase().contains(q) ||
+        r.customerName.toLowerCase().contains(q)  ||
+        r.productName.toLowerCase().contains(q),
+    ).toList();
   }
 
-  factory _SalesRow.fromCells(List<Data?> row, Map<String, int> m) {
-    return _SalesRow(
-      invoiceNumber: _s(row, m['invoice_number']),
-      saleDate     : _s(row, m['sale_date']),
-      orderDate    : _s(row, m['order_date']),
-      customerName : _s(row, m['customer_name']),
-      productName  : _s(row, m['product_name']),
-      type         : _s(row, m['type']),
-      size         : _s(row, m['size']),
-      quantity     : _num(row, m['quantity']).toInt(),
-      unitPrice    : _num(row, m['unit_price']),
-      itemTotal    : _num(row, m['item_total']),
-      totalAmount  : _num(row, m['total_amount']),
-      orderStatus  : _s(row, m['order_status']).isNotEmpty  ? _s(row, m['order_status'])  : 'completed',
-      paymentStatus: _s(row, m['payment_status']).isNotEmpty ? _s(row, m['payment_status']) : 'paid',
-      source       : _s(row, m['source']).isNotEmpty        ? _s(row, m['source'])         : 'walk-in',
-      isHistorical : _s(row, m['is_historical']).toLowerCase() == 'true',
+  // ── Build ──────────────────────────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    switch (_state) {
+      case _ViewState.loading: return _buildLoading();
+      case _ViewState.empty:   return _buildEmpty();
+      case _ViewState.error:   return _buildError();
+      case _ViewState.loaded:  return _buildTable();
+    }
+  }
+
+  Widget _buildLoading() => const Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        CircularProgressIndicator(strokeWidth: 2.5, color: _G.primary),
+        SizedBox(height: 16),
+        Text('Loading Excel file…', style: TextStyle(color: _G.textMuted, fontSize: 12)),
+      ],
+    ),
+  );
+
+  Widget _buildEmpty() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 72, height: 72,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE5E7EB), width: 1.5),
+            ),
+            child: const Icon(Icons.table_chart_outlined, size: 34, color: _G.textMuted),
+          ),
+          const SizedBox(height: 18),
+          const Text('No Excel file uploaded yet',
+              style: TextStyle(color: _G.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          const Text(
+            'Use the "Upload Excel" button to upload your\nhistorical sales file.',
+            style: TextStyle(color: _G.textMuted, fontSize: 12, height: 1.6),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildError() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 72, height: 72,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFFECACA), width: 1.5),
+            ),
+            child: const Icon(Icons.error_outline_rounded, color: _G.red, size: 34),
+          ),
+          const SizedBox(height: 18),
+          const Text('Could not read file',
+              style: TextStyle(color: _G.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Text(_errorMsg ?? 'Unknown error',
+              style: const TextStyle(color: _G.textSecondary, fontSize: 11, height: 1.6),
+              textAlign: TextAlign.center),
+          const SizedBox(height: 20),
+          _PillButton(label: 'Retry', icon: Icons.refresh_rounded, onTap: _load, color: _G.primary),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildTable() {
+    final filtered = _filtered;
+    final totalPages = (filtered.length / _perPage).ceil().clamp(1, 999999);
+    final pageRows   = filtered.skip(_page * _perPage).take(_perPage).toList();
+
+    return Column(
+      children: [
+        // ── toolbar ────────────────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(
+            children: [
+              // file badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3F4F6),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.insert_drive_file_outlined, size: 12, color: _G.textMuted),
+                    const SizedBox(width: 5),
+                    Text(
+                      _uploadedName ?? 'historical_sales.xlsx',
+                      style: const TextStyle(color: _G.textSecondary, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFBBF7D0)),
+                ),
+                child: Text('${_allRows.length} rows',
+                    style: const TextStyle(color: _G.green, fontSize: 11, fontWeight: FontWeight.w700)),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: _load,
+                child: const Row(
+                  children: [
+                    Icon(Icons.refresh_rounded, size: 13, color: _G.textMuted),
+                    SizedBox(width: 4),
+                    Text('Reload', style: TextStyle(color: _G.textMuted, fontSize: 11)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── search ─────────────────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Container(
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+              boxShadow: const [_G.shadow],
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: 10),
+                const Icon(Icons.search_rounded, size: 16, color: _G.textMuted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    style: const TextStyle(fontSize: 12, color: _G.textPrimary),
+                    decoration: const InputDecoration(
+                      hintText: 'Search invoice, customer, product…',
+                      hintStyle: TextStyle(fontSize: 12, color: _G.textMuted),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onChanged: (v) => setState(() { _search = v; _page = 0; }),
+                  ),
+                ),
+                if (_search.isNotEmpty)
+                  GestureDetector(
+                    onTap: () { _searchCtrl.clear(); setState(() { _search = ''; _page = 0; }); },
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Icon(Icons.close_rounded, size: 14, color: _G.textMuted),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+        // ── table header ───────────────────────────────────────────────────
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: const Row(
+            children: [
+              Expanded(flex: 2, child: _TH('Invoice')),
+              Expanded(flex: 3, child: _TH('Customer')),
+              Expanded(flex: 2, child: _TH('Date')),
+              Expanded(flex: 2, child: _TH('Product')),
+              SizedBox(width: 80, child: _TH('Total', right: true)),
+              SizedBox(width: 74, child: _TH('Status', center: true)),
+            ],
+          ),
+        ),
+
+        // ── rows ───────────────────────────────────────────────────────────
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+            itemCount: pageRows.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 3),
+            itemBuilder: (_, i) => _buildRow(pageRows[i]),
+          ),
+        ),
+
+        // ── pagination ─────────────────────────────────────────────────────
+        _buildPager(filtered.length, totalPages),
+      ],
     );
   }
 
-  factory _SalesRow.fromList(List<String> cells, Map<String, int> m) {
-    return _SalesRow(
-      invoiceNumber: _sl(cells, m['invoice_number']),
-      saleDate     : _sl(cells, m['sale_date']),
-      orderDate    : _sl(cells, m['order_date']),
-      customerName : _sl(cells, m['customer_name']),
-      productName  : _sl(cells, m['product_name']),
-      type         : _sl(cells, m['type']),
-      size         : _sl(cells, m['size']),
-      quantity     : int.tryParse(_sl(cells, m['quantity'])) ?? 1,
-      unitPrice    : double.tryParse(_sl(cells, m['unit_price']).replaceAll(',', '')) ?? 0,
-      itemTotal    : double.tryParse(_sl(cells, m['item_total']).replaceAll(',', '')) ?? 0,
-      totalAmount  : double.tryParse(_sl(cells, m['total_amount']).replaceAll(',', '')) ?? 0,
-      orderStatus  : _sl(cells, m['order_status']).isNotEmpty  ? _sl(cells, m['order_status'])  : 'completed',
-      paymentStatus: _sl(cells, m['payment_status']).isNotEmpty ? _sl(cells, m['payment_status']) : 'paid',
-      source       : _sl(cells, m['source']).isNotEmpty        ? _sl(cells, m['source'])         : 'walk-in',
-      isHistorical : _sl(cells, m['is_historical']).toLowerCase() == 'true',
-    );
-  }
+  Widget _buildRow(_ExcelRecord r) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: const Color(0xFFE5E7EB)),
+    ),
+    child: Row(
+      children: [
+        Expanded(flex: 2, child: _Cell(r.invoiceNumber, mono: true)),
+        Expanded(flex: 3, child: _Cell(r.customerName)),
+        Expanded(flex: 2, child: _Cell(r.saleDate.length > 10 ? r.saleDate.substring(0, 10) : r.saleDate)),
+        Expanded(flex: 2, child: _Cell(r.productName, muted: true)),
+        SizedBox(
+          width: 80,
+          child: Text(
+            r.totalAmount > 0 ? '₱${r.totalAmount.toStringAsFixed(2)}' : '—',
+            style: const TextStyle(color: _G.amber, fontSize: 11, fontWeight: FontWeight.w700),
+            textAlign: TextAlign.right,
+          ),
+        ),
+        SizedBox(width: 74, child: _StatusPill(r.orderStatus)),
+      ],
+    ),
+  );
+
+  Widget _buildPager(int total, int totalPages) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+    decoration: const BoxDecoration(
+      color: Colors.white,
+      border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+    ),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          _search.isNotEmpty
+              ? '$total result${total == 1 ? '' : 's'}'
+              : '${_allRows.length} total rows',
+          style: const TextStyle(color: _G.textMuted, fontSize: 11),
+        ),
+        Row(
+          children: [
+            _PageBtn(
+              icon: Icons.chevron_left_rounded,
+              enabled: _page > 0,
+              onTap: () => setState(() => _page--),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Page ${_page + 1} / $totalPages',
+              style: const TextStyle(color: _G.textSecondary, fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(width: 8),
+            _PageBtn(
+              icon: Icons.chevron_right_rounded,
+              enabled: _page < totalPages - 1,
+              onTap: () => setState(() => _page++),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
 }
 
 // =============================================================================
-// Small helper widgets
+// Shared small widgets
 // =============================================================================
 class _PillButton extends StatelessWidget {
   final String   label;
@@ -931,18 +953,27 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
-class _StatRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color  color;
-  const _StatRow({required this.label, required this.value, required this.color});
+class _PageBtn extends StatelessWidget {
+  final IconData icon;
+  final bool     enabled;
+  final VoidCallback onTap;
+  const _PageBtn({required this.icon, required this.enabled, required this.onTap});
+
   @override
-  Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      Text(label, style: const TextStyle(color: _G.textSecondary, fontSize: 13)),
-      const SizedBox(width: 8),
-      Text(value, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w800)),
-    ],
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: enabled ? onTap : null,
+    child: AnimatedOpacity(
+      opacity: enabled ? 1 : 0.3,
+      duration: const Duration(milliseconds: 120),
+      child: Container(
+        width: 28, height: 28,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: Icon(icon, size: 16, color: _G.textSecondary),
+      ),
+    ),
   );
 }

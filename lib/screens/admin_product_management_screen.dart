@@ -156,6 +156,24 @@ class _AdminProductManagementScreenState
   void initState() {
     super.initState();
     _migrateCallingCards();
+    _migratePhotoInviteSurcharge();
+  }
+
+  // Sets under_min_surcharge=150 on Photo Invite if not already set.
+  Future<void> _migratePhotoInviteSurcharge() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('Products')
+          .where('product_name', isEqualTo: 'Photo Invite')
+          .get();
+      for (final doc in snap.docs) {
+        final current =
+            (doc.data()['under_min_surcharge'] as num?)?.toDouble() ?? 0;
+        if (current <= 0) {
+          await doc.reference.update({'under_min_surcharge': 150.0});
+        }
+      }
+    } catch (_) {}
   }
 
   // One-time migration: merges the old separate Calling Card Matte / Glossy /
@@ -1046,6 +1064,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   late final TextEditingController _descCtrl;
   late final TextEditingController _priceCtrl;
   late final TextEditingController _minQtyCtrl;
+  late final TextEditingController _surchargeCtrl; // ₱ surcharge if under min qty
   late final TextEditingController _pricingQtyCtrl; // only for per_qty
 
   // 'per_sqft' | 'per_sqin' | 'per_piece' | 'per_qty'
@@ -1086,6 +1105,11 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _priceCtrl = TextEditingController(text: e?['price']?.toString() ?? '');
     _minQtyCtrl = TextEditingController(
       text: e?['min_quantity']?.toString() ?? '1',
+    );
+    _surchargeCtrl = TextEditingController(
+      text: (e?['under_min_surcharge'] as num?)
+              ?.toStringAsFixed(0) ??
+          '',
     );
     _selectedCategory = e?['category'];
     // If the product has an old category not in the current list, clear it.
@@ -1156,6 +1180,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _descCtrl.dispose();
     _priceCtrl.dispose();
     _minQtyCtrl.dispose();
+    _surchargeCtrl.dispose();
     _pricingQtyCtrl.dispose();
     for (final c in _optionControllers) c.dispose();
     for (final c in _optionPriceControllers) c.dispose();
@@ -1252,6 +1277,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         if (_pricingUnit == 'per_qty')
           'pricing_qty': int.tryParse(_pricingQtyCtrl.text.trim()) ?? 100,
         'min_quantity': int.tryParse(_minQtyCtrl.text.trim()) ?? 1,
+        'under_min_surcharge':
+            double.tryParse(_surchargeCtrl.text.trim()) ?? 0.0,
         'image_url': uploadedUrl ?? '',
         'is_available': _isAvailable,
         'featured': _isFeatured,
@@ -1658,26 +1685,60 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Min Quantity
-                      _SectionLabel('Minimum Order Quantity'),
-                      const SizedBox(height: 6),
-                      SizedBox(
-                        width: 160,
-                        child: TextFormField(
-                          controller: _minQtyCtrl,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(
-                            color: _Glass.textPrimary,
-                            fontSize: 13,
+                      // Min Quantity + Under-min surcharge
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _SectionLabel('Min. Order Quantity'),
+                              const SizedBox(height: 6),
+                              SizedBox(
+                                width: 150,
+                                child: TextFormField(
+                                  controller: _minQtyCtrl,
+                                  keyboardType: TextInputType.number,
+                                  style: const TextStyle(
+                                      color: _Glass.textPrimary, fontSize: 13),
+                                  decoration: _Glass.field('1'),
+                                  validator: (v) {
+                                    if (v != null &&
+                                        v.isNotEmpty &&
+                                        int.tryParse(v) == null)
+                                      return 'Whole number';
+                                    return null;
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
-                          decoration: _Glass.field('1'),
-                          validator: (v) {
-                            if (v != null &&
-                                v.isNotEmpty &&
-                                int.tryParse(v) == null) return 'Whole number';
-                            return null;
-                          },
-                        ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _SectionLabel('Under-min Surcharge (₱)'),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Added when qty < min. Leave blank if none.',
+                                  style: TextStyle(
+                                      color: _Glass.textMuted, fontSize: 10),
+                                ),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _surchargeCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  style: const TextStyle(
+                                      color: _Glass.textPrimary, fontSize: 13),
+                                  decoration: _Glass.field('e.g. 150'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
 

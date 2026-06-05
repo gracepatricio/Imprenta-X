@@ -117,6 +117,13 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   int get _pricingQty =>
       (widget.product['pricing_qty'] as num?)?.toInt() ?? 100;
 
+  // Flat surcharge applied when quantity is below min_quantity (e.g. Photo Invite).
+  double get _underMinSurcharge =>
+      (widget.product['under_min_surcharge'] as num?)?.toDouble() ?? 0;
+
+  bool get _hasSurcharge =>
+      _underMinSurcharge > 0 && _quantity < _minQty;
+
   // ── Pricing ──────────────────────────────────────────────────────────────────
 
   double _calcUnitTotal(double price) {
@@ -129,14 +136,16 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
 
   double get _subtotal {
     double total = _calcUnitTotal(_effectiveBasePrice);
-    // Add selected add-on services using the same billing rate.
+    // Add selected add-on services.
     for (final svc in _additionalServicesList) {
-      final name = svc['name']?.toString() ?? '';
-      if (_selectedServices.contains(name)) {
+      final svcName = svc['name']?.toString() ?? '';
+      if (_selectedServices.contains(svcName)) {
         final sp = (svc['price'] as num?)?.toDouble() ?? 0;
         total += _calcUnitTotal(sp);
       }
     }
+    // Under-minimum surcharge (flat, not per-unit).
+    if (_hasSurcharge) total += _underMinSurcharge;
     return total;
   }
 
@@ -697,8 +706,12 @@ decoration: AppTheme.backgroundDecoration(context),
         const SizedBox(height: 8),
         Row(
           children: [
-            _qtyBtn(Icons.remove,
-                    () { if (_quantity > _minQty) setState(() => _quantity--); }),
+            _qtyBtn(Icons.remove, () {
+              // If there's a surcharge for under-minimum, allow going below
+              // min_quantity (customer pays the surcharge).  Otherwise enforce.
+              final hardMin = _underMinSurcharge > 0 ? 1 : _minQty;
+              if (_quantity > hardMin) setState(() => _quantity--);
+            }),
             const SizedBox(width: 16),
             Text('$_quantity',
                 style: const TextStyle(
@@ -714,6 +727,25 @@ decoration: AppTheme.backgroundDecoration(context),
                   : 'min. $_minQty',
               style: const TextStyle(color: Colors.white38, fontSize: 11),
             ),
+            if (_hasSurcharge) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.45)),
+                ),
+                child: Text(
+                  '+₱${_underMinSurcharge.toStringAsFixed(0)} under-min surcharge',
+                  style: const TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
           ],
         ),
         const SizedBox(height: 16),
@@ -958,6 +990,11 @@ decoration: AppTheme.backgroundDecoration(context),
         if (_material != null) _sumRow('Variant', _material!),
         if (_selectedServices.isNotEmpty)
           _sumRow('Add-ons', _selectedServices.join(', ')),
+        if (_hasSurcharge)
+          _sumRow(
+            'Under-min surcharge',
+            '+₱${_underMinSurcharge.toStringAsFixed(0)}',
+          ),
         _sumRow('Shipping', 'Pick-Up'),
         _sumRow('Turnaround', _turnaroundLabel),
         const Divider(color: Colors.white12, height: 16),
