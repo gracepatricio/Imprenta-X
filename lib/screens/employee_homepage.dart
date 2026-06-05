@@ -48,7 +48,7 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
   static const _mobileItems = ['Home', 'Inventory', 'Job Queue', 'Account'];
 
   List<String> get _navItems =>
-      PlatformUtils.isMobileDevice ? _mobileItems : _webItems;
+      PlatformUtils.effectiveMobile ? _mobileItems : _webItems;
 
   late String _active;
 
@@ -98,8 +98,8 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
   // ── Screen routing ───────────────────────────────────────────────────────
 
   Widget get _screen {
-    // Mobile employees only reach Job Queue and Account.
-    if (PlatformUtils.isMobileDevice) {
+    // Mobile employees (native or mobile browser) only reach Job Queue and Account.
+    if (PlatformUtils.effectiveMobile) {
       switch (_active) {
         case 'Inventory':
           return const EmployeeInventoryScreen();

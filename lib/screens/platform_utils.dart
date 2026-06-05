@@ -4,9 +4,11 @@
 //
 // Usage:
 //   if (PlatformUtils.isMobileDevice) { ... }
+//   if (PlatformUtils.effectiveMobile) { ... }
 // ---------------------------------------------------------------------------
 
 import 'package:flutter/foundation.dart';
+import 'browser_utils_io.dart' if (dart.library.html) 'browser_utils_web.dart';
 
 class PlatformUtils {
   PlatformUtils._();
@@ -20,6 +22,13 @@ class PlatformUtils {
     return defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
   }
+
+  /// Returns true on native Android/iOS AND on a web browser running on a
+  /// mobile device. Use this instead of isMobileDevice when you want mobile
+  /// browsers to receive the same features, restrictions, and layout as the
+  /// native mobile app.
+  static bool get effectiveMobile =>
+      isMobileDevice || (kIsWeb && isMobileBrowser());
 
   /// Convenience inverse.
   static bool get isWebOrDesktop => !isMobileDevice;

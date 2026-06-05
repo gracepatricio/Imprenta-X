@@ -1,10 +1,10 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../services/cart_manager.dart';
 import '../services/notification_service.dart';
 import 'app_theme.dart';
+import 'platform_utils.dart';
 
 const _cyan = Color(0xFF00B4D8);
 const _magenta = Color(0xFFFF006E);
@@ -97,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen>
         Navigator.pushReplacementNamed(context, '/employee');
         break;
       case 'admin':
-        if (!kIsWeb) {
+        if (PlatformUtils.effectiveMobile) {
           _snack('Admin access is only available on the web.', isError: true);
           await _authService.signOut();
           return;

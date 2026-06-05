@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'app_theme.dart';
 import 'employee_inventory_forecast_screen.dart';
+import 'platform_utils.dart';
 
 // ── Shared colour constants (aligned with admin) ──────────────────────────────
 const Color _amber = Color(0xFFB45309);
@@ -113,7 +114,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
   void initState() {
     super.initState();
     _loadEmployee();
-    if (kIsWeb) {
+    if (kIsWeb && !PlatformUtils.effectiveMobile) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _scanFocus.requestFocus();
       });
@@ -1184,7 +1185,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                                 onSubmitted: _onScanFieldSubmitted,
                                 textInputAction: TextInputAction.search,
                                 decoration: InputDecoration(
-                                  hintText: kIsWeb
+                                  hintText: (kIsWeb && !PlatformUtils.effectiveMobile)
                                       ? 'Physical scanner or type ID (e.g. RM-001) + Enter'
                                       : 'Type material ID (e.g. RM-001) + Enter',
                                   hintStyle: const TextStyle(
@@ -1205,7 +1206,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                               ),
                             ),
                           ),
-                          if (!kIsWeb) ...[
+                          if (PlatformUtils.isMobileDevice) ...[
                             const SizedBox(width: 8),
                             GestureDetector(
                               onTap: _openCameraScanner,

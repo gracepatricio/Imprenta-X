@@ -71,7 +71,10 @@ class _RoleGuardState extends State<RoleGuard> {
 
   @override
   Widget build(BuildContext context) {
-    if (isMobileBrowser()) {
+    // Admin is a desktop-web-only role. Block it on mobile browsers.
+    // Customer and employee roles are allowed on mobile browsers and will
+    // receive the mobile layout/feature set via PlatformUtils.effectiveMobile.
+    if (isMobileBrowser() && widget.requiredRole == 'admin') {
       return Scaffold(
         backgroundColor: const Color(0xFF0d0d1a),
         body: Center(
@@ -93,8 +96,8 @@ class _RoleGuardState extends State<RoleGuard> {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'The Imprenta X web app is designed for desktop use.\n'
-                  'Please use the mobile app on your phone.',
+                  'Admin access is only available on desktop.\n'
+                  'Please use a desktop browser to access the admin panel.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white54, fontSize: 14, height: 1.5),
                 ),
