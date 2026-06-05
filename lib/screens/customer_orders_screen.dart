@@ -509,7 +509,14 @@ class _OrderCardState extends State<_OrderCard> {
     final isFullyPaid   = remaining < 0.01;
     final customerName  = widget.order['customer_name']?.toString() ?? '';
     final customerEmail = widget.order['customer_email']?.toString() ?? '';
-    final customerId    = widget.order['customer_id']?.toString() ?? '';
+    String customerId = widget.order['customer_id']?.toString() ?? '';
+    if (customerId.isEmpty) {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        final userDoc = await FirebaseFirestore.instance.collection('User').doc(uid).get();
+        customerId = userDoc.data()?['customer_id']?.toString() ?? '';
+      }
+    }
     final products      = (widget.order['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final turnaroundDays = (widget.order['turnaround_days'] as int?) ?? 3;
 

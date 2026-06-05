@@ -859,142 +859,178 @@ class _InvoiceView extends StatelessWidget {
     final isCancelled = inv['status']?.toString() == 'cancelled';
 
     return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Header band ────────────────────────────────────────────────────
           Container(
             width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-            ),
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+            color: Colors.white,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Company block
-                    Expanded(
-                      child: Column(
+                // Navy accent top bar
+                Container(height: 4, color: const Color(0xFF1E3A5F)),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Company name row + INVOICE label
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            _bizName,
-                            style: const TextStyle(
-                              color: AppTheme.gold,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.5,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _bizName,
+                                  style: const TextStyle(
+                                    color: Color(0xFF1E3A5F),
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                                const Text(
+                                  _bizTagline,
+                                  style: TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          const Text(
-                            _bizTagline,
-                            style: TextStyle(
-                              color: Color(0xFF94A3B8),
-                              fontSize: 11,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              const Text(
+                                'OFFICIAL INVOICE',
+                                style: TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                inv['invoice_id']?.toString() ?? '—',
+                                style: const TextStyle(
+                                  color: Color(0xFF1E3A5F),
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              // Status badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isCancelled
+                                      ? const Color(0xFFFEE2E2)
+                                      : isFullPaid
+                                      ? const Color(0xFFDCFCE7)
+                                      : const Color(0xFFFEF3C7),
+                                  borderRadius: BorderRadius.circular(99),
+                                  border: Border.all(
+                                    color: isCancelled
+                                        ? const Color(0xFFFCA5A5)
+                                        : isFullPaid
+                                        ? const Color(0xFF86EFAC)
+                                        : const Color(0xFFFCD34D),
+                                  ),
+                                ),
+                                child: Text(
+                                  isCancelled
+                                      ? 'CANCELLED'
+                                      : isFullPaid
+                                      ? 'PAID IN FULL'
+                                      : 'PARTIAL PAYMENT',
+                                  style: TextStyle(
+                                    color: isCancelled
+                                        ? const Color(0xFFDC2626)
+                                        : isFullPaid
+                                        ? const Color(0xFF16A34A)
+                                        : const Color(0xFFD97706),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ),
-                    // Status badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isCancelled
-                            ? Colors.red.withValues(alpha: 0.15)
-                            : isFullPaid
-                            ? Colors.green.withValues(alpha: 0.15)
-                            : Colors.orange.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isCancelled
-                              ? Colors.red.withValues(alpha: 0.5)
-                              : isFullPaid
-                              ? Colors.green.withValues(alpha: 0.5)
-                              : Colors.orange.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      child: Text(
-                        isCancelled
-                            ? 'CANCELLED'
-                            : isFullPaid
-                            ? 'PAID IN FULL'
-                            : 'PARTIAL PAYMENT',
-                        style: TextStyle(
-                          color: isCancelled
-                              ? Colors.redAccent
-                              : isFullPaid
-                              ? Colors.green
-                              : Colors.orange,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
 
-                // Address + TIN
-                const SizedBox(height: 10),
-                Container(
-                  height: 1,
-                  color: const Color(0xFFE2E8F0),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  '$_bizAddr1\n$_bizAddr2',
-                  style: TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 11,
-                    height: 1.5,
+                      // Business address + TIN row
+                      const SizedBox(height: 14),
+                      Container(height: 1, color: const Color(0xFFE2E8F0)),
+                      const SizedBox(height: 10),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.location_on_outlined, size: 13, color: Color(0xFF94A3B8)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              '$_bizAddr1, $_bizAddr2',
+                              style: const TextStyle(
+                                color: Color(0xFF64748B),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          const Text(
+                            'TIN: ',
+                            style: TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const Text(
+                            _bizTin,
+                            style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Text(
-                      'TIN: ',
-                      style: TextStyle(
-                        color: Color(0xFF94A3B8),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Text(
-                      _bizTin,
-                      style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                    ),
-                  ],
-                ),
+              ],
+            ),
+          ),
 
-                // Divider
-                const SizedBox(height: 16),
-                Container(
-                  height: 1,
-                  color: const Color(0xFFE2E8F0),
-                ),
-                const SizedBox(height: 14),
-
-                // Invoice meta grid
+          // ── Invoice meta cards ──────────────────────────────────────────────
+          Container(
+            color: const Color(0xFFF8FAFC),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(
+              children: [
                 Row(
                   children: [
                     Expanded(
-                      child: _InvDetail(
+                      child: _MetaCard(
+                        icon: Icons.receipt_outlined,
                         label: 'INVOICE NO.',
                         value: inv['invoice_id']?.toString() ?? '—',
+                        highlight: true,
                       ),
                     ),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: _InvDetail(
+                      child: _MetaCard(
+                        icon: Icons.shopping_bag_outlined,
                         label: 'ORDER NO.',
                         value: inv['order_id']?.toString() ?? '—',
                       ),
@@ -1005,31 +1041,22 @@ class _InvoiceView extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: _InvDetail(
-                        label: 'CUSTOMER',
-                        value: inv['customer_name']?.toString() ?? '—',
-                      ),
-                    ),
-                    Expanded(
-                      child: _InvDetail(
+                      child: _MetaCard(
+                        icon: Icons.calendar_today_outlined,
                         label: 'DATE ISSUED',
                         value: _fmtDate(inv['issued_date']),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: _InvDetail(
+                      child: _MetaCard(
+                        icon: Icons.badge_outlined,
                         label: 'CUSTOMER ID',
                         value: inv['customer_id']?.toString().isNotEmpty == true
                             ? inv['customer_id'].toString()
                             : '—',
                       ),
                     ),
-                    const Expanded(child: SizedBox()),
                   ],
                 ),
               ],
@@ -1039,246 +1066,257 @@ class _InvoiceView extends StatelessWidget {
           // ── Bill To strip ───────────────────────────────────────────────────
           Container(
             width: double.infinity,
-            color: const Color(0xFFF1F5F9),
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+            margin: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'BILL TO',
-                        style: TextStyle(
-                          color: Color(0xFF94A3B8),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        inv['customer_name']?.toString() ?? '—',
-                        style: const TextStyle(
-                          color: Color(0xFF1E293B),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        inv['customer_email']?.toString() ?? '—',
-                        style: const TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
+                // Left accent bar
+                Container(
+                  width: 4,
+                  height: 80,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1E3A5F),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(12),
+                      bottomLeft: Radius.circular(12),
+                    ),
                   ),
                 ),
-                Container(
-                  width: 1,
-                  height: 48,
-                  color: const Color(0xFFD1D5DB),
-                ),
-                const SizedBox(width: 16),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'ISSUED BY',
-                        style: TextStyle(
-                          color: Color(0xFF94A3B8),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'BILL TO',
+                                style: TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                inv['customer_name']?.toString() ?? '—',
+                                style: const TextStyle(
+                                  color: Color(0xFF1E293B),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                inv['customer_email']?.toString() ?? '—',
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        _bizName,
-                        style: TextStyle(
-                          color: Color(0xFF1E293B),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                        Container(width: 1, height: 52, color: const Color(0xFFE2E8F0)),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'ISSUED BY',
+                                style: TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                _bizName,
+                                style: TextStyle(
+                                  color: Color(0xFF1E293B),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const Text(
+                                'TIN: $_bizTin',
+                                style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const Text(
-                        'TIN: $_bizTin',
-                        style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-
           // ── Items ───────────────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const _SectionLabel('ORDER ITEMS'),
                 const SizedBox(height: 10),
 
-                // Table header
+                // Table card
                 Container(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1E3A5F),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(10),
-                      topRight: Radius.circular(10),
-                    ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    children: const [
-                      Expanded(
-                        flex: 4,
-                        child: Text(
-                          'DESCRIPTION',
-                          style: TextStyle(
-                            color: AppTheme.gold,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'QTY',
-                        style: TextStyle(
-                          color: AppTheme.gold,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      SizedBox(width: 14),
-                      Text(
-                        'AMOUNT',
-                        style: TextStyle(
-                          color: AppTheme.gold,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Item rows
-                ...items.asMap().entries.map((e) {
-                  final idx = e.key;
-                  final p = e.value;
-                  final name = p['name']?.toString() ?? '—';
-                  final qty = (p['qty'] as num?)?.toInt() ?? 1;
-                  final unit = (p['unit_price'] as num?)?.toDouble() ?? 0;
-                  final sub = (p['price'] as num?)?.toDouble() ?? (unit * qty);
-                  final size = p['size_label']?.toString();
-                  final mat = p['material']?.toString();
-                  final notes = p['notes']?.toString() ?? '';
-                  final isLast = idx == items.length - 1;
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: idx.isEven
-                          ? const Color(0xFFF8FAFC)
-                          : Colors.white,
-                      borderRadius: isLast
-                          ? const BorderRadius.only(
-                              bottomLeft: Radius.circular(10),
-                              bottomRight: Radius.circular(10),
-                            )
-                          : null,
-                      border: Border(
-                        bottom: isLast
-                            ? BorderSide.none
-                            : const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 4,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                name,
-                                style: const TextStyle(
-                                  color: Color(0xFF1E293B),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
+                  clipBehavior: Clip.hardEdge,
+                  child: Column(
+                    children: [
+                      // Header row
+                      Container(
+                        color: const Color(0xFF1E3A5F),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        child: Row(
+                          children: const [
+                            Expanded(
+                              flex: 4,
+                              child: Text(
+                                'DESCRIPTION',
+                                style: TextStyle(
+                                  color: AppTheme.gold,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8,
                                 ),
-                              ),
-                              if (size != null || mat != null)
-                                Text(
-                                  [
-                                    if (size != null) size,
-                                    if (mat != null) mat,
-                                  ].join(' · '),
-                                  style: const TextStyle(
-                                    color: Color(0xFF64748B),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              if (notes.isNotEmpty)
-                                Text(
-                                  'Note: $notes',
-                                  style: const TextStyle(
-                                    color: Color(0xFF94A3B8),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '×$qty',
-                          style: const TextStyle(
-                            color: Color(0xFF64748B),
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              '₱${sub.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: AppTheme.gold,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
                               ),
                             ),
+                            SizedBox(width: 8),
                             Text(
-                              '@ ₱${unit.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: Color(0xFF94A3B8),
+                              'QTY',
+                              style: TextStyle(
+                                color: AppTheme.gold,
                                 fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            SizedBox(width: 14),
+                            Text(
+                              'AMOUNT',
+                              style: TextStyle(
+                                color: AppTheme.gold,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  );
-                }),
+                      ),
+                      // Item rows
+                      ...items.asMap().entries.map((e) {
+                        final idx = e.key;
+                        final p = e.value;
+                        final name = p['name']?.toString() ?? '—';
+                        final qty = (p['qty'] as num?)?.toInt() ?? 1;
+                        final unit = (p['unit_price'] as num?)?.toDouble() ?? 0;
+                        final sub = (p['price'] as num?)?.toDouble() ?? (unit * qty);
+                        final size = p['size_label']?.toString();
+                        final mat = p['material']?.toString();
+                        final notes = p['notes']?.toString() ?? '';
+                        final isLast = idx == items.length - 1;
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: idx.isEven ? const Color(0xFFF8FAFC) : Colors.white,
+                            border: Border(
+                              bottom: isLast
+                                  ? BorderSide.none
+                                  : const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 4,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: const TextStyle(
+                                        color: Color(0xFF1E293B),
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    if (size != null || mat != null)
+                                      Text(
+                                        [
+                                          if (size != null) size,
+                                          if (mat != null) mat,
+                                        ].join(' · '),
+                                        style: const TextStyle(
+                                          color: Color(0xFF64748B),
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    if (notes.isNotEmpty)
+                                      Text(
+                                        'Note: $notes',
+                                        style: const TextStyle(
+                                          color: Color(0xFF94A3B8),
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '×$qty',
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '₱${sub.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      color: Color(0xFF1E3A5F),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    '@ ₱${unit.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      color: Color(0xFF94A3B8),
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
 
                 const SizedBox(height: 20),
 
@@ -1555,14 +1593,27 @@ class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: const TextStyle(
-      color: Color(0xFF64748B),
-      fontSize: 10,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 1.2,
-    ),
+  Widget build(BuildContext context) => Row(
+    children: [
+      Container(
+        width: 3,
+        height: 14,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E3A5F),
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Text(
+        text,
+        style: const TextStyle(
+          color: Color(0xFF1E3A5F),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+        ),
+      ),
+    ],
   );
 }
 
@@ -1630,5 +1681,69 @@ class _PayRow extends StatelessWidget {
         ),
       ),
     ],
+  );
+}
+
+class _MetaCard extends StatelessWidget {
+  final IconData icon;
+  final String label, value;
+  final bool highlight;
+  const _MetaCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.highlight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: highlight ? const Color(0xFFEFF6FF) : Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(
+        color: highlight ? const Color(0xFFBFDBFE) : const Color(0xFFE2E8F0),
+      ),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E3A5F).withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Icon(icon, size: 16, color: const Color(0xFF1E3A5F)),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: TextStyle(
+                  color: highlight ? const Color(0xFF1E3A5F) : const Color(0xFF1E293B),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
   );
 }
