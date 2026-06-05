@@ -846,6 +846,7 @@ class _GroupedRecord {
   final String? paymentMethod;
   final Timestamp? latestDate;
   final List<DocumentReference> docRefs;
+  final bool isImported; // true for Excel-imported historical records
 
   const _GroupedRecord({
     required this.orderId,
@@ -857,6 +858,7 @@ class _GroupedRecord {
     required this.paymentMethod,
     required this.latestDate,
     required this.docRefs,
+    this.isImported = false,
   });
 }
 
@@ -982,6 +984,10 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
       custId = resolvedCustId[orderId]!;
     }
 
+    final isImported = records.any(
+      (r) => r['import_source'] == 'manual_xlsx_import',
+    );
+
     groups.add(
       _GroupedRecord(
         orderId: orderId,
@@ -993,6 +999,7 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
         paymentMethod: lastMethod,
         latestDate: latestTs,
         docRefs: refs,
+        isImported: isImported,
       ),
     );
   }
@@ -1147,27 +1154,25 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
       );
     }
 
-    // Group all raw docs by order_id first
     final allGroups = _allGroups;
 
-    // Period filter — use the group's latest payment date
-    var filtered = allGroups.where((g) {
+    // All records filtered by date — used for total revenue (includes imported Excel records)
+    var allDateFiltered = allGroups.where((g) {
       final ts = g.latestDate;
       if (ts == null) return _selectedRange == null;
       return _isWithinDateRange(ts.toDate().toLocal(), _selectedRange);
     }).toList();
 
-    // Type filter — match against derived paymentType
+    // System orders only (no imported) — used for list, search, Records chip, To Collect
+    var filtered = allDateFiltered.where((g) => !g.isImported).toList();
+
     if (_typeFilter != 'all') {
       filtered = filtered.where((g) => g.paymentType == _typeFilter).toList();
     }
 
-    // Search — supports full customer ID (e.g. CUS-123), name, order ID,
-    // or just the numeric/suffix part of the customer ID (e.g. "123").
     if (_search.isNotEmpty) {
       filtered = filtered.where((g) {
         final custIdLower = g.custId.toLowerCase();
-        // Also match the part after the last '-' so typing "123" finds "CUS-123"
         final custIdSuffix = custIdLower.contains('-')
             ? custIdLower.split('-').last
             : custIdLower;
@@ -1178,12 +1183,12 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
       }).toList();
     }
 
-    final totalCollected = filtered.fold<double>(0, (s, g) => s + g.totalPaid);
+    // Revenue total includes all (system + imported) within the date filter
+    final totalRevenue = allDateFiltered.fold<double>(0, (s, g) => s + g.totalPaid);
 
-    // Sum remaining balance from all grouped orders still on 'downpayment' status
-    // (i.e. order_total - totalPaid for every group whose latest payment is a downpayment)
+    // To Collect — system orders only (imported records are fully paid)
     double paymentToCollect = 0;
-    for (final g in allGroups) {
+    for (final g in allGroups.where((g) => !g.isImported)) {
       if (g.paymentType == 'downpayment' && g.orderTotal > 0) {
         final remaining = g.orderTotal - g.totalPaid;
         if (remaining > 0.01) paymentToCollect += remaining;
@@ -1201,7 +1206,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
               children: [
                 _SummaryChip(
                   label: _selectedRange == null ? 'Total' : 'Date Total',
-                  value: '₱${totalCollected.toStringAsFixed(2)}',
+                  value: '₱${totalRevenue.toStringAsFixed(2)}',
                   fg: _T.gold,
                   bg: const Color(0xFFFFFBEB),
                   border: const Color(0xFFFDE68A),
@@ -1209,7 +1214,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                 const SizedBox(width: 8),
                 _SummaryChip(
                   label: 'Records',
-                  value: '${filtered.length}',
+                  value: '${allDateFiltered.length}',
                   fg: const Color(0xFF374151),
                   bg: _T.headerBg,
                   border: _T.divider,
@@ -1243,42 +1248,26 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
             decoration: InputDecoration(
               hintText: 'Search by Order ID, Customer Name, or Customer ID',
               hintStyle: const TextStyle(color: _T.textMuted, fontSize: 13),
-              prefixIcon: const Icon(
-                Icons.search,
-                size: 16,
-                color: _T.textMuted,
-              ),
+              prefixIcon: const Icon(Icons.search, size: 16, color: _T.textMuted),
               suffixIcon: _search.isNotEmpty
                   ? GestureDetector(
-                onTap: () {
-                  _searchCtrl.clear();
-                  setState(() => _search = '');
-                },
-                child: const Icon(
-                  Icons.clear,
-                  size: 16,
-                  color: _T.textMuted,
-                ),
-              )
+                      onTap: () {
+                        _searchCtrl.clear();
+                        setState(() => _search = '');
+                      },
+                      child: const Icon(Icons.clear, size: 16, color: _T.textMuted),
+                    )
                   : null,
               filled: true,
               fillColor: const Color(0xFFF9FAFB),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 10,
-              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFFE5E7EB),
-                  width: 1,
-                ),
+                borderSide: const BorderSide(color: Color(0xFFE5E7EB), width: 1),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(
-                  color: AppTheme.gold.withValues(alpha: 0.7),
-                ),
+                borderSide: BorderSide(color: AppTheme.gold.withValues(alpha: 0.7)),
               ),
             ),
           ),

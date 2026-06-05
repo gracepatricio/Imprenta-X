@@ -2305,10 +2305,12 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     if (_allMaterials.isEmpty) return;
     final first = _allMaterials.first;
     setState(() {
+      final su = first['stock_unit']?.toString().toLowerCase() ?? '';
       _bom.add({
         'material_id': first['material_id'] ?? first['id'],
         'material_name': first['material_name'] ?? '',
         'quantity_per_unit': 1.0,
+        'unit': (su == 'sqft' || su == 'roll' || su == 'sheet') ? 'sqft' : 'pc',
         'for_material_option': '',
       });
     });
@@ -2342,7 +2344,10 @@ class _BomEditRowState extends State<_BomEditRow> {
   String _materialId = '';
   String _materialName = '';
   String _forMaterialOption = '';
+  String _unit = 'sqft';
   late TextEditingController _qtyCtrl;
+
+  static const _unitOptions = ['sqft', 'pc', 'sheet', 'roll', 'm'];
 
   @override
   void initState() {
@@ -2350,6 +2355,9 @@ class _BomEditRowState extends State<_BomEditRow> {
     _materialId = widget.item['material_id']?.toString() ?? '';
     _materialName = widget.item['material_name']?.toString() ?? '';
     _forMaterialOption = widget.item['for_material_option']?.toString() ?? '';
+    _unit = widget.item['unit']?.toString().isNotEmpty == true
+        ? widget.item['unit'].toString()
+        : 'sqft';
     _qtyCtrl = TextEditingController(
       text: widget.item['quantity_per_unit']?.toString() ?? '1',
     );
@@ -2366,8 +2374,17 @@ class _BomEditRowState extends State<_BomEditRow> {
       'material_id': _materialId,
       'material_name': _materialName,
       'quantity_per_unit': double.tryParse(_qtyCtrl.text) ?? 1.0,
+      'unit': _unit,
       'for_material_option': _forMaterialOption,
     });
+  }
+
+  String _unitFromMaterial(Map<String, dynamic> mat) {
+    final su = mat['stock_unit']?.toString().toLowerCase() ?? '';
+    if (su == 'sqft') return 'sqft';
+    if (su == 'roll') return 'sqft';
+    if (su == 'sheet') return 'sqft';
+    return 'pc';
   }
 
   @override
@@ -2400,15 +2417,6 @@ class _BomEditRowState extends State<_BomEditRow> {
     final valueExists = widget.allMaterials.any(
       (m) => (m['material_id'] ?? m['id'])?.toString() == _materialId,
     );
-    String unitHint = '';
-    if (valueExists) {
-      final mat = widget.allMaterials.firstWhere(
-        (m) => (m['material_id'] ?? m['id'])?.toString() == _materialId,
-        orElse: () => {},
-      );
-      final su = mat['stock_unit']?.toString() ?? 'pcs';
-      unitHint = su == 'sqft' ? 'sqft / sqft ordered' : 'pcs / piece ordered';
-    }
 
     final validOptions = widget.materialOptions
         .where((o) => o.isNotEmpty)
@@ -2523,6 +2531,10 @@ class _BomEditRowState extends State<_BomEditRow> {
                             _materialId = id;
                             _materialName =
                                 mat['material_name']?.toString() ?? '';
+                            // auto-fill unit from material's stock_unit
+                            if (widget.item['unit'] == null || widget.item['unit'].toString().isEmpty) {
+                              _unit = _unitFromMaterial(mat);
+                            }
                           });
                           _notify();
                         },
@@ -2547,30 +2559,25 @@ class _BomEditRowState extends State<_BomEditRow> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              // ── Quantity ──
               SizedBox(
-                width: 100,
+                width: 80,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      unitHint.isNotEmpty ? 'Qty ($unitHint)' : 'Qty/unit',
-                      style: const TextStyle(
+                    const Text(
+                      'Qty / unit',
+                      style: TextStyle(
                         color: _Glass.textMuted,
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     TextField(
                       controller: _qtyCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      style: const TextStyle(
-                        color: _Glass.textPrimary,
-                        fontSize: 13,
-                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
                       decoration: _Glass.field('1.0'),
                       onChanged: (_) => _notify(),
                     ),
@@ -2578,6 +2585,46 @@ class _BomEditRowState extends State<_BomEditRow> {
                 ),
               ),
               const SizedBox(width: 8),
+              // ── Unit ──
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Unit',
+                    style: TextStyle(
+                      color: _Glass.textMuted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _Glass.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _Glass.borderMid, width: 0.8),
+                    ),
+                    child: DropdownButton<String>(
+                      value: _unitOptions.contains(_unit) ? _unit : _unitOptions.first,
+                      dropdownColor: _Glass.surface,
+                      underline: const SizedBox.shrink(),
+                      style: const TextStyle(color: _Glass.textPrimary, fontSize: 12),
+                      items: _unitOptions.map((u) => DropdownMenuItem(
+                        value: u,
+                        child: Text(u, style: const TextStyle(color: _Glass.textPrimary, fontSize: 12)),
+                      )).toList(),
+                      onChanged: (val) {
+                        if (val == null) return;
+                        setState(() => _unit = val);
+                        _notify();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+              // ── For variant ──
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2592,10 +2639,7 @@ class _BomEditRowState extends State<_BomEditRow> {
                     ),
                     const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 2,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                       decoration: BoxDecoration(
                         color: _Glass.surface,
                         borderRadius: BorderRadius.circular(10),
@@ -2606,10 +2650,7 @@ class _BomEditRowState extends State<_BomEditRow> {
                         isExpanded: true,
                         dropdownColor: _Glass.surface,
                         underline: const SizedBox.shrink(),
-                        style: const TextStyle(
-                          color: _Glass.textPrimary,
-                          fontSize: 12,
-                        ),
+                        style: const TextStyle(color: _Glass.textPrimary, fontSize: 12),
                         items: optionItems,
                         onChanged: validOptions.isEmpty
                             ? null

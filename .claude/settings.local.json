@@ -48,7 +48,13 @@
       "Bash(powershell -command \"\\(Get-Content 'lib\\\\screens\\\\admin_product_management_screen.dart' | Measure-Object -Line\\).Lines\")",
       "Bash(n\\\\\"\")",
       "Bash(powershell -command \"\\(Get-Content 'lib\\\\screens\\\\admin_product_management_screen.dart'\\)[-5..-1] -join \\\\\"`n\\\\\"\")",
-      "Bash(powershell -command \"\\(Get-Content 'lib\\\\screens\\\\admin_inventory_screen.dart' | Measure-Object -Line\\).Lines\")"
+      "Bash(powershell -command \"\\(Get-Content 'lib\\\\screens\\\\admin_inventory_screen.dart' | Measure-Object -Line\\).Lines\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\ADMIN\\\\AndroidStudioProjects\\\\Imprenta-X-main\\\\lib\\\\screens\" -Recurse -Filter \"*.dart\")",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "Bash(grep -v \"//\\\\|_notesCtrl\\\\|notesCtrl\\\\|_notes \\\\|notes:.*item\\\\|'notes':.*item\\\\|notes.*_notes\")",
+      "Bash(Get-Content \"C:\\\\Users\\\\ADMIN\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-ADMIN-AndroidStudioProjects-Imprenta-X-main\\\\75344024-fd34-436f-ae81-b3a0c70f4221\\\\tasks\\\\b4y2dh9y7.output\")",
+      "Bash(Select-Object -Last 5)"
     ]
   }
 }
