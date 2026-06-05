@@ -26,8 +26,14 @@ class CustomerHomeScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Hero(isWide: isWide, onViewProducts: onViewProducts),
-                _FeaturedSection(isWide: isWide, onViewProducts: onViewProducts),
-                _ServicesSection(isWide: isWide, onViewProducts: onViewProducts),
+                _FeaturedSection(
+                  isWide: isWide,
+                  onViewProducts: onViewProducts,
+                ),
+                _ServicesSection(
+                  isWide: isWide,
+                  onViewProducts: onViewProducts,
+                ),
                 const SizedBox(height: 32),
               ],
             ),
@@ -436,9 +442,9 @@ class _FeaturedSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final h = isWide ? 24.0 : 16.0;
     return _FrostedSectionContainer(
-      margin: EdgeInsets.fromLTRB(h, 20, h, 0),
+      margin: EdgeInsets.fromLTRB(h, 24, h, 0),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 18, 0, 18),
+        padding: const EdgeInsets.fromLTRB(20, 22, 0, 22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -446,7 +452,7 @@ class _FeaturedSection extends StatelessWidget {
               padding: EdgeInsets.only(right: h),
               child: const _SectionHeader(title: 'Featured Products'),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('Products')
@@ -456,7 +462,7 @@ class _FeaturedSection extends StatelessWidget {
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const SizedBox(
-                    height: 160,
+                    height: 200,
                     child: Center(
                       child: CircularProgressIndicator(color: AppTheme.gold),
                     ),
@@ -465,7 +471,7 @@ class _FeaturedSection extends StatelessWidget {
                 final docs = snapshot.data!.docs;
                 if (docs.isEmpty) {
                   return Container(
-                    height: 100,
+                    height: 120,
                     margin: EdgeInsets.only(right: h),
                     child: const Center(
                       child: Text(
@@ -477,17 +483,29 @@ class _FeaturedSection extends StatelessWidget {
                 }
                 return LayoutBuilder(
                   builder: (_, boxConstraints) {
-                    // Aim to show exactly 3 cards; compute their width.
-                    final availW = boxConstraints.maxWidth - h;
-                    final cardW = ((availW - 24) / 3).clamp(160.0, 260.0);
-                    final cardH = cardW * 1.35;
+                    const gap = 14.0;
+                    const listRightPadding = 20.0;
+                    final availW = boxConstraints.maxWidth - listRightPadding;
+
+                    // Fit exactly 3 cards; clamp so a single card isn't tiny
+                    final idealW = (availW - gap * 2) / 3;
+                    final cardW = idealW.clamp(200.0, 320.0);
+                    final imgH = cardW * 0.85;
+
+                    // Let the ListView be as tall as the cards naturally are.
+                    // We use a fixed height derived from content so the
+                    // horizontal ListView has a bounded height, but add enough
+                    // generous buffer so content never clips
+                    const textAreaH = 140.0;
+                    final listH = imgH + textAreaH;
+
                     return SizedBox(
-                      height: cardH,
+                      height: listH,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
-                        padding: EdgeInsets.only(right: h),
+                        padding: const EdgeInsets.only(right: listRightPadding),
                         itemCount: docs.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        separatorBuilder: (_, __) => const SizedBox(width: gap),
                         itemBuilder: (_, i) {
                           final d = docs[i].data() as Map<String, dynamic>;
                           final docId = docs[i].id;
@@ -495,7 +513,8 @@ class _FeaturedSection extends StatelessWidget {
                             data: d,
                             docId: docId,
                             cardWidth: cardW,
-                            onViewProducts: onViewProducts,
+                            imageHeight: imgH,
+                            totalHeight: listH,
                           );
                         },
                       ),
@@ -515,12 +534,14 @@ class _FeaturedCard extends StatefulWidget {
   final Map<String, dynamic> data;
   final String docId;
   final double cardWidth;
-  final void Function([String? category]) onViewProducts;
+  final double imageHeight;
+  final double totalHeight;
   const _FeaturedCard({
     required this.data,
     required this.docId,
     required this.cardWidth,
-    required this.onViewProducts,
+    required this.imageHeight,
+    required this.totalHeight,
   });
 
   @override
@@ -550,11 +571,13 @@ class _FeaturedCardState extends State<_FeaturedCard> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: () => _goToOrder(context),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           width: widget.cardWidth,
+          height: widget.totalHeight,
           transform: Matrix4.translationValues(0, _hovered ? -5 : 0, 0),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -591,11 +614,13 @@ class _FeaturedCardState extends State<_FeaturedCard> {
           clipBehavior: Clip.antiAlias,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.max,
             children: [
+              // ── Image ──
               Stack(
                 children: [
                   SizedBox(
-                    height: widget.cardWidth * 0.65,
+                    height: widget.imageHeight,
                     width: double.infinity,
                     child: imageUrl.isNotEmpty
                         ? Image.network(
@@ -610,7 +635,7 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                     left: 0,
                     right: 0,
                     child: Container(
-                      height: 42,
+                      height: 36,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
@@ -625,92 +650,101 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                   ),
                 ],
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      price != null ? '₱$price' : 'See pricing',
-                      style: TextStyle(
-                        color: AppTheme.gold,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        shadows: [
-                          Shadow(
-                            color: AppTheme.gold.withValues(alpha: 0.4),
-                            blurRadius: 6,
+              // ── Text + Button ──
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              height: 1.35,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            price != null ? '₱$price' : 'See pricing',
+                            style: TextStyle(
+                              color: AppTheme.gold,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              shadows: [
+                                Shadow(
+                                  color: AppTheme.gold.withValues(alpha: 0.4),
+                                  blurRadius: 6,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: GestureDetector(
-                        onTap: () => _goToOrder(context),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          decoration: BoxDecoration(
-                            color: _hovered
-                                ? AppTheme.gold
-                                : AppTheme.gold.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: AppTheme.gold.withValues(alpha: 0.65),
-                            ),
-                            boxShadow: _hovered
-                                ? [
-                                    BoxShadow(
-                                      color: AppTheme.gold.withValues(
-                                        alpha: 0.3,
-                                      ),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ]
-                                : [],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.shopping_cart_outlined,
-                                size: 13,
-                                color: _hovered
-                                    ? const Color(0xFF1A0A00)
-                                    : AppTheme.gold,
+                      SizedBox(
+                        width: double.infinity,
+                        child: GestureDetector(
+                          onTap: () => _goToOrder(context),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            decoration: BoxDecoration(
+                              color: _hovered
+                                  ? AppTheme.gold
+                                  : AppTheme.gold.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: AppTheme.gold.withValues(alpha: 0.65),
                               ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Add to Cart',
-                                style: TextStyle(
+                              boxShadow: _hovered
+                                  ? [
+                                      BoxShadow(
+                                        color: AppTheme.gold.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ]
+                                  : [],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.shopping_cart_outlined,
+                                  size: 14,
                                   color: _hovered
                                       ? const Color(0xFF1A0A00)
                                       : AppTheme.gold,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Add to Cart',
+                                  style: TextStyle(
+                                    color: _hovered
+                                        ? const Color(0xFF1A0A00)
+                                        : AppTheme.gold,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -823,59 +857,70 @@ class _ServicesSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final h = isWide ? 24.0 : 16.0;
     return _FrostedSectionContainer(
-      margin: EdgeInsets.fromLTRB(h, 20, h, 0),
+      margin: EdgeInsets.fromLTRB(h, 24, h, 0),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _SectionHeader(title: 'Our Services'),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               'Everything you need, printed with precision.',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.45),
-                fontSize: 12,
+                fontSize: 13,
               ),
             ),
-            const SizedBox(height: 16),
-            isWide
-                ? Row(
-                    children: _services
-                        .map(
-                          (s) => Expanded(
-                            child: Padding(
-                              padding: EdgeInsets.only(
-                                right: s == _services.last ? 0 : 10,
-                              ),
-                              child: _ServiceCard(
-                                service: s,
-                                compact: false,
-                                onTap: () => onViewProducts(s.category),
-                              ),
+            const SizedBox(height: 20),
+            // Use LayoutBuilder + Wrap so it NEVER overflows regardless of width
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final totalW = constraints.maxWidth;
+                // On wide screens show 3 in a row, narrow show 1 per row
+                // Breakpoint: if each card can be at least 160px wide in 3-col layout, go wide
+                final threeColMinW = 160.0 * 3 + 14.0 * 2; // 3 cards + 2 gaps
+                final useRow = totalW >= threeColMinW;
+
+                if (useRow) {
+                  const gap = 14.0;
+                  final cardW = (totalW - gap * 2) / 3;
+                  // IntrinsicHeight makes all cards match the tallest one
+                  return IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (int i = 0; i < _services.length; i++) ...[
+                          if (i > 0) const SizedBox(width: gap),
+                          SizedBox(
+                            width: cardW,
+                            child: _ServiceCard(
+                              service: _services[i],
+                              compact: false,
+                              onTap: () =>
+                                  onViewProducts(_services[i].category),
                             ),
                           ),
-                        )
-                        .toList(),
-                  )
-                : Row(
-                    children: _services
-                        .map(
-                          (s) => Expanded(
-                            child: Padding(
-                              padding: EdgeInsets.only(
-                                right: s == _services.last ? 0 : 8,
-                              ),
-                              child: _ServiceCard(
-                                service: s,
-                                compact: true,
-                                onTap: () => onViewProducts(s.category),
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
+                        ],
+                      ],
+                    ),
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      for (int i = 0; i < _services.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 12),
+                        _ServiceCard(
+                          service: _services[i],
+                          compact: true,
+                          onTap: () => onViewProducts(_services[i].category),
+                        ),
+                      ],
+                    ],
+                  );
+                }
+              },
+            ),
           ],
         ),
       ),
@@ -908,7 +953,11 @@ class _ServiceCard extends StatefulWidget {
   final _ServiceItem service;
   final bool compact;
   final VoidCallback onTap;
-  const _ServiceCard({required this.service, required this.compact, required this.onTap});
+  const _ServiceCard({
+    required this.service,
+    required this.compact,
+    required this.onTap,
+  });
 
   @override
   State<_ServiceCard> createState() => _ServiceCardState();
@@ -927,115 +976,119 @@ class _ServiceCardState extends State<_ServiceCard> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        transform: Matrix4.translationValues(0, _hovered ? -4 : 0, 0),
-        padding: EdgeInsets.all(widget.compact ? 14 : 16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          color: _hovered
-              ? Colors.white.withValues(alpha: 0.20)
-              : Colors.white.withValues(alpha: 0.12),
-          border: Border.all(
+          duration: const Duration(milliseconds: 180),
+          transform: Matrix4.translationValues(0, _hovered ? -4 : 0, 0),
+          padding: EdgeInsets.all(widget.compact ? 16 : 20),
+          // height: double.infinity lets it stretch to IntrinsicHeight
+          constraints: const BoxConstraints(minHeight: 0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
             color: _hovered
-                ? s.iconColor.withValues(alpha: 0.75)
-                : s.accentColor.withValues(alpha: 0.55),
-            width: _hovered ? 1.5 : 1.2,
+                ? Colors.white.withValues(alpha: 0.20)
+                : Colors.white.withValues(alpha: 0.12),
+            border: Border.all(
+              color: _hovered
+                  ? s.iconColor.withValues(alpha: 0.75)
+                  : s.accentColor.withValues(alpha: 0.55),
+              width: _hovered ? 1.5 : 1.2,
+            ),
+            boxShadow: _hovered
+                ? [
+                    BoxShadow(
+                      color: s.accentColor.withValues(alpha: 0.35),
+                      blurRadius: 20,
+                      offset: const Offset(0, 6),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.18),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.20),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
           ),
-          boxShadow: _hovered
-              ? [
-                  BoxShadow(
-                    color: s.accentColor.withValues(alpha: 0.35),
-                    blurRadius: 20,
-                    offset: const Offset(0, 6),
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 12,
-                    offset: const Offset(0, 3),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.20),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(11),
-                    color: s.accentColor.withValues(alpha: 0.32),
-                    border: Border.all(
-                      color: s.iconColor.withValues(alpha: 0.35),
-                      width: 1,
-                    ),
-                  ),
-                  child: Icon(s.icon, color: s.iconColor, size: 20),
-                ),
-                if (s.tag != null) ...[
-                  const SizedBox(width: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: AppTheme.gold.withValues(alpha: 0.20),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(11),
+                      color: s.accentColor.withValues(alpha: 0.32),
                       border: Border.all(
-                        color: AppTheme.gold.withValues(alpha: 0.55),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.gold.withValues(alpha: 0.2),
-                          blurRadius: 8,
-                        ),
-                      ],
-                    ),
-                    child: const Text(
-                      'Popular',
-                      style: TextStyle(
-                        color: AppTheme.gold,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
+                        color: s.iconColor.withValues(alpha: 0.35),
+                        width: 1,
                       ),
                     ),
+                    child: Icon(s.icon, color: s.iconColor, size: 20),
                   ),
+                  if (s.tag != null) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.gold.withValues(alpha: 0.20),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: AppTheme.gold.withValues(alpha: 0.55),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.gold.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: const Text(
+                        'Popular',
+                        style: TextStyle(
+                          color: AppTheme.gold,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
-            SizedBox(height: widget.compact ? 10 : 12),
-            Text(
-              s.title,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: widget.compact ? 12 : 13,
-                fontWeight: FontWeight.w700,
-                height: 1.3,
               ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              s.subtitle,
-              style: TextStyle(
-                color: s.iconColor.withValues(alpha: 0.65),
-                fontSize: widget.compact ? 10 : 11,
-                height: 1.45,
+              SizedBox(height: widget.compact ? 12 : 14),
+              Text(
+                s.title,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: widget.compact ? 13 : 14,
+                  fontWeight: FontWeight.w700,
+                  height: 1.3,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 5),
+              Text(
+                s.subtitle,
+                style: TextStyle(
+                  color: s.iconColor.withValues(alpha: 0.65),
+                  fontSize: widget.compact ? 11 : 12,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-        ),
     );
   }
 }
