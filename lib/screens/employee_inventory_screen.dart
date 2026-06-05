@@ -89,7 +89,14 @@ String _stockUnitLabel(String su) {
 String _buildMatSubLine(Map<String, dynamic> data) {
   final su = data['stocking_unit']?.toString();
   if (su == null || su.isEmpty) return '';
-  if (su == 'Piece') return 'Piece';
+  if (su == 'Piece') {
+    final baseUom  = data['base_uom']?.toString() ?? 'pc';
+    final unitSize = (data['unit_size_sqft'] as num?)?.toDouble() ?? 1;
+    if (baseUom == 'sheet' && unitSize > 1) {
+      return 'Pack · ${_fmtNum(unitSize)} sheets';
+    }
+    return 'Piece';
+  }
   final wv = (data['width_value'] as num?)?.toDouble() ?? 0;
   final wu = data['width_unit']?.toString() ?? 'ft';
   final lv = (data['length_value'] as num?)?.toDouble() ?? 0;
@@ -1758,10 +1765,12 @@ class _TableRow extends StatelessWidget {
     final id      = data['material_id']?.toString() ?? '';
     final name    = data['material_name']?.toString() ?? '';
     final status  = data['_status']?.toString() ?? '';
-    final current = (data['current_stock'] as num?)?.toDouble() ?? 0;
+    final current  = (data['current_stock'] as num?)?.toDouble() ?? 0;
     final su       = data['stocking_unit']?.toString() ?? '';
     final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
-    final subLine  = _buildMatSubLine(data);
+    final baseUom  = data['base_uom']?.toString() ??
+        (su == 'Piece' ? 'pc' : 'sqft');
+    final subLine      = _buildMatSubLine(data);
     final isStructured = su.isNotEmpty;
     final isPiece      = su == 'Piece';
 
@@ -1774,18 +1783,34 @@ class _TableRow extends StatelessWidget {
         textAlign: TextAlign.center,
       );
     } else if (isPiece) {
-      stockCell = Text(
-        '${_fmtNum(current)} pcs',
-        style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
-        textAlign: TextAlign.center,
-      );
+      if (baseUom == 'sheet' && unitSqft > 1) {
+        final packs = unitSqft > 0 ? current / unitSqft : 0.0;
+        stockCell = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${_fmtNum(current)} sheets',
+                style: const TextStyle(color: _Glass.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
+                textAlign: TextAlign.center),
+            Text('${_fmtNum(packs)} packs',
+                style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                textAlign: TextAlign.center),
+          ],
+        );
+      } else {
+        final label = baseUom == 'sheet' ? 'sheets' : 'pcs';
+        stockCell = Text(
+          '${_fmtNum(current)} $label',
+          style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+          textAlign: TextAlign.center,
+        );
+      }
     } else {
       final stockUnits = unitSqft > 0 ? current / unitSqft : 0.0;
       final label = _stockUnitLabel(su);
       stockCell = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('${_fmtNum(current)} sqft',
+          Text('${_fmtNum(current)} $baseUom',
               style: const TextStyle(color: _Glass.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
               textAlign: TextAlign.center),
           Text('${_fmtNum(stockUnits)} ${label}s',

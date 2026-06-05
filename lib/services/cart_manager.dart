@@ -23,6 +23,8 @@ class CartItem {
   final String? material;
   final List<CartFile> files;
   final String notes;
+  // Add-on services the customer selected, each: {name, price}
+  final List<Map<String, dynamic>> selectedServices;
 
   const CartItem({
     required this.productId,
@@ -37,6 +39,7 @@ class CartItem {
     this.material,
     required this.files,
     required this.notes,
+    this.selectedServices = const [],
   });
 
   bool get hasSizeInput => widthFt != null && heightFt != null;
@@ -55,15 +58,30 @@ class CartItem {
   }
 
   double get subtotal {
+    double base;
     if (hasSizeInput) {
-      // per_sqin: area is in sq ft internally, but price is per sq in → × 144.
-      if (pricingUnit == 'per_sqin') {
-        return unitPrice * widthFt! * heightFt! * 144 * quantity;
-      }
-      return unitPrice * widthFt! * heightFt! * quantity;
+      base = pricingUnit == 'per_sqin'
+          ? unitPrice * widthFt! * heightFt! * 144 * quantity
+          : unitPrice * widthFt! * heightFt! * quantity;
+    } else {
+      base = unitPrice * quantity;
     }
-    return unitPrice * quantity;
+    // Add selected add-on services using the same billing rate as the product.
+    for (final svc in selectedServices) {
+      final sp = (svc['price'] as num?)?.toDouble() ?? 0;
+      if (hasSizeInput) {
+        base += pricingUnit == 'per_sqin'
+            ? sp * widthFt! * heightFt! * 144 * quantity
+            : sp * widthFt! * heightFt! * quantity;
+      } else {
+        base += sp * quantity;
+      }
+    }
+    return base;
   }
+
+  String get servicesLabel =>
+      selectedServices.map((s) => s['name']?.toString() ?? '').join(', ');
 
   double get estimatedDaysExact {
     final cat = category.toLowerCase();
@@ -119,6 +137,7 @@ class CartItem {
     if (heightFt != null) 'heightFt': heightFt,
     if (material != null) 'material': material,
     'notes': notes,
+    if (selectedServices.isNotEmpty) 'selectedServices': selectedServices,
     'fileData': files.map((f) => {
       'name': f.name,
       if (f.url  != null) 'url':  f.url,
@@ -137,6 +156,11 @@ class CartItem {
     widthFt:     j['widthFt']  != null ? (j['widthFt']  as num).toDouble() : null,
     heightFt:    j['heightFt'] != null ? (j['heightFt'] as num).toDouble() : null,
     material:    j['material'] as String?,
+    selectedServices: (() {
+      final raw = j['selectedServices'] as List?;
+      if (raw == null) return <Map<String, dynamic>>[];
+      return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    })(),
     files: (() {
       final raw = j['fileData'] as List?;
       if (raw == null) return <CartFile>[];

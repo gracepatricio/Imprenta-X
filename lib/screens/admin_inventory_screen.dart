@@ -85,6 +85,62 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
   String? _statusFilter;
   bool _seeding = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _syncRawMaterials();
+  }
+
+  // One-time migration: replaces all raw material documents with the new
+  // authoritative list of 33 materials.  Idempotent — checks RM-001 name
+  // before running, so it silently skips after the first successful run.
+  Future<void> _syncRawMaterials() async {
+    try {
+      final col = FirebaseFirestore.instance.collection('RawMaterials');
+      final check = await col.doc('RM-001').get();
+      if (check.exists &&
+          check.data()?['material_name'] == 'Vinyl Matte Sticker') {
+        return; // already migrated
+      }
+
+      // Full replacement in batches of 400 (Firestore cap is 500 per batch).
+      const batchSize = 400;
+      for (int start = 0;
+          start < _kNewMaterials.length;
+          start += batchSize) {
+        final batch = FirebaseFirestore.instance.batch();
+        final chunk = _kNewMaterials.sublist(
+            start,
+            (start + batchSize).clamp(0, _kNewMaterials.length));
+        for (final mat in chunk) {
+          batch.set(col.doc(mat['material_id'] as String), {
+            ...mat,
+            'last_updated': null,
+            'last_updated_by': '',
+            'last_updated_by_uid': '',
+          });
+        }
+        await batch.commit();
+      }
+
+      // Delete any old RM-XXX documents not in the new list.
+      final newIds = _kNewMaterials.map((m) => m['material_id']).toSet();
+      final allSnap = await col.get();
+      final toDelete = allSnap.docs
+          .where((d) => !newIds.contains(d.id))
+          .toList();
+      if (toDelete.isNotEmpty) {
+        final batch = FirebaseFirestore.instance.batch();
+        for (final d in toDelete) {
+          batch.delete(d.reference);
+        }
+        await batch.commit();
+      }
+    } catch (_) {
+      // Silent — retries on next open until it succeeds.
+    }
+  }
+
   // Counts derived from the live stream — kept here so the header can use them.
   Map<String, int> _counts = {};
   int _total = 0;
@@ -1026,13 +1082,15 @@ class _MaterialRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final id     = data['material_id']?.toString() ?? '';
-    final name   = data['material_name']?.toString() ?? '';
-    final status = data['_status']?.toString() ?? '';
+    final id       = data['material_id']?.toString() ?? '';
+    final name     = data['material_name']?.toString() ?? '';
+    final status   = data['_status']?.toString() ?? '';
     final current  = (data['current_stock'] as num?)?.toDouble() ?? 0;
     final su       = data['stocking_unit']?.toString() ?? '';
     final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
-    final subLine    = _buildMatSubLine(data);
+    final baseUom  = data['base_uom']?.toString() ??
+        (su == 'Piece' ? 'pc' : 'sqft');
+    final subLine      = _buildMatSubLine(data);
     final isStructured = su.isNotEmpty;
     final isPiece      = su == 'Piece';
 
@@ -1045,11 +1103,27 @@ class _MaterialRow extends StatelessWidget {
         textAlign: TextAlign.center,
       );
     } else if (isPiece) {
-      stockCell = Text(
-        '${_fmtNum(current)} pcs',
-        style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
-        textAlign: TextAlign.center,
-      );
+      if (baseUom == 'sheet' && unitSqft > 1) {
+        final packs = unitSqft > 0 ? current / unitSqft : 0.0;
+        stockCell = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${_fmtNum(current)} sheets',
+                style: const TextStyle(color: _Glass.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
+                textAlign: TextAlign.center),
+            Text('${_fmtNum(packs)} packs',
+                style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                textAlign: TextAlign.center),
+          ],
+        );
+      } else {
+        final label = baseUom == 'sheet' ? 'sheets' : 'pcs';
+        stockCell = Text(
+          '${_fmtNum(current)} $label',
+          style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+          textAlign: TextAlign.center,
+        );
+      }
     } else {
       final stockUnits = unitSqft > 0 ? current / unitSqft : 0.0;
       final label = _stockUnitLabel(su);
@@ -1058,7 +1132,7 @@ class _MaterialRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            '${_fmtNum(current)} sqft',
+            '${_fmtNum(current)} $baseUom',
             style: const TextStyle(color: _Glass.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
             textAlign: TextAlign.center,
           ),
@@ -1216,20 +1290,27 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
   String _wUnit    = 'ft';
   final _lCtrl     = TextEditingController();
   String _lUnit    = 'm';
+  String _baseUom  = 'pc'; // 'pc' | 'sheet' — only relevant for Piece type
+  final _packSizeCtrl = TextEditingController(text: '1'); // sheets per pack
   final _restockCtrl = TextEditingController(text: '5');
   final _stockCtrl   = TextEditingController(text: '0');
   bool _saving = false;
 
-  bool get _isPiece => _su == 'Piece';
+  bool get _isPiece  => _su == 'Piece';
+  bool get _isPack   => _isPiece && _baseUom == 'sheet';
 
   double get _unitSizeSqft {
-    if (_isPiece) return 1.0;
+    if (_isPiece) {
+      if (_isPack) return double.tryParse(_packSizeCtrl.text) ?? 1.0;
+      return 1.0;
+    }
     final wv = double.tryParse(_wCtrl.text) ?? 0;
     final lv = double.tryParse(_lCtrl.text) ?? 0;
     return _calcUnitSqft(wv, _wUnit, lv, _lUnit);
   }
 
   String get _unitSizeDisplay {
+    if (_isPack) return '${_fmtNum(_unitSizeSqft)} sheets / pack';
     if (_isPiece) return '1 pc / pc';
     final s = _unitSizeSqft;
     return '${_fmtNum(s)} sqft / ${_stockUnitLabel(_su)}';
@@ -1263,13 +1344,14 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
   void dispose() {
     _idCtrl.dispose(); _nameCtrl.dispose();
     _wCtrl.dispose();  _lCtrl.dispose();
+    _packSizeCtrl.dispose();
     _restockCtrl.dispose(); _stockCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final unitLabel = _isPiece ? 'pcs' : '${_stockUnitLabel(_su)}s';
+    final unitLabel = _isPack ? 'sheets' : (_isPiece ? 'pcs' : '${_stockUnitLabel(_su)}s');
     return Dialog(
       backgroundColor: _Glass.surface,
       elevation: 32,
@@ -1341,9 +1423,44 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
                       _GlassDropdown<String>(
                         value: _su,
                         items: const ['Roll', 'Sheet', 'Piece'],
-                        onChanged: (v) => setState(() => _su = v!),
+                        onChanged: (v) => setState(() { _su = v!; _baseUom = 'pc'; }),
                       ),
                       const SizedBox(height: 12),
+
+                      // Piece sub-type (base unit + optional pack size)
+                      if (_isPiece) ...[
+                        _SectionLabel('Base Unit'),
+                        const SizedBox(height: 6),
+                        _GlassDropdown<String>(
+                          value: _baseUom,
+                          items: const ['pc', 'sheet'],
+                          onChanged: (v) => setState(() => _baseUom = v!),
+                        ),
+                        if (_isPack) ...[
+                          const SizedBox(height: 12),
+                          _SectionLabel('Sheets per pack *'),
+                          const SizedBox(height: 6),
+                          SizedBox(
+                            width: 160,
+                            child: _GlassField(
+                              controller: _packSizeCtrl,
+                              hint: 'e.g. 100',
+                              keyboardType: TextInputType.number,
+                              validator: (v) {
+                                if (v?.trim().isEmpty == true) return 'Required';
+                                if (int.tryParse(v!.trim()) == null) return 'Whole number';
+                                return null;
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '→ ${_fmtNum(_unitSizeSqft)} sheets per pack',
+                            style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                      ],
 
                       // Width + Length (only for Roll/Sheet)
                       if (!_isPiece) ...[
@@ -1521,14 +1638,21 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
       final restockBase  = _isPiece ? restockInput : restockInput * sqft;
       final wv = _isPiece ? 0.0 : (double.tryParse(_wCtrl.text) ?? 0.0);
       final lv = _isPiece ? 0.0 : (double.tryParse(_lCtrl.text) ?? 0.0);
-      final unitDesc = _isPiece
-          ? 'Piece'
-          : '$_su (${_fmtNum(wv)}$_wUnit × ${_fmtNum(lv)}$_lUnit)';
+      String unitDesc;
+      if (_isPack) {
+        unitDesc = 'Pack (${_fmtNum(sqft)} sheets)';
+      } else if (_isPiece) {
+        unitDesc = 'Piece';
+      } else {
+        unitDesc = '$_su (${_fmtNum(wv)}$_wUnit × ${_fmtNum(lv)}$_lUnit)';
+      }
+      final effectiveBaseUom = _isPiece ? _baseUom : 'sqft';
 
       await FirebaseFirestore.instance.collection('RawMaterials').doc(id).set({
         'material_id': id,
         'material_name': name,
         'stocking_unit': _su,
+        'base_uom': effectiveBaseUom,
         'width_value':  _isPiece ? null : wv,
         'width_unit':   _isPiece ? null : _wUnit,
         'length_value': _isPiece ? null : lv,
@@ -1571,16 +1695,20 @@ class _EditMaterialDialogState extends State<_EditMaterialDialog> {
   final _formKey  = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
   late String _su;
+  late String _baseUom; // 'sqft' | 'pc' | 'sheet'
   late final TextEditingController _wCtrl;
   late String _wUnit;
   late final TextEditingController _lCtrl;
   late String _lUnit;
+  late final TextEditingController _packSizeCtrl;
   late final TextEditingController _restockCtrl;
   bool _saving = false;
 
   bool get _isPiece => _su == 'Piece';
+  bool get _isPack  => _isPiece && _baseUom == 'sheet';
 
   double get _unitSizeSqft {
+    if (_isPack) return double.tryParse(_packSizeCtrl.text) ?? 1.0;
     if (_isPiece) return 1.0;
     final wv = double.tryParse(_wCtrl.text) ?? 0;
     final lv = double.tryParse(_lCtrl.text) ?? 0;
@@ -1588,6 +1716,7 @@ class _EditMaterialDialogState extends State<_EditMaterialDialog> {
   }
 
   String get _unitSizeDisplay {
+    if (_isPack) return '${_fmtNum(_unitSizeSqft)} sheets / pack';
     if (_isPiece) return '1 pc / pc';
     final s = _unitSizeSqft;
     return '${_fmtNum(s)} sqft / ${_stockUnitLabel(_su)}';
@@ -1599,21 +1728,24 @@ class _EditMaterialDialogState extends State<_EditMaterialDialog> {
     final d = widget.data;
     _nameCtrl = TextEditingController(text: d['material_name']?.toString() ?? '');
     _su       = d['stocking_unit']?.toString().isNotEmpty == true
-                  ? d['stocking_unit'] as String
-                  : 'Roll';
-    _wCtrl    = TextEditingController(
-        text: (d['width_value'] as num?)?.toString() ?? '');
-    _wUnit    = d['width_unit']?.toString().isNotEmpty == true
-                  ? d['width_unit'] as String
-                  : 'ft';
-    _lCtrl    = TextEditingController(
-        text: (d['length_value'] as num?)?.toString() ?? '');
-    _lUnit    = d['length_unit']?.toString().isNotEmpty == true
-                  ? d['length_unit'] as String
-                  : 'm';
+                  ? d['stocking_unit'] as String : 'Roll';
+    _baseUom  = d['base_uom']?.toString().isNotEmpty == true
+                  ? d['base_uom'] as String
+                  : (_su == 'Piece' ? 'pc' : 'sqft');
+    _wCtrl    = TextEditingController(text: (d['width_value']  as num?)?.toString() ?? '');
+    _wUnit    = d['width_unit']?.toString().isNotEmpty  == true ? d['width_unit']  as String : 'ft';
+    _lCtrl    = TextEditingController(text: (d['length_value'] as num?)?.toString() ?? '');
+    _lUnit    = d['length_unit']?.toString().isNotEmpty == true ? d['length_unit'] as String : 'm';
 
-    // Pre-fill restock in stock units (reverse-convert from sqft)
-    final currentSqft = (d['unit_size_sqft'] as num?)?.toDouble() ?? 0;
+    final existingUnitSize = (d['unit_size_sqft'] as num?)?.toDouble() ?? 1.0;
+    _packSizeCtrl = TextEditingController(
+      text: _baseUom == 'sheet' && existingUnitSize > 1
+          ? _fmtNum(existingUnitSize)
+          : '1',
+    );
+
+    // Pre-fill restock in stock units.
+    final currentSqft = existingUnitSize;
     final restockBase  = (d['restock_level'] as num?)?.toDouble() ?? 0;
     double restockDisplay;
     if (_su == 'Piece' || currentSqft <= 0) {
@@ -1625,17 +1757,19 @@ class _EditMaterialDialogState extends State<_EditMaterialDialog> {
 
     _wCtrl.addListener(() => setState(() {}));
     _lCtrl.addListener(() => setState(() {}));
+    _packSizeCtrl.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
-    _nameCtrl.dispose(); _wCtrl.dispose(); _lCtrl.dispose(); _restockCtrl.dispose();
+    _nameCtrl.dispose(); _wCtrl.dispose(); _lCtrl.dispose();
+    _packSizeCtrl.dispose(); _restockCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final unitLabel = _isPiece ? 'pcs' : '${_stockUnitLabel(_su)}s';
+    final unitLabel = _isPack ? 'sheets' : (_isPiece ? 'pcs' : '${_stockUnitLabel(_su)}s');
     final docId = widget.data['material_id']?.toString() ?? '';
     return Dialog(
       backgroundColor: _Glass.surface,
@@ -1709,9 +1843,42 @@ class _EditMaterialDialogState extends State<_EditMaterialDialog> {
                       _GlassDropdown<String>(
                         value: _su,
                         items: const ['Roll', 'Sheet', 'Piece'],
-                        onChanged: (v) => setState(() => _su = v!),
+                        onChanged: (v) => setState(() {
+                          _su = v!;
+                          if (_su != 'Piece') _baseUom = 'sqft';
+                        }),
                       ),
                       const SizedBox(height: 12),
+
+                      // Piece sub-type
+                      if (_isPiece) ...[
+                        _SectionLabel('Base Unit'),
+                        const SizedBox(height: 6),
+                        _GlassDropdown<String>(
+                          value: _baseUom == 'sqft' ? 'pc' : _baseUom,
+                          items: const ['pc', 'sheet'],
+                          onChanged: (v) => setState(() => _baseUom = v!),
+                        ),
+                        if (_isPack) ...[
+                          const SizedBox(height: 12),
+                          _SectionLabel('Sheets per pack *'),
+                          const SizedBox(height: 6),
+                          SizedBox(
+                            width: 160,
+                            child: _GlassField(
+                              controller: _packSizeCtrl,
+                              hint: 'e.g. 100',
+                              keyboardType: TextInputType.number,
+                              validator: (v) {
+                                if (v?.trim().isEmpty == true) return 'Required';
+                                if (int.tryParse(v!.trim()) == null) return 'Whole number';
+                                return null;
+                              },
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                      ],
 
                       // Width + Length
                       if (!_isPiece) ...[
@@ -1863,13 +2030,20 @@ class _EditMaterialDialogState extends State<_EditMaterialDialog> {
       final restockBase  = _isPiece ? restockInput : restockInput * sqft;
       final wv = _isPiece ? 0.0 : (double.tryParse(_wCtrl.text) ?? 0.0);
       final lv = _isPiece ? 0.0 : (double.tryParse(_lCtrl.text) ?? 0.0);
-      final unitDesc = _isPiece
-          ? 'Piece'
-          : '$_su (${_fmtNum(wv)}$_wUnit × ${_fmtNum(lv)}$_lUnit)';
+      String unitDesc;
+      if (_isPack) {
+        unitDesc = 'Pack (${_fmtNum(sqft)} sheets)';
+      } else if (_isPiece) {
+        unitDesc = 'Piece';
+      } else {
+        unitDesc = '$_su (${_fmtNum(wv)}$_wUnit × ${_fmtNum(lv)}$_lUnit)';
+      }
+      final effectiveBaseUom = _isPiece ? (_isPack ? 'sheet' : _baseUom) : 'sqft';
 
       await FirebaseFirestore.instance.collection('RawMaterials').doc(docId).update({
         'material_name': name,
         'stocking_unit': _su,
+        'base_uom': effectiveBaseUom,
         'width_value':  _isPiece ? null : wv,
         'width_unit':   _isPiece ? null : _wUnit,
         'length_value': _isPiece ? null : lv,
@@ -3569,11 +3743,17 @@ String _stockUnitLabel(String su) {
 }
 
 // Builds the sub-line shown under the material name in the table.
-// Only shows structured data — empty string if not yet configured.
 String _buildMatSubLine(Map<String, dynamic> data) {
   final su = data['stocking_unit']?.toString();
   if (su == null || su.isEmpty) return '';
-  if (su == 'Piece') return 'Piece';
+  if (su == 'Piece') {
+    final baseUom  = data['base_uom']?.toString() ?? 'pc';
+    final unitSize = (data['unit_size_sqft'] as num?)?.toDouble() ?? 1;
+    if (baseUom == 'sheet' && unitSize > 1) {
+      return 'Pack · ${_fmtNum(unitSize)} sheets';
+    }
+    return 'Piece';
+  }
   final wv = (data['width_value'] as num?)?.toDouble() ?? 0;
   final wu = data['width_unit']?.toString() ?? 'ft';
   final lv = (data['length_value'] as num?)?.toDouble() ?? 0;
@@ -3582,7 +3762,55 @@ String _buildMatSubLine(Map<String, dynamic> data) {
 }
 
 // =============================================================================
-// Seed data
+// Authoritative raw-material list — 33 materials (replaces old seed list)
+// =============================================================================
+const _kNewMaterials = [
+  // ── Rolls — width in ft, length in m ──────────────────────────────────────
+  {'material_id':'RM-001','material_name':'Vinyl Matte Sticker','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':2050.53,'current_stock':0.0},
+  {'material_id':'RM-002','material_name':'Clear Matte Printable','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':2050.53,'current_stock':0.0},
+  {'material_id':'RM-003','material_name':'Clear Glossy Printable','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':1230.32,'current_stock':0.0},
+  {'material_id':'RM-004','material_name':'Poster Paper Matte','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':1230.32,'current_stock':0.0},
+  {'material_id':'RM-005','material_name':'Poster Paper Glossy','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':1230.32,'current_stock':0.0},
+  {'material_id':'RM-006','material_name':'Vinyl Glossy Sticker','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':1230.32,'current_stock':0.0},
+  {'material_id':'RM-007','material_name':'Sticker Matte (paper)','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':1230.32,'current_stock':0.0},
+  {'material_id':'RM-008','material_name':'Sticker Glossy (paper)','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':1230.32,'current_stock':0.0},
+  {'material_id':'RM-009','material_name':'Tarpaulin 13oz','stocking_unit':'Roll','width_value':10.0,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':1640.42,'base_uom':'sqft','unit_description':'Roll (10ft × 50m)','restock_level':4921.26,'current_stock':0.0},
+  {'material_id':'RM-010','material_name':'Tarpaulin 10oz','stocking_unit':'Roll','width_value':10.0,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':1640.42,'base_uom':'sqft','unit_description':'Roll (10ft × 50m)','restock_level':4921.26,'current_stock':0.0},
+  // ── Sheets — width & length in ft ─────────────────────────────────────────
+  {'material_id':'RM-011','material_name':'Composite Panel 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':160.0,'current_stock':0.0},
+  {'material_id':'RM-012','material_name':'Acrylic Clear 5mm 3x8','stocking_unit':'Sheet','width_value':3.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':24.0,'base_uom':'sqft','unit_description':'Sheet (3ft × 8ft)','restock_level':48.0,'current_stock':0.0},
+  {'material_id':'RM-013','material_name':'Acrylic Chalk White 4x4','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':4.0,'length_unit':'ft','unit_size_sqft':16.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 4ft)','restock_level':32.0,'current_stock':0.0},
+  {'material_id':'RM-014','material_name':'Acrylic Diffuser 3mm 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':64.0,'current_stock':0.0},
+  {'material_id':'RM-015','material_name':'Acrylic Diffuser 1.5mm 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':64.0,'current_stock':0.0},
+  {'material_id':'RM-016','material_name':'Acrylic Clear 3mm 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':64.0,'current_stock':0.0},
+  {'material_id':'RM-017','material_name':'Acrylic Clear 1.5mm 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':64.0,'current_stock':0.0},
+  {'material_id':'RM-018','material_name':'Sintra Board 1.5mm 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':96.0,'current_stock':0.0},
+  {'material_id':'RM-019','material_name':'Sintra Board 2mm 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':96.0,'current_stock':0.0},
+  {'material_id':'RM-020','material_name':'Sintra Board 3mm 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':96.0,'current_stock':0.0},
+  {'material_id':'RM-021','material_name':'Sintra Board 5mm 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':64.0,'current_stock':0.0},
+  {'material_id':'RM-022','material_name':'Plastic PVC Board 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':96.0,'current_stock':0.0},
+  // ── Piece — no dimensions ─────────────────────────────────────────────────
+  {'material_id':'RM-023','material_name':'Metal Furring','stocking_unit':'Piece','unit_size_sqft':1.0,'base_uom':'pc','unit_description':'Piece','restock_level':10.0,'current_stock':0.0},
+  // ── Roll — Panaflex ───────────────────────────────────────────────────────
+  {'material_id':'RM-024','material_name':'Panaflex Flex','stocking_unit':'Roll','width_value':10.0,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':1640.42,'base_uom':'sqft','unit_description':'Roll (10ft × 50m)','restock_level':4921.26,'current_stock':0.0},
+  // ── Photo paper packs — base UoM = sheet ─────────────────────────────────
+  {'material_id':'RM-025','material_name':'Photo Paper 4R','stocking_unit':'Piece','unit_size_sqft':100.0,'base_uom':'sheet','unit_description':'Pack (100 sheets)','restock_level':200.0,'current_stock':0.0},
+  // ── Sheets — Card stock ───────────────────────────────────────────────────
+  {'material_id':'RM-026','material_name':'Card Stock Matte','stocking_unit':'Sheet','width_value':1.083,'width_unit':'ft','length_value':0.875,'length_unit':'ft','unit_size_sqft':0.95,'base_uom':'sqft','unit_description':'Sheet (1.083ft × 0.875ft)','restock_level':4.74,'current_stock':0.0},
+  {'material_id':'RM-027','material_name':'Card Stock Glossy','stocking_unit':'Sheet','width_value':1.083,'width_unit':'ft','length_value':0.875,'length_unit':'ft','unit_size_sqft':0.95,'base_uom':'sqft','unit_description':'Sheet (1.083ft × 0.875ft)','restock_level':4.74,'current_stock':0.0},
+  // ── Stand units ───────────────────────────────────────────────────────────
+  {'material_id':'RM-028','material_name':'Roll-up Stand','stocking_unit':'Piece','unit_size_sqft':1.0,'base_uom':'pc','unit_description':'Piece','restock_level':5.0,'current_stock':0.0},
+  // ── More photo paper packs ────────────────────────────────────────────────
+  {'material_id':'RM-029','material_name':'Photo Paper 3R','stocking_unit':'Piece','unit_size_sqft':100.0,'base_uom':'sheet','unit_description':'Pack (100 sheets)','restock_level':100.0,'current_stock':0.0},
+  {'material_id':'RM-030','material_name':'Photo Paper 5R','stocking_unit':'Piece','unit_size_sqft':100.0,'base_uom':'sheet','unit_description':'Pack (100 sheets)','restock_level':100.0,'current_stock':0.0},
+  {'material_id':'RM-031','material_name':'Photo Paper 8R/A4','stocking_unit':'Piece','unit_size_sqft':50.0,'base_uom':'sheet','unit_description':'Pack (50 sheets)','restock_level':50.0,'current_stock':0.0},
+  // ── Equipment units ───────────────────────────────────────────────────────
+  {'material_id':'RM-032','material_name':'X-banner Frame','stocking_unit':'Piece','unit_size_sqft':1.0,'base_uom':'pc','unit_description':'Piece','restock_level':5.0,'current_stock':0.0},
+  {'material_id':'RM-033','material_name':'PVC ID Card Blank','stocking_unit':'Piece','unit_size_sqft':1.0,'base_uom':'pc','unit_description':'Piece','restock_level':20.0,'current_stock':0.0},
+];
+
+// =============================================================================
+// Legacy seed data (kept for reference — superseded by _kNewMaterials)
 // =============================================================================
 const _kInitialMaterials = [
   {

@@ -41,6 +41,9 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   // Notes
   final _notesCtrl = TextEditingController();
 
+  // Selected add-on services (by name)
+  final Set<String> _selectedServices = {};
+
   // ── Product accessors ────────────────────────────────────────────────────────
 
   String get _productName => widget.product['product_name']?.toString() ?? '';
@@ -91,6 +94,13 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     return [];
   }
 
+  // Add-on services from the product definition.
+  List<Map<String, dynamic>> get _additionalServicesList {
+    final raw = widget.product['additional_services'] as List?;
+    if (raw == null) return [];
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
   // Per-variant price override. Falls back to base price if no override set.
   double get _effectiveBasePrice {
     if (_material != null) {
@@ -109,15 +119,25 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
 
   // ── Pricing ──────────────────────────────────────────────────────────────────
 
-  double get _subtotal {
+  double _calcUnitTotal(double price) {
     if (_pricingUnit == 'per_sqin') {
-      // widthFt/heightFt stored as feet; multiply ×144 for sq in.
-      return _effectiveBasePrice * _widthFt * _heightFt * 144 * _quantity;
+      return price * _widthFt * _heightFt * 144 * _quantity;
     }
-    if (_needsSizeInput) {
-      return _effectiveBasePrice * _widthFt * _heightFt * _quantity;
+    if (_needsSizeInput) return price * _widthFt * _heightFt * _quantity;
+    return price * _quantity;
+  }
+
+  double get _subtotal {
+    double total = _calcUnitTotal(_effectiveBasePrice);
+    // Add selected add-on services using the same billing rate.
+    for (final svc in _additionalServicesList) {
+      final name = svc['name']?.toString() ?? '';
+      if (_selectedServices.contains(name)) {
+        final sp = (svc['price'] as num?)?.toDouble() ?? 0;
+        total += _calcUnitTotal(sp);
+      }
     }
-    return _effectiveBasePrice * _quantity;
+    return total;
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
@@ -328,6 +348,9 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
       material:    _material,
       files:       cartFiles,
       notes:       _notesCtrl.text.trim(),
+      selectedServices: _additionalServicesList
+          .where((s) => _selectedServices.contains(s['name']?.toString()))
+          .toList(),
     );
 
     final isEdit = widget.editIndex != null;
@@ -710,6 +733,103 @@ decoration: AppTheme.backgroundDecoration(context),
           const SizedBox(height: 16),
         ],
 
+        // ── Add-on Services ──────────────────────────────────────────────
+        if (_additionalServicesList.isNotEmpty) ...[
+          _label('Add-on Services'),
+          const SizedBox(height: 4),
+          const Text(
+            'Optional — select any extras you\'d like included.',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          const SizedBox(height: 8),
+          ..._additionalServicesList.map((svc) {
+            final name  = svc['name']?.toString() ?? '';
+            final price = (svc['price'] as num?)?.toDouble() ?? 0;
+            final sel   = _selectedServices.contains(name);
+            final priceLabel = _pricingUnit == 'per_qty'
+                ? '+₱${price.toStringAsFixed(0)} / $_pricingQty pcs'
+                : _pricingUnit == 'per_sqin'
+                ? '+₱${price.toStringAsFixed(2)} / sq in'
+                : _pricingUnit == 'per_sqft'
+                ? '+₱${price.toStringAsFixed(2)} / sq ft'
+                : '+₱${price.toStringAsFixed(2)} / piece';
+            return GestureDetector(
+              onTap: () => setState(() {
+                if (sel) _selectedServices.remove(name);
+                else     _selectedServices.add(name);
+              }),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: sel
+                      ? AppTheme.gold.withValues(alpha: 0.12)
+                      : Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: sel
+                        ? AppTheme.gold.withValues(alpha: 0.55)
+                        : Colors.white.withValues(alpha: 0.15),
+                    width: sel ? 1.4 : 1.0,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: sel
+                            ? AppTheme.gold
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: sel
+                              ? AppTheme.gold
+                              : Colors.white38,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: sel
+                          ? const Icon(Icons.check,
+                              size: 12,
+                              color: Color(0xFF1A0A00))
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: TextStyle(
+                          color: sel ? AppTheme.gold : Colors.white,
+                          fontSize: 13,
+                          fontWeight: sel
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      priceLabel,
+                      style: TextStyle(
+                        color: sel
+                            ? AppTheme.gold
+                            : Colors.white54,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 8),
+        ],
+
         // ── File upload ──────────────────────────────────────────────────
         _label('Upload Design Files'),
         const SizedBox(height: 4),
@@ -836,6 +956,8 @@ decoration: AppTheme.backgroundDecoration(context),
               : '$_quantity',
         ),
         if (_material != null) _sumRow('Variant', _material!),
+        if (_selectedServices.isNotEmpty)
+          _sumRow('Add-ons', _selectedServices.join(', ')),
         _sumRow('Shipping', 'Pick-Up'),
         _sumRow('Turnaround', _turnaroundLabel),
         const Divider(color: Colors.white12, height: 16),

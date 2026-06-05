@@ -151,77 +151,68 @@ class _AdminProductManagementScreenState
   ];
 
   String? _categoryFilter;
-  bool _seeding = false;
 
-  Future<void> _seedProducts() async {
-    setState(() => _seeding = true);
+  @override
+  void initState() {
+    super.initState();
+    _migrateCallingCards();
+  }
+
+  // One-time migration: merges the old separate Calling Card Matte / Glossy /
+  // Back Print products into a single "Calling Card" product with variants and
+  // an add-on service.  Runs silently; safe to call repeatedly (idempotent).
+  Future<void> _migrateCallingCards() async {
     try {
       final col = FirebaseFirestore.instance.collection('Products');
-      final existing = await col.get();
-      final existingNames =
-          existing.docs.map((d) => d.data()['product_name']?.toString()).toSet();
+      final oldNames = [
+        'Calling Card Matte',
+        'Calling Card Glossy',
+        'Calling Card Back Print',
+      ];
+      final oldDocs = <DocumentSnapshot>[];
+      for (final n in oldNames) {
+        final s = await col.where('product_name', isEqualTo: n).get();
+        oldDocs.addAll(s.docs);
+      }
+      if (oldDocs.isEmpty) return; // already migrated
 
-      final toAdd = _kInitialProducts
-          .where((p) => !existingNames.contains(p['product_name']))
-          .toList();
-
-      if (toAdd.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: const Text('All products already exist — nothing to seed'),
-            backgroundColor: _Glass.accentEmerald,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            margin: const EdgeInsets.all(16),
-          ));
-        }
-        return;
+      // Create merged product if it doesn't exist yet.
+      final merged = await col
+          .where('product_name', isEqualTo: 'Calling Card')
+          .get();
+      if (merged.docs.isEmpty) {
+        final ref = col.doc();
+        await ref.set({
+          'product_id': ref.id,
+          'product_name': 'Calling Card',
+          'category': 'Photo & Card Prints',
+          'short_description': 'Available in Matte or Glossy finish.',
+          'description': '',
+          'price': 250.0,
+          'pricing_unit': 'per_qty',
+          'pricing_qty': 100,
+          'min_quantity': 1,
+          'material_options': ['Matte', 'Glossy'],
+          'variant_prices': {'Matte': 250.0, 'Glossy': 300.0},
+          'additional_services': [
+            {'name': 'Back Printing', 'price': 50.0},
+          ],
+          'image_url': '',
+          'is_available': true,
+          'featured': false,
+          'bill_of_materials': [],
+          'bulk_pricing': [],
+          'created_at': FieldValue.serverTimestamp(),
+          'updated_at': FieldValue.serverTimestamp(),
+        });
       }
 
-      // Firestore batches are capped at 500 ops; split if needed.
-      const batchSize = 400;
-      for (int start = 0; start < toAdd.length; start += batchSize) {
-        final batch = FirebaseFirestore.instance.batch();
-        final chunk = toAdd.sublist(
-            start, (start + batchSize).clamp(0, toAdd.length));
-        for (final p in chunk) {
-          final ref = col.doc();
-          batch.set(ref, {
-            ...p,
-            'product_id': ref.id,
-            'image_url': '',
-            'is_available': true,
-            'featured': false,
-            'bill_of_materials': [],
-            'bulk_pricing': [],
-            'created_at': FieldValue.serverTimestamp(),
-            'updated_at': FieldValue.serverTimestamp(),
-          });
-        }
-        await batch.commit();
+      // Delete old separated products.
+      for (final doc in oldDocs) {
+        await doc.reference.delete();
       }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${toAdd.length} product(s) seeded'),
-          backgroundColor: _Glass.accentEmerald,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          margin: const EdgeInsets.all(16),
-        ));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Seed error: $e'),
-          backgroundColor: _Glass.accentRose,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          margin: const EdgeInsets.all(16),
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _seeding = false);
+    } catch (_) {
+      // Silent — migration retries on next screen open.
     }
   }
 
@@ -284,58 +275,6 @@ class _AdminProductManagementScreenState
                           ],
                         ),
                       ),
-                      // Seed Products ghost pill
-                      GestureDetector(
-                        onTap: _seeding ? null : _seedProducts,
-                        child: AnimatedOpacity(
-                          opacity: _seeding ? 0.5 : 1.0,
-                          duration: const Duration(milliseconds: 150),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 9,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _Glass.surfaceThin,
-                              borderRadius: BorderRadius.circular(99),
-                              border: Border.all(
-                                color: _Glass.borderMid,
-                                width: 0.9,
-                              ),
-                              boxShadow: const [_Glass.rowShadow],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _seeding
-                                    ? const SizedBox(
-                                        width: 13,
-                                        height: 13,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: _Glass.textSecondary,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.add_box_outlined,
-                                        size: 14,
-                                        color: _Glass.textSecondary,
-                                      ),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  'Seed',
-                                  style: TextStyle(
-                                    color: _Glass.textSecondary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
                       // Add Product pill button
                       GestureDetector(
                         onTap: () => _openProductForm(context, null),
@@ -757,6 +696,8 @@ class _ProductTile extends StatelessWidget {
     final isFeatured = data['featured'] as bool? ?? false;
     final variants = (data['material_options'] as List?)?.cast<String>() ?? [];
     final hasVariants = variants.isNotEmpty;
+    final addOns = (data['additional_services'] as List?) ?? [];
+    final hasAddOns = addOns.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -879,6 +820,29 @@ class _ProductTile extends StatelessWidget {
                           '${variants.length} variant${variants.length == 1 ? '' : 's'}',
                           style: const TextStyle(
                             color: _Glass.accentViolet,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    if (hasAddOns)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _Glass.accentEmerald
+                              .withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(
+                            color: _Glass.accentEmerald
+                                .withValues(alpha: 0.35),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          '${addOns.length} add-on${addOns.length == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            color: _Glass.accentEmerald,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                           ),
@@ -1100,8 +1064,10 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   bool _materialsLoaded = false;
   List<String> _materialOptions = [];
   final List<TextEditingController> _optionControllers = [];
-  // Optional per-variant price fields (parallel to _optionControllers)
   final List<TextEditingController> _optionPriceControllers = [];
+  // Additional (add-on) services
+  final List<TextEditingController> _svcNameControllers = [];
+  final List<TextEditingController> _svcPriceControllers = [];
 
   @override
   void initState() {
@@ -1170,6 +1136,16 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         TextEditingController(text: vp != null ? vp.toString() : ''),
       );
     }
+    // Load additional services.
+    final existingSvcs = (e?['additional_services'] as List?)
+        ?.cast<Map<String, dynamic>>() ?? [];
+    for (final svc in existingSvcs) {
+      _svcNameControllers.add(
+          TextEditingController(text: svc['name']?.toString() ?? ''));
+      _svcPriceControllers.add(
+          TextEditingController(text: svc['price']?.toString() ?? ''));
+    }
+
     _loadMaterials();
   }
 
@@ -1183,6 +1159,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _pricingQtyCtrl.dispose();
     for (final c in _optionControllers) c.dispose();
     for (final c in _optionPriceControllers) c.dispose();
+    for (final c in _svcNameControllers) c.dispose();
+    for (final c in _svcPriceControllers) c.dispose();
     super.dispose();
   }
 
@@ -1284,6 +1262,13 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         if (variantPricesMap.isNotEmpty) 'variant_prices': variantPricesMap,
         'bill_of_materials': _bom,
         'bulk_pricing': sortedBulk,
+        'additional_services': List.generate(
+          _svcNameControllers.length,
+          (i) => {
+            'name': _svcNameControllers[i].text.trim(),
+            'price': double.tryParse(_svcPriceControllers[i].text.trim()) ?? 0.0,
+          },
+        ).where((s) => (s['name'] as String).isNotEmpty).toList(),
         'updated_at': FieldValue.serverTimestamp(),
         // Remove legacy fields.
         'availability_override': FieldValue.delete(),
@@ -2038,6 +2023,139 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                               setState(() => _bulkPricing.removeAt(e.key)),
                         ),
                       ),
+                      const SizedBox(height: 18),
+
+                      // ── Add-on Services ─────────────────────────────────
+                      Row(
+                        children: [
+                          _SectionLabel('Add-on Services (Optional)'),
+                          const Spacer(),
+                          _FormPillButton(
+                            label: 'Add Service',
+                            icon: Icons.add_rounded,
+                            onPressed: () => setState(() {
+                              _svcNameControllers
+                                  .add(TextEditingController());
+                              _svcPriceControllers
+                                  .add(TextEditingController());
+                            }),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Optional extras customers can add to their order '
+                        '(e.g. Back Printing ₱50). Price follows the same '
+                        'billing unit as the product.',
+                        style: TextStyle(
+                          color: _Glass.textMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_svcNameControllers.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            'No add-ons — customers see only the base product.',
+                            style: TextStyle(
+                              color: _Glass.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ...List.generate(_svcNameControllers.length, (i) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _Glass.surfaceThin,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: _Glass.borderMid,
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Service name',
+                                      style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    TextField(
+                                      controller: _svcNameControllers[i],
+                                      style: const TextStyle(
+                                        color: _Glass.textPrimary,
+                                        fontSize: 13,
+                                      ),
+                                      decoration: _Glass.field(
+                                        'e.g. Back Printing',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 90,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Add-on price (₱)',
+                                      style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    TextField(
+                                      controller: _svcPriceControllers[i],
+                                      keyboardType: const TextInputType
+                                          .numberWithOptions(decimal: true),
+                                      style: const TextStyle(
+                                        color: _Glass.textPrimary,
+                                        fontSize: 13,
+                                      ),
+                                      decoration: _Glass.field('50'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.remove_circle_outline,
+                                  color: _Glass.accentRose,
+                                  size: 18,
+                                ),
+                                onPressed: () => setState(() {
+                                  _svcNameControllers
+                                      .removeAt(i)
+                                      .dispose();
+                                  _svcPriceControllers
+                                      .removeAt(i)
+                                      .dispose();
+                                }),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                     ],
                   ),
                 ),
@@ -2752,227 +2870,3 @@ class _SectionLabel extends StatelessWidget {
   );
 }
 
-// =============================================================================
-// Initial product seed data (18 products, 3 grouped with variants)
-// =============================================================================
-const _kInitialProducts = [
-  // ── Large Format & Signage ─────────────────────────────────────────────────
-  {
-    'product_name': 'Tarpaulin',
-    'category': 'Large Format & Signage',
-    'short_description': '',
-    'description': '',
-    'price': 25.0,
-    'pricing_unit': 'per_sqft',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'Panaflex',
-    'category': 'Large Format & Signage',
-    'short_description': '',
-    'description': '',
-    'price': 95.0,
-    'pricing_unit': 'per_sqft',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'Signage (face+frame+install)',
-    'category': 'Large Format & Signage',
-    'short_description': '',
-    'description': '',
-    'price': 750.0,
-    'pricing_unit': 'per_piece',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'Roll-up Banner',
-    'category': 'Large Format & Signage',
-    'short_description': '',
-    'description': '',
-    'price': 1650.0,
-    'pricing_unit': 'per_piece',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'X-banner',
-    'category': 'Large Format & Signage',
-    'short_description': '',
-    'description': '',
-    'price': 700.0,
-    'pricing_unit': 'per_piece',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'PVC Menu',
-    'category': 'Large Format & Signage',
-    'short_description': '',
-    'description': '',
-    'price': 250.0,
-    'pricing_unit': 'per_piece',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  // Acrylic Signage — grouped with variant pricing
-  {
-    'product_name': 'Acrylic Signage',
-    'category': 'Large Format & Signage',
-    'short_description': '',
-    'description': '',
-    'price': 120.0, // lowest variant price
-    'pricing_unit': 'per_sqft',
-    'min_quantity': 1,
-    'material_options': [
-      'Clear 5mm (3×8)',
-      'Chalk White (4×4)',
-      'Diffuser 3mm (4×8)',
-      'Diffuser 1.5mm (4×8)',
-      'Clear 3mm (4×8)',
-      'Clear 1.5mm (4×8)',
-    ],
-    'variant_prices': {
-      'Clear 5mm (3×8)': 310.0,
-      'Chalk White (4×4)': 200.0,
-      'Diffuser 3mm (4×8)': 210.0,
-      'Diffuser 1.5mm (4×8)': 140.0,
-      'Clear 3mm (4×8)': 190.0,
-      'Clear 1.5mm (4×8)': 120.0,
-    },
-  },
-
-  // ── Stickers & Labels ──────────────────────────────────────────────────────
-  {
-    'product_name': 'Photo Sticker',
-    'category': 'Stickers & Labels',
-    'short_description': '',
-    'description': '',
-    'price': 0.60,
-    'pricing_unit': 'per_sqin',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'Outdoor Sticker',
-    'category': 'Stickers & Labels',
-    'short_description': '',
-    'description': '',
-    'price': 0.80,
-    'pricing_unit': 'per_sqin',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'Sticker with Sintra',
-    'category': 'Stickers & Labels',
-    'short_description': '',
-    'description': '',
-    'price': 2.00,
-    'pricing_unit': 'per_sqin',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-
-  // ── Photo & Card Prints ────────────────────────────────────────────────────
-  // Photo Print — grouped with variant pricing
-  {
-    'product_name': 'Photo Print',
-    'category': 'Photo & Card Prints',
-    'short_description': '',
-    'description': '',
-    'price': 3.0, // lowest variant price
-    'pricing_unit': 'per_piece',
-    'min_quantity': 1,
-    'material_options': ['3R', '4R', '5R', '8R/A4', 'A3'],
-    'variant_prices': {
-      '3R': 5.0,
-      '4R': 8.0,
-      '5R': 3.0,
-      '8R/A4': 5.0,
-      'A3': 8.0,
-    },
-  },
-  // Photo Invite — grouped with variant pricing, min 30 pcs
-  {
-    'product_name': 'Photo Invite',
-    'category': 'Photo & Card Prints',
-    'short_description': 'Min. 30 pcs. +₱150 if under 30 pcs.',
-    'description':
-        'Minimum order of 30 pieces. Orders below 30 pcs incur a ₱150 surcharge.',
-    'price': 10.0, // lowest variant price
-    'pricing_unit': 'per_piece',
-    'min_quantity': 30,
-    'material_options': ['3R', '4R', '5R', 'Wedding/Debut 8R'],
-    'variant_prices': {
-      '3R': 10.0,
-      '4R': 12.0,
-      '5R': 15.0,
-      'Wedding/Debut 8R': 60.0,
-    },
-  },
-  {
-    'product_name': 'Calling Card Matte',
-    'category': 'Photo & Card Prints',
-    'short_description': '',
-    'description': '',
-    'price': 250.0,
-    'pricing_unit': 'per_qty',
-    'pricing_qty': 100,
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'Calling Card Glossy',
-    'category': 'Photo & Card Prints',
-    'short_description': '',
-    'description': '',
-    'price': 300.0,
-    'pricing_unit': 'per_qty',
-    'pricing_qty': 100,
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'Calling Card Back Print',
-    'category': 'Photo & Card Prints',
-    'short_description': 'Add-on for double-sided calling cards',
-    'description': '',
-    'price': 50.0,
-    'pricing_unit': 'per_piece',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'PVC ID',
-    'category': 'Photo & Card Prints',
-    'short_description': '',
-    'description': '',
-    'price': 100.0,
-    'pricing_unit': 'per_piece',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'ID Photo Package 1',
-    'category': 'Photo & Card Prints',
-    'short_description': '',
-    'description': '',
-    'price': 100.0,
-    'pricing_unit': 'per_piece',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-  {
-    'product_name': 'ID Photo Package 2',
-    'category': 'Photo & Card Prints',
-    'short_description': '',
-    'description': '',
-    'price': 100.0,
-    'pricing_unit': 'per_piece',
-    'min_quantity': 1,
-    'material_options': <String>[],
-  },
-];
