@@ -818,7 +818,7 @@ class _QueueStatusList extends StatelessWidget {
                       products: products,
                       dateStr: dateStr,
                       total: total,
-                      queueNotes: data['notes']?.toString() ?? '',
+                      queueNotes: _resolveNotes(data),
                       cancelReason: data['cancel_reason']?.toString() ?? '',
                       turnaround: data['turnaround_days'] as int?,
                     );
@@ -831,6 +831,19 @@ class _QueueStatusList extends StatelessWidget {
       },
     );
   }
+}
+
+// Reads order-level notes, then falls back to per-product notes for online orders.
+String _resolveNotes(Map<String, dynamic> data) {
+  final orderNote = data['notes']?.toString() ?? '';
+  if (orderNote.isNotEmpty) return orderNote;
+  final prods = (data['products'] as List? ?? [])
+      .whereType<Map<String, dynamic>>()
+      .toList();
+  return prods
+      .map((p) => p['notes']?.toString() ?? '')
+      .where((n) => n.isNotEmpty)
+      .join(' | ');
 }
 
 // =============================================================================
@@ -883,9 +896,9 @@ class _JobCardWithPayment extends StatelessWidget {
         final amountPaid =
             (orderData['amount_paid'] as num?)?.toDouble() ?? 0.0;
 
-        // Prefer notes from Orders doc; fall back to Order_Queue notes
-        final orderNotes = orderData['notes']?.toString() ?? '';
-        final resolvedNotes = orderNotes.isNotEmpty ? orderNotes : queueNotes;
+        // Prefer notes from Orders doc (checks order-level + per-product); fall back to queue notes
+        final orderResolvedNotes = _resolveNotes(orderData);
+        final resolvedNotes = orderResolvedNotes.isNotEmpty ? orderResolvedNotes : queueNotes;
 
         return _JobCard(
           index: index,
@@ -1696,7 +1709,7 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                             invoiceId: invoiceId,
                             cancelReason:
                                 data['cancel_reason']?.toString() ?? '',
-                            notes: data['notes']?.toString() ?? '',
+                            notes: _resolveNotes(data),
                           );
                         },
                       ), // ListView.separated

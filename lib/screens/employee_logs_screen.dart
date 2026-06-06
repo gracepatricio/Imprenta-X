@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'app_theme.dart';
 import 'sales_widgets.dart';
@@ -483,6 +484,19 @@ class _PillSegmentControl<T> extends StatelessWidget {
       ),
     );
   }
+}
+
+// Reads order-level notes, then falls back to per-product notes for online orders.
+String _resolveNotes(Map<String, dynamic> data) {
+  final orderNote = data['notes']?.toString() ?? '';
+  if (orderNote.isNotEmpty) return orderNote;
+  final prods = (data['products'] as List? ?? [])
+      .whereType<Map<String, dynamic>>()
+      .toList();
+  return prods
+      .map((p) => p['notes']?.toString() ?? '')
+      .where((n) => n.isNotEmpty)
+      .join(' | ');
 }
 
 // =============================================================================
@@ -1177,7 +1191,7 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                             invoiceId: invoiceId,
                             cancelReason:
                                 data['cancel_reason']?.toString() ?? '',
-                            notes: data['notes']?.toString() ?? '',
+                            notes: _resolveNotes(data),
                           ),
                         ),
                       ],
@@ -1344,29 +1358,7 @@ class _OrderHistoryCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              Builder(
-                builder: (context) {
-                  final isWalkIn =
-                      (doc.data() as Map<String, dynamic>)['walk_in'] == true;
-                  if (isWalkIn) {
-                    final chips = products
-                        .where((p) =>
-                            (p['design_file_name']?.toString() ?? '').isNotEmpty &&
-                            (p['design_file_url']?.toString() ?? '').isNotEmpty)
-                        .map((p) => DesignFileChip(
-                              name: p['design_file_name'] as String,
-                              url: p['design_file_url'] as String,
-                            ))
-                        .toList();
-                    if (chips.isEmpty) return const SizedBox.shrink();
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Wrap(spacing: 6, runSpacing: 4, children: chips),
-                    );
-                  }
-                  return DesignFilesSection(products: products);
-                },
-              ),
+              DesignFilesSection(products: products),
             ],
             if (cancelReason.isNotEmpty && status == 'cancelled') ...[
               const SizedBox(height: 6),
@@ -1553,8 +1545,8 @@ class _WalkInItem {
   double? widthFt;
   double? heightFt;
   String? material;
-  String? designFileUrl;
-  String? designFileName;
+  List<String> fileUrls;
+  List<String> fileNames;
   List<Map<String, dynamic>> selectedServices;
 
   _WalkInItem({
@@ -1565,8 +1557,8 @@ class _WalkInItem {
     this.widthFt,
     this.heightFt,
     this.material,
-    this.designFileUrl,
-    this.designFileName,
+    this.fileUrls = const [],
+    this.fileNames = const [],
     this.selectedServices = const [],
   });
 
@@ -1739,10 +1731,8 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
               if (item.selectedServices.isNotEmpty)
                 'selected_services': item.selectedServices,
               'walk_in': true,
-              if (item.designFileUrl != null)
-                'design_file_url': item.designFileUrl,
-              if (item.designFileName != null)
-                'design_file_name': item.designFileName,
+              if (item.fileUrls.isNotEmpty) 'file_urls': item.fileUrls,
+              if (item.fileNames.isNotEmpty) 'file_names': item.fileNames,
             },
           )
           .toList();
@@ -2112,7 +2102,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                                                 fontSize: 11,
                                               ),
                                             ),
-                                          if (item.designFileName != null)
+                                          if (item.fileNames.isNotEmpty)
                                             Row(
                                               children: [
                                                 const Icon(
@@ -2123,7 +2113,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                                                 const SizedBox(width: 4),
                                                 Expanded(
                                                   child: Text(
-                                                    item.designFileName!,
+                                                    item.fileNames.join(', '),
                                                     style: const TextStyle(
                                                       color: _Glass.accentBlue,
                                                       fontSize: 11,
@@ -2475,6 +2465,7 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
   // Design files
   final List<_WalkInDesignFile> _files = [];
   static const int _maxFileMB = 25;
+  bool _uploading = false;
 
   // ── Size presets ─────────────────────────────────────────────────────────
   static const _sizePresets = [
@@ -2763,7 +2754,7 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
 
   // ── Add to order ─────────────────────────────────────────────────────────
 
-  void _addToOrder() {
+  Future<void> _addToOrder() async {
     if (_needsSize && !_sizeIsValid) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -2803,6 +2794,37 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
       }
     }
 
+    setState(() => _uploading = true);
+    final fileUrls = <String>[];
+    final fileNames = <String>[];
+    try {
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      for (int i = 0; i < _files.length; i++) {
+        final f = _files[i];
+        if (f.bytes == null) continue;
+        final ext = f.name.split('.').last.toLowerCase();
+        final path = 'order_files/walkin_${ts}_${i}_${f.name}';
+        final ref = FirebaseStorage.instance.ref(path);
+        final task = await ref.putData(
+          f.bytes!,
+          SettableMetadata(contentType: _mimeType(ext)),
+        );
+        fileUrls.add(await task.ref.getDownloadURL());
+        fileNames.add(f.name);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _uploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Upload failed: $e'),
+            backgroundColor: _Glass.accentRose,
+          ),
+        );
+      }
+      return;
+    }
+
     final selectedSvcList = _additionalServicesList
         .where((s) => _selectedServices.contains(s['name']?.toString()))
         .toList();
@@ -2816,14 +2838,22 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
         widthFt: _needsSize ? _widthFt : null,
         heightFt: _needsSize ? _heightFt : null,
         material: _material,
-        designFileUrl: null,
-        designFileName: _files.isNotEmpty
-            ? _files.map((f) => f.name).join(', ')
-            : null,
+        fileUrls: fileUrls,
+        fileNames: fileNames,
         selectedServices: selectedSvcList,
       ),
     );
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
+  }
+
+  static String _mimeType(String ext) {
+    switch (ext) {
+      case 'pdf': return 'application/pdf';
+      case 'jpg':
+      case 'jpeg': return 'image/jpeg';
+      case 'png': return 'image/png';
+      default: return 'application/octet-stream';
+    }
   }
 
   // ── Build ────────────────────────────────────────────────────────────────
@@ -3858,30 +3888,50 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
               ),
               const SizedBox(width: 12),
               GestureDetector(
-                onTap: _addToOrder,
+                onTap: _uploading ? null : _addToOrder,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
                     vertical: 13,
                   ),
-                  decoration: _Glass.solidPill(_navyBlue, glow: true),
-                  child: const Row(
+                  decoration: _Glass.solidPill(_navyBlue, glow: !_uploading),
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.add_shopping_cart_rounded,
-                        size: 16,
-                        color: Colors.white,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Add to Order',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
+                      if (_uploading) ...[
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white70,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Uploading…',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ] else ...[
+                        const Icon(
+                          Icons.add_shopping_cart_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Add to Order',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -4612,27 +4662,7 @@ class _ReadyOrderCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-            Builder(
-              builder: (_) {
-                if (data['walk_in'] == true) {
-                  final chips = products
-                      .where((p) =>
-                          (p['design_file_name']?.toString() ?? '').isNotEmpty &&
-                          (p['design_file_url']?.toString() ?? '').isNotEmpty)
-                      .map((p) => DesignFileChip(
-                            name: p['design_file_name'] as String,
-                            url: p['design_file_url'] as String,
-                          ))
-                      .toList();
-                  if (chips.isEmpty) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Wrap(spacing: 6, runSpacing: 4, children: chips),
-                  );
-                }
-                return DesignFilesSection(products: products);
-              },
-            ),
+            DesignFilesSection(products: products),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -5964,27 +5994,7 @@ class _QueueCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Builder(
-                    builder: (_) {
-                      if (data['walk_in'] == true) {
-                        final chips = products
-                            .where((p) =>
-                                (p['design_file_name']?.toString() ?? '').isNotEmpty &&
-                                (p['design_file_url']?.toString() ?? '').isNotEmpty)
-                            .map((p) => DesignFileChip(
-                                  name: p['design_file_name'] as String,
-                                  url: p['design_file_url'] as String,
-                                ))
-                            .toList();
-                        if (chips.isEmpty) return const SizedBox.shrink();
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Wrap(spacing: 6, runSpacing: 4, children: chips),
-                        );
-                      }
-                      return DesignFilesSection(products: products);
-                    },
-                  ),
+                  DesignFilesSection(products: products),
                 ],
 
                 if (estimatedCompletion != null &&
