@@ -3036,9 +3036,16 @@ class _QueueList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Map queue job status names to Orders collection status values
+    final String ordersStatus;
+    if (jobStatus == 'active') {
+      ordersStatus = 'in_production';
+    } else {
+      ordersStatus = jobStatus;
+    }
     final query = FirebaseFirestore.instance
-        .collection('Order_Queue')
-        .where('job_status', isEqualTo: jobStatus);
+        .collection('Orders')
+        .where('status', isEqualTo: ordersStatus);
 
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
@@ -3825,11 +3832,7 @@ class _RefundPickupSection extends StatelessWidget {
 
     final batch = db.batch();
 
-    // Mark refund as picked up on both Order_Queue and Orders
-    batch.update(db.collection('Order_Queue').doc(queueDocId), {
-      'refund_picked_up': true,
-      'refund_picked_up_at': FieldValue.serverTimestamp(),
-    });
+    // Mark refund as picked up on Orders
     batch.update(db.collection('Orders').doc(orderId), {
       'refund_picked_up': true,
       'refund_picked_up_at': FieldValue.serverTimestamp(),
@@ -4254,11 +4257,6 @@ class _QueueCard extends StatelessWidget {
     final db = FirebaseFirestore.instance;
     final batch = db.batch();
 
-    batch.update(db.collection('Order_Queue').doc(queueDocId), {
-      'job_status': 'cancelled',
-      'cancel_reason': finalReason,
-      'updated_at': FieldValue.serverTimestamp(),
-    });
     batch.update(db.collection('Orders').doc(orderId), {
       'status': 'cancelled',
       'cancel_reason': finalReason,
@@ -4400,10 +4398,6 @@ class _QueueCard extends StatelessWidget {
         data['bom_deducted'] == true;
 
     final batch = db.batch();
-    batch.update(db.collection('Order_Queue').doc(queueDocId), {
-      'job_status': 'active',
-      'updated_at': FieldValue.serverTimestamp(),
-    });
     batch.update(db.collection('Orders').doc(orderId), {
       'status': 'in_production',
     });
@@ -4642,10 +4636,6 @@ class _QueueCard extends StatelessWidget {
     final remaining =
         (orderSnap.data()?['remaining_balance'] as num?)?.toDouble() ?? 0;
 
-    batch.update(db.collection('Order_Queue').doc(queueDocId), {
-      'job_status': 'completed',
-      'updated_at': FieldValue.serverTimestamp(),
-    });
     batch.update(db.collection('Orders').doc(orderId), {'status': 'ready'});
     await batch.commit();
 
@@ -4693,7 +4683,8 @@ class _QueueCard extends StatelessWidget {
               .join(', ')
         : '—';
     final total = (data['total_price'] as num?)?.toDouble() ?? 0;
-    final jobStatus = data['job_status']?.toString() ?? 'pending';
+    final rawStatus2 = data['status']?.toString() ?? data['job_status']?.toString() ?? 'pending';
+    final jobStatus = rawStatus2 == 'in_production' ? 'active' : rawStatus2;
     final statusLabel = jobStatus == 'active' ? 'In Production' : 'Pending';
 
     final user = FirebaseAuth.instance.currentUser;
@@ -4760,7 +4751,9 @@ class _QueueCard extends StatelessWidget {
     final customerId = data['customer_id']?.toString() ?? '';
     final turnaround = data['turnaround_days'] as int?;
     final total = (data['total_price'] as num?)?.toDouble() ?? 0;
-    final jobStatus = data['job_status']?.toString() ?? 'pending';
+    // Normalize: Orders uses 'in_production', legacy Queue used 'active'
+    final rawStatus = data['status']?.toString() ?? data['job_status']?.toString() ?? 'pending';
+    final jobStatus = rawStatus == 'in_production' ? 'active' : rawStatus;
     final products =
         (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final dateStr = _fmtDate(data['created_at']);

@@ -1,189 +1,204 @@
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'app_theme.dart';
-
-/// Inventory Forecast Screen — Employee side
-///
-/// Forecasting aligned with the TechnoTams thesis specification:
-///   • Double Exponential Smoothing (DES) — Brown's method
-///       S'_t  = α·X_t  + (1−α)·S'_{t-1}
-///       S''_t = α·S'_t + (1−α)·S''_{t-1}
-///       a_t   = 2·S'_t − S''_t
-///       b_t   = α/(1−α) · (S'_t − S''_t)
-///       F_{t+m} = a_t + b_t · m
-///   • MAPE = (1/n) Σ |X_t − F_t| / X_t × 100%
-///     (accumulated over one-step-ahead DES forecasts, not naïve period diff)
-
-// ── Liquid Glass Design Tokens ───────────────────────────────────────────────
-class _Glass {
-  static const Color surface     = Color(0xF8FFFFFF);
-  static const Color surfaceMid  = Color(0xF0FFFFFF);
-  static const Color surfaceThin = Color(0xA0FFFFFF);
-
-  static const Color borderMid = Color(0x70FFFFFF);
-  static const Color borderDim = Color(0x30FFFFFF);
-
-  static const Color textPrimary   = Color(0xFF0F172A);
-  static const Color textSecondary = Color(0xCC0F172A);
-  static const Color textMuted     = Color(0x880F172A);
-
-  static const Color accentEmerald = Color(0xFF10B981);
-  static const Color accentRose    = Color(0xFFEF4444);
-  static const Color accentAmber   = Color(0xFFB45309);
-
-  static const BoxShadow elevatedShadow = BoxShadow(
-    color: Color(0x22000000),
-    blurRadius: 32,
-    spreadRadius: -4,
-    offset: Offset(0, 8),
-  );
-  static const BoxShadow rowShadow = BoxShadow(
-    color: Color(0x10000000),
-    blurRadius: 10,
-    offset: Offset(0, 3),
-  );
-
-  static BoxDecoration glass({
-    double radius = 16,
-    bool elevated = false,
-    Color? tintBorder,
-  }) =>
-      BoxDecoration(
-        color: surfaceMid,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: tintBorder ?? borderMid, width: 0.9),
-        boxShadow: [elevated ? elevatedShadow : rowShadow],
-      );
-
-  static BoxDecoration solidPill(Color color, {bool glow = false}) =>
-      BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(99),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: glow ? 0.38 : 0.22),
-            blurRadius: glow ? 16 : 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      );
-}
-
-const Color _navyBlue   = Color(0xFF0F1A2E);
-final _blurFilter = ImageFilter.blur(sigmaX: 14, sigmaY: 14);
+import 'sales_import_widget.dart' show showSalesImportSheet;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DES helper
+// DOUBLE EXPONENTIAL SMOOTHING  — Holt's Linear Trend method
+//
+//  Phase 1 — Demand Forecasting (per product)
+//    Init:   L₁ = X₁   T₁ = X₂ − X₁
+//    Level:  Lₜ = α·Xₜ + (1−α)·(Lₜ₋₁ + Tₜ₋₁)
+//    Trend:  Tₜ = β·(Lₜ − Lₜ₋₁) + (1−β)·Tₜ₋₁
+//    Fore:   F{t+m} = Lₜ + m·Tₜ   (clamped ≥ 0)
+//    MAPE  = mean( |Xₜ − Fₜ| / Xₜ ) × 100  over non-zero actuals
+//    α, β  auto-selected per product by minimising MAPE (grid search)
+//
+//  Phase 2 — Dependent Demand (BOM explosion)
+//    material_need  = Σ products  F{t+1}(product) × BOM_qty_per_unit
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Result of running DES over a series of observations.
-class _DesResult {
-  /// Level component at the last fitted data point.
-  final double aLast;
+// ── Colours ───────────────────────────────────────────────────────────────────
+const _navy    = Color(0xFF0F1A2E);
+const _rose    = Color(0xFFEF4444);
+const _amber   = Color(0xFFB45309);
+const _emerald = Color(0xFF10B981);
+const _lime    = Color(0xFF65A30D);
+const _slate   = Color(0xFF475569);
+const _muted   = Color(0x880F172A);
+const _border  = Color(0x30000000);
 
-  /// Trend component at the last fitted data point.
-  final double bLast;
 
-  /// MAPE (%) over the one-step-ahead in-sample forecasts.
-  /// Null when there are fewer than 2 data points (no forecast comparisons).
+// ── DES algorithm ─────────────────────────────────────────────────────────────
+
+class _DES {
+  final double L;      // level  Lₜ at last fitted point
+  final double T;      // trend  Tₜ at last fitted point
+  final double alpha;
+  final double beta;
   final double? mape;
+  final List<double> fits;    // one-step-ahead F values for t=2..n
+  final List<double> actuals; // corresponding actual X values
 
-  /// One-step-ahead DES forecasts for t = 2 … n  (same length as [actuals]).
-  final List<double> forecasts;
-
-  /// Actual values for t = 2 … n, paired with [forecasts].
-  final List<double> actuals;
-
-  const _DesResult({
-    required this.aLast,
-    required this.bLast,
+  const _DES({
+    required this.L, required this.T,
+    required this.alpha, required this.beta,
     required this.mape,
-    required this.forecasts,
-    required this.actuals,
+    required this.fits, required this.actuals,
   });
 
-  /// DES forecast m periods ahead from the last fitted point.
-  ///   F_{last+m} = a_last + b_last × m
-  double forecastAhead(int m) => aLast + bLast * m;
+  // Forecast m periods ahead from the end of the fitted series.
+  double forecast(int m) => math.max(0.0, L + T * m);
 }
 
-/// Runs Double Exponential Smoothing (Brown's method) over [series].
-///
-/// Formulas from the TechnoTams thesis (Pradnyani et al., 2024):
-///   S'_t  = α·X_t  + (1−α)·S'_{t-1}        — first smoothing
-///   S''_t = α·S'_t + (1−α)·S''_{t-1}        — second smoothing
-///   a_t   = 2·S'_t  − S''_t                  — level estimate
-///   b_t   = α/(1−α) · (S'_t − S''_t)         — trend estimate
-///   F_{t+m} = a_t + b_t · m                  — m-step-ahead forecast
-///   MAPE  = (1/n) Σ |X_t − F_t| / X_t × 100 — accuracy metric
-///
-/// Initialization: S'_1 = S''_1 = X_1  (standard Brown initialization).
-/// [alpha] must be in the open interval (0, 1).
-_DesResult _runDes(List<double> series, {double alpha = 0.5}) {
-  assert(alpha > 0 && alpha < 1,
-  'Smoothing constant α must be in (0, 1). Got: $alpha');
+/// Fit Holt's Linear Trend DES to [series] with given α, β.
+/// Leading zeros are trimmed so the model starts at the first real observation.
+_DES _fitHolt(List<double> series, double alpha, double beta) {
+  final first = series.indexWhere((v) => v > 0.001);
+  final data  = first >= 0 ? series.sublist(first) : <double>[];
+  final n     = data.length;
 
-  final n = series.length;
   if (n == 0) {
-    return const _DesResult(
-      aLast: 0, bLast: 0, mape: null, forecasts: [], actuals: [],
-    );
+    return _DES(L: 0, T: 0, alpha: alpha, beta: beta,
+        mape: null, fits: [], actuals: []);
   }
 
-  // ── Initialization: S'_1 = S''_1 = X_1 ───────────────────────────────────
-  double sp  = series[0]; // S'_t
-  double spp = series[0]; // S''_t
+  double L = data[0];
+  double T = n >= 2 ? data[1] - data[0] : 0.0;
+  final fits    = <double>[];
+  final actuals = <double>[];
+  final apes    = <double>[];
 
-  // Compute a_1, b_1 from initialization
-  double a = 2 * sp - spp;
-  double b = (alpha / (1 - alpha)) * (sp - spp);
-
-  final forecasts = <double>[];
-  final actuals   = <double>[];
-  final apes      = <double>[];
-
-  // ── Iterate t = 2 … n ─────────────────────────────────────────────────────
   for (int t = 1; t < n; t++) {
-    // One-step-ahead forecast using level & trend from previous step (m = 1)
-    final double forecastT = a + b * 1;
-    final double actualT   = series[t];
-
-    forecasts.add(forecastT);
-    actuals.add(actualT);
-
-    // APE for this step: |X_t − F_t| / X_t × 100
-    // Guard against division by zero when actual consumption is essentially 0
-    if (actualT > 0.001) {
-      apes.add(((actualT - forecastT) / actualT).abs() * 100);
-    }
-
-    // ── Update smoothing values ─────────────────────────────────────────────
-    // S'_t  = α·X_t  + (1−α)·S'_{t-1}
-    sp  = alpha * actualT + (1 - alpha) * sp;
-    // S''_t = α·S'_t + (1−α)·S''_{t-1}
-    spp = alpha * sp      + (1 - alpha) * spp;
-
-    // ── Recompute level and trend ───────────────────────────────────────────
-    // a_t = 2·S'_t − S''_t
-    a = 2 * sp - spp;
-    // b_t = α/(1−α) · (S'_t − S''_t)
-    b = (alpha / (1 - alpha)) * (sp - spp);
+    final f  = math.max(0.0, L + T);   // one-step forecast (m = 1)
+    final x  = data[t];
+    fits.add(f);
+    actuals.add(x);
+    if (x > 0.001) apes.add(((x - f) / x).abs() * 100.0);
+    final lastL = L;
+    L = alpha * x + (1 - alpha) * (L + T);
+    T = beta  * (L - lastL) + (1 - beta) * T;
   }
 
-  // MAPE = (1/n) Σ APE_t
-  final double? mape = apes.isEmpty
+  final mape = apes.isEmpty
       ? null
-      : apes.reduce((x, y) => x + y) / apes.length;
+      : apes.reduce((a, b) => a + b) / apes.length;
 
-  return _DesResult(
-    aLast: a,
-    bLast: b,
-    mape: mape,
-    forecasts: forecasts,
-    actuals: actuals,
-  );
+  return _DES(L: L, T: T, alpha: alpha, beta: beta,
+      mape: mape, fits: fits, actuals: actuals);
+}
+
+/// Return the best-fitting (α, β) for [series] by grid search over MAPE.
+_DES _bestFit(List<double> series) {
+  const alphas = [0.1, 0.2, 0.3, 0.4, 0.5];
+  const betas  = [0.05, 0.1, 0.15, 0.2, 0.25];
+  _DES? best;
+  double bestMape = double.infinity;
+  for (final a in alphas) {
+    for (final b in betas) {
+      final r = _fitHolt(series, a, b);
+      if (r.mape != null && r.mape! < bestMape) {
+        bestMape = r.mape!;
+        best     = r;
+      }
+    }
+  }
+  return best ?? _fitHolt(series, 0.2, 0.1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data models
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One product that contributes demand to a raw material via BOM.
+class _Source {
+  final String name;
+  final double forecastQty; // F{t+1} in product units
+  final double qpu;         // BOM: sqft (or base units) per product unit
+  final double? mape;
+  final double alpha, beta;
+  final double contribution; // forecastQty × qpu  (in raw material base units)
+  const _Source({
+    required this.name, required this.forecastQty, required this.qpu,
+    required this.mape, required this.alpha, required this.beta,
+    required this.contribution,
+  });
+}
+
+/// Urgency of a raw material's stock situation.
+enum _Status { critical, atRisk, healthy, noDemand }
+
+class _Material {
+  final String id, name, unit;
+  final double stock, restock;
+  final double forecastUnits; // next-30d forecast in stocking units
+  final double dailyRate;
+  final double daysLeft, daysToRestock;
+  final double? weightedMape;
+  final List<_Source> sources;
+  final List<double> periods; // 36-period history in stocking units
+  // true when forecast derives from restock_level proxy, not real sales
+  final bool synthetic;
+
+  const _Material({
+    required this.id, required this.name, required this.unit,
+    required this.stock, required this.restock,
+    required this.forecastUnits, required this.dailyRate,
+    required this.daysLeft, required this.daysToRestock,
+    required this.weightedMape, required this.sources, required this.periods,
+    this.synthetic = false,
+  });
+
+  _Status get status {
+    if (dailyRate < 0.001) return _Status.noDemand;
+    // If stock hasn't been entered yet (synthetic baseline + zero stock),
+    // show At Risk instead of Critical so the screen doesn't alarm before
+    // the admin has had a chance to enter their actual stock levels.
+    if (stock <= 0) return synthetic ? _Status.atRisk : _Status.critical;
+    if (daysLeft <= 7) return _Status.critical;
+    if (daysLeft <= 21 || stock <= restock) return _Status.atRisk;
+    return _Status.healthy;
+  }
+
+  Color get statusColor {
+    switch (status) {
+      case _Status.critical: return _rose;
+      case _Status.atRisk:   return _amber;
+      case _Status.healthy:  return _emerald;
+      case _Status.noDemand: return _slate;
+    }
+  }
+
+  String get statusLabel {
+    switch (status) {
+      case _Status.critical: return 'Critical';
+      case _Status.atRisk:   return 'At Risk';
+      case _Status.healthy:  return 'Healthy';
+      case _Status.noDemand: return 'No Demand';
+    }
+  }
+
+  String get mapeText => weightedMape == null
+      ? '—' : '${weightedMape!.toStringAsFixed(1)}%';
+
+  Color get mapeColor {
+    final m = weightedMape;
+    if (m == null) return _muted;
+    if (m < 10)   return _emerald;
+    if (m < 25)   return _lime;
+    if (m < 50)   return _amber;
+    return _rose;
+  }
+
+  String get mapeGrade {
+    final m = weightedMape;
+    if (m == null) return '—';
+    if (m < 10)   return 'Excellent';
+    if (m < 25)   return 'Good';
+    if (m < 50)   return 'Fair';
+    return 'Poor';
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -192,1718 +207,1272 @@ _DesResult _runDes(List<double> series, {double alpha = 0.5}) {
 
 class EmployeeInventoryForecastScreen extends StatefulWidget {
   const EmployeeInventoryForecastScreen({super.key});
-
   @override
-  State<EmployeeInventoryForecastScreen> createState() =>
-      _EmployeeInventoryForecastScreenState();
+  State<EmployeeInventoryForecastScreen> createState() => _ForecastState();
 }
 
-class _EmployeeInventoryForecastScreenState
-    extends State<EmployeeInventoryForecastScreen> {
-  // ── State ──────────────────────────────────────────────────────────────────
-  bool _loading = true;
+class _ForecastState extends State<EmployeeInventoryForecastScreen> {
+  bool   _loading = true;
   String? _error;
+  List<_Material> _all = [];
+  String _filter = 'All';
+  String _sort   = 'Days Left';
 
-  List<_ForecastItem> _items = [];
-
-  // Filter / sort
-  String _filter = 'All';       // All | Critical | At Risk | Healthy
-  String _sort   = 'Days Left'; // Days Left | Name | Consumption | MAPE
-
-  static const _windowDays = 90;
+  static const _nPeriods   = 36; // 3 years × 12 months
   static const _periodDays = 30;
 
-  /// DES smoothing constant α — fixed in (0, 1) per thesis specification.
-  static const double _alpha = 0.5;
-
   @override
-  void initState() {
-    super.initState();
-    _load();
-  }
+  void initState() { super.initState(); _load(); }
 
-  // ── Data loading ───────────────────────────────────────────────────────────
+  // ── Load & compute ──────────────────────────────────────────────────────────
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error   = null;
-    });
+    setState(() { _loading = true; _error = null; });
     try {
       final db  = FirebaseFirestore.instance;
       final now = DateTime.now();
 
-      final nowTs   = Timestamp.fromDate(now);
-      final p1Start = Timestamp.fromDate(now.subtract(const Duration(days: 30)));
-      final p2Start = Timestamp.fromDate(now.subtract(const Duration(days: 60)));
-      final p3Start = Timestamp.fromDate(now.subtract(const Duration(days: 90)));
+      // Period boundaries: limits[0] = 3 yrs ago, limits[36] = now
+      final limits = List.generate(_nPeriods + 1, (k) =>
+          Timestamp.fromDate(now.subtract(
+              Duration(days: _periodDays * (_nPeriods - k)))));
 
-      final matSnap   = await db.collection('RawMaterials').get();
-      final materials = {
-        for (final d in matSnap.docs) d.id: d.data(),
-      };
-
-      final prodSnap = await db.collection('Products').get();
-      final bomByProductId   = <String, List<Map<String, dynamic>>>{};
-      final bomByProductName = <String, List<Map<String, dynamic>>>{};
-      for (final d in prodSnap.docs) {
-        final bom = (d.data()['bill_of_materials'] as List?)
-            ?.cast<Map<String, dynamic>>() ?? [];
-        bomByProductId[d.id] = bom;
-        final name = d.data()['product_name']?.toString() ?? '';
-        if (name.isNotEmpty) bomByProductName[name] = bom;
-      }
-
-      void accumulateOrders(
-          List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-          Timestamp from,
-          Timestamp to,
-          Map<String, double> target,
-          ) {
-        for (final orderDoc in docs) {
-          final createdAt = orderDoc.data()['created_at'] as Timestamp?;
-          if (createdAt == null) continue;
-          if (createdAt.compareTo(from) < 0) continue;
-          if (createdAt.compareTo(to) >= 0) continue;
-
-          final products = (orderDoc.data()['products'] as List?)
-              ?.cast<Map<String, dynamic>>() ?? [];
-          for (final p in products) {
-            final pid     = p['product_id']?.toString() ?? '';
-            final name    = p['name']?.toString() ?? '';
-            // Orders store selected variant in 'material' field
-            final variant = p['material']?.toString() ?? '';
-            final qty     = (p['qty'] as num?)?.toDouble() ?? 1;
-            final bom     = bomByProductId[pid] ?? bomByProductName[name] ?? [];
-            for (final bomItem in bom) {
-              // Skip if this BOM entry is for a specific variant that doesn't match
-              final forVariant = bomItem['for_material_option']?.toString() ?? '';
-              if (forVariant.isNotEmpty && forVariant != variant) continue;
-              final matId = bomItem['material_id']?.toString() ?? '';
-              final qpu   = (bomItem['quantity_per_unit'] as num?)?.toDouble() ?? 1;
-              if (matId.isEmpty) continue;
-              target[matId] = (target[matId] ?? 0) + qty * qpu;
-            }
-          }
+      int? periodOf(Timestamp ts) {
+        if (ts.compareTo(limits[0]) < 0) return null;
+        if (ts.compareTo(limits[_nPeriods]) >= 0) return null;
+        for (int i = _nPeriods - 1; i >= 0; i--) {
+          if (ts.compareTo(limits[i]) >= 0) return i;
         }
+        return null;
       }
 
-      // Fetch completed orders and historical sales records in parallel
-      final results = await Future.wait([
+      // ── Fetch all data ─────────────────────────────────────────────────────
+      // Order_Queue holds the live job queue; Orders may hold archived ones.
+      // Query both so no completed orders are missed.
+      final [matSnap, prodSnap, ordSnap, oqSnap, srSnap] = await Future.wait([
+        db.collection('RawMaterials').get(),
+        db.collection('Products').get(),
         db.collection('Orders').where('status', isEqualTo: 'completed').get(),
+        db.collection('Order_Queue').where('status', isEqualTo: 'completed').get(),
         db.collection('Sales_Records').get(),
-        db.collection('InventoryLogs').get(),
       ]);
-      final orderSnap    = results[0];
-      final salesRecSnap = results[1];
-      final logSnap      = results[2];
 
-      final consumedP1 = <String, double>{};
-      final consumedP2 = <String, double>{};
-      final consumedP3 = <String, double>{};
+      final mats = {for (final d in matSnap.docs) d.id: d.data()};
 
-      // From completed Orders (uses created_at)
-      accumulateOrders(orderSnap.docs, p1Start, nowTs,   consumedP1);
-      accumulateOrders(orderSnap.docs, p2Start, p1Start, consumedP2);
-      accumulateOrders(orderSnap.docs, p3Start, p2Start, consumedP3);
+      // ── BOM catalog: keyed by product doc-ID (primary) and name (fallback) ─
+      final bomById   = <String, List<Map<String, dynamic>>>{};
+      final bomByName = <String, List<Map<String, dynamic>>>{};
+      final nameById  = <String, String>{};
+      for (final d in prodSnap.docs) {
+        final bom  = (d.data()['bill_of_materials'] as List?)
+            ?.cast<Map<String, dynamic>>() ?? [];
+        final name = (d.data()['product_name']?.toString() ?? '').trim();
+        if (name.isEmpty) continue;
+        bomById[d.id]                = bom;
+        bomByName[name.toLowerCase()] = bom;
+        nameById[d.id]               = name;
+      }
 
-      // From Sales_Records — historical & imported data
-      // Imported records store line items in a products[] array (name + type = variant).
-      // Each BOM entry has for_material_option: "" (all variants) or a specific variant name.
-      for (final period in [
-        (p1Start, nowTs,   consumedP1),
-        (p2Start, p1Start, consumedP2),
-        (p3Start, p2Start, consumedP3),
-      ]) {
-        for (final doc in salesRecSnap.docs) {
-          final ts = doc.data()['sale_date'] as Timestamp?;
-          if (ts == null) continue;
-          if (ts.compareTo(period.$1) < 0) continue;
-          if (ts.compareTo(period.$2) >= 0) continue;
+      // ── Accumulate per-period product sales ────────────────────────────────
+      // key  = product doc-id when BOM is found by id, else lowercase name
+      // This keeps duplicate-proof aggregation even when both sources fire.
+      final sales   = <String, List<double>>{};
+      final display = <String, String>{};
+      final bomKey  = <String, List<Map<String, dynamic>>>{};
 
-          // Imported records: products stored as array [{name, type, qty}]
-          final lineItems =
-              (doc.data()['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      void addSale(String key, String label,
+                   List<Map<String, dynamic>> bom, int idx, double qty) {
+        sales.putIfAbsent(key, () => List.filled(_nPeriods, 0.0));
+        display.putIfAbsent(key, () => label);
+        bomKey.putIfAbsent(key, () => bom);
+        sales[key]![idx] += qty;
+      }
 
-          for (final item in lineItems) {
-            final productName = item['name']?.toString() ?? '';
-            final variantName = item['type']?.toString() ?? '';
-            final qty = (item['qty'] as num?)?.toDouble() ?? 1.0;
-            if (productName.isEmpty || qty <= 0) continue;
+      // Combine Orders + Order_Queue, deduplicated by Firestore doc id
+      final seen   = <String>{};
+      final allOrd = [...ordSnap.docs, ...oqSnap.docs]
+          .where((d) => seen.add(d.id)).toList();
 
-            final bom = bomByProductName[productName] ?? [];
-            for (final bomItem in bom) {
-              // Apply only BOM entries for this variant OR entries for all variants ('')
-              final forVariant = bomItem['for_material_option']?.toString() ?? '';
-              if (forVariant.isNotEmpty && forVariant != variantName) continue;
+      for (final doc in allOrd) {
+        final ts = doc.data()['created_at'] as Timestamp?;
+        if (ts == null) continue;
+        final idx = periodOf(ts); if (idx == null) continue;
+        for (final p in (doc.data()['products'] as List? ?? [])
+            .cast<Map<String, dynamic>>()) {
+          final name = (p['name']?.toString() ?? '').trim();
+          final pid  = p['product_id']?.toString() ?? '';
+          final qty  = (p['qty'] as num?)?.toDouble() ?? 1.0;
+          if (qty <= 0) continue;
+          final bom = bomById[pid] ?? bomByName[name.toLowerCase()] ?? [];
+          if (bom.isEmpty) continue; // skip products with no BOM
+          final key   = pid.isNotEmpty && bomById.containsKey(pid)
+              ? pid : name.toLowerCase();
+          final label = nameById[pid] ?? name;
+          addSale(key, label, bom, idx, qty);
+        }
+      }
 
-              final matId = bomItem['material_id']?.toString() ?? '';
-              final qpu   = (bomItem['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
-              if (matId.isEmpty) continue;
-              period.$3[matId] = (period.$3[matId] ?? 0) + qty * qpu;
-            }
+      // Sales_Records (CSV imports)
+      for (final doc in srSnap.docs) {
+        final ts = doc.data()['sale_date'] as Timestamp?;
+        if (ts == null) continue;
+        final idx = periodOf(ts); if (idx == null) continue;
+        for (final p in (doc.data()['products'] as List? ?? [])
+            .cast<Map<String, dynamic>>()) {
+          final name = (p['name']?.toString() ?? '').trim();
+          final qty  = (p['qty'] as num?)?.toDouble() ?? 1.0;
+          if (name.isEmpty || qty <= 0) continue;
+          final bom = bomByName[name.toLowerCase()] ?? [];
+          if (bom.isEmpty) continue;
+          addSale(name.toLowerCase(), name, bom, idx, qty);
+        }
+      }
+
+      // ── Phase 1: DES per product ──────────────────────────────────────────
+      final holt = <String, _DES>{};
+      for (final e in sales.entries) { holt[e.key] = _bestFit(e.value); }
+
+      // ── Phase 2: BOM explosion → per-material consumption series + sources ─
+      // periodSqft[matId][p] = base-unit consumption in period p (summed over products)
+      final periodSqft = <String, List<double>>{
+        for (final id in mats.keys) id: List.filled(_nPeriods, 0.0),
+      };
+      // sources for display (product-level breakdown)
+      final sourcesMap = <String, List<_Source>>{};
+
+      for (final e in sales.entries) {
+        final key  = e.key;
+        final des  = holt[key]!;
+        final fQty = des.forecast(1);
+        final bom  = bomKey[key] ?? [];
+
+        for (final b in bom) {
+          final mid = b['material_id']?.toString() ?? '';
+          final qpu = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+          if (mid.isEmpty || !periodSqft.containsKey(mid)) continue;
+
+          // Always accumulate historical consumption regardless of fQty
+          for (int p = 0; p < _nPeriods; p++) {
+            periodSqft[mid]![p] += e.value[p] * qpu;
+          }
+
+          // Only add to sources display if forecast is meaningful
+          if (fQty >= 0.001) {
+            final contrib = fQty * qpu;
+            sourcesMap.putIfAbsent(mid, () => []).add(_Source(
+              name: display[key] ?? key,
+              forecastQty: fQty, qpu: qpu,
+              mape: des.mape, alpha: des.alpha, beta: des.beta,
+              contribution: contrib,
+            ));
           }
         }
       }
 
-      final replenishedPerMaterial = <String, double>{};
-      for (final d in logSnap.docs) {
-        final ts = d.data()['timestamp'] as Timestamp?;
-        if (ts != null && ts.compareTo(p3Start) < 0) continue;
-        final matId = d.data()['material_id']?.toString() ?? '';
-        final qty   = (d.data()['quantity_added'] as num?)?.toDouble() ?? 0;
-        if (matId.isEmpty) continue;
-        replenishedPerMaterial[matId] =
-            (replenishedPerMaterial[matId] ?? 0) + qty;
+      // ── Phase 3: DES on each material's aggregated consumption history ─────
+      // Running DES on the material series directly is more stable than
+      // chaining product DES → BOM explosion, especially with sparse data.
+      final materialDES = <String, _DES>{};
+      for (final id in mats.keys) {
+        materialDES[id] =
+            _bestFit(periodSqft[id] ?? List.filled(_nPeriods, 0.0));
       }
 
-      final items = <_ForecastItem>[];
-      for (final entry in materials.entries) {
-        final matId    = entry.key;
-        final data     = entry.value;
-        final name     = data['material_name']?.toString() ?? matId;
-        final su       = data['stocking_unit']?.toString() ?? '';
-        final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
-        final unitDesc = data['unit_description']?.toString() ?? '';
-        // Display unit: prefer unit_description, else stocking_unit label
-        final unit = unitDesc.isNotEmpty ? unitDesc : (su.isNotEmpty ? su : '');
+      // ── Build _Material per raw material ───────────────────────────────────
+      final result = <_Material>[];
+      for (final e in mats.entries) {
+        final id       = e.key;
+        final d        = e.value;
+        final name     = d['material_name']?.toString() ?? id;
+        final su       = d['stocking_unit']?.toString() ?? '';
+        final sqftPer  = (d['unit_size_sqft'] as num?)?.toDouble() ?? 0;
+        final unitDesc = d['unit_description']?.toString() ?? '';
+        final unit     = unitDesc.isNotEmpty ? unitDesc : su;
+        final hasConv  = sqftPer > 0.001 && su.isNotEmpty;
 
-        final rawStock   = (data['current_stock'] as num?)?.toDouble() ?? 0;
-        final rawRestock = (data['restock_level'] as num?)?.toDouble() ?? 0;
+        double toSU(double v) => hasConv ? v / sqftPer : v;
 
-        // Convert base-unit (sqft) values to stocking units for meaningful display.
-        // For old-style materials (no unitSqft), use raw values as-is.
-        final isNewStyle = unitSqft > 0.001 && su.isNotEmpty;
-        final stock   = isNewStyle ? rawStock   / unitSqft : rawStock;
-        final restock = isNewStyle ? rawRestock / unitSqft : rawRestock;
+        final rawStock   = (d['current_stock'] as num?)?.toDouble() ?? 0;
+        final rawRestock = (d['restock_level'] as num?)?.toDouble() ?? 0;
+        final stock   = hasConv ? rawStock   / sqftPer : rawStock;
+        final restock = hasConv ? rawRestock / sqftPer : rawRestock;
 
-        // ── Period consumption totals (convert to stocking units) ─────────
-        final rawC1 = consumedP1[matId] ?? 0.0;
-        final rawC2 = consumedP2[matId] ?? 0.0;
-        final rawC3 = consumedP3[matId] ?? 0.0;
-        final c1 = isNewStyle ? rawC1 / unitSqft : rawC1; // last 30 d
-        final c2 = isNewStyle ? rawC2 / unitSqft : rawC2; // 30–60 d ago
-        final c3 = isNewStyle ? rawC3 / unitSqft : rawC3; // 60–90 d ago
+        // Use the material-level DES for the primary forecast
+        final mDes = materialDES[id]!;
+        double fRaw = mDes.forecast(1); // base units next period
+        bool isSynthetic = false;
 
-        // Average daily rates per period in stocking units (X_t for DES)
-        final r1 = c1 / _periodDays;
-        final r2 = c2 / _periodDays;
-        final r3 = c3 / _periodDays;
-
-        // ── Double Exponential Smoothing ───────────────────────────────────
-        final hasSufficientData = (r3 > 0.001 || r2 > 0.001 || r1 > 0.001);
-        final desSeries = [r3, r2, r1];
-        final des = hasSufficientData
-            ? _runDes(desSeries, alpha: _alpha)
-            : _DesResult(
-            aLast: 0, bLast: 0, mape: null, forecasts: [], actuals: []);
-
-        final totalConsumed = c1 + c2 + c3;
-        // Replenished also in stocking units
-        final rawReplenished = replenishedPerMaterial[matId] ?? 0;
-        final replenished = isNewStyle ? rawReplenished / unitSqft : rawReplenished;
-
-        double dailyRate;
-        if (hasSufficientData) {
-          final forecastNext30 = des.forecastAhead(1).clamp(0.0, double.infinity);
-          dailyRate = forecastNext30 / _periodDays;
-        } else {
-          dailyRate = totalConsumed > 0
-              ? totalConsumed / _windowDays
-              : (replenished > 0 ? replenished / _windowDays : 0.0);
+        // Synthetic DES fallback — no real BOM-linked sales found.
+        // Build a 12-period constant series equal to restock_level and run DES
+        // on it so every material has a proper Holt forecast. This baseline is
+        // replaced automatically once real sales data arrives.
+        if (fRaw < 0.001 && rawRestock > 0.001) {
+          final synth = List.generate(_nPeriods, (i) =>
+              i < _nPeriods - 12 ? 0.0 : rawRestock);
+          fRaw = _bestFit(synth).forecast(1); // ≈ rawRestock, trend ≈ 0
+          isSynthetic = true;
         }
 
-        // Days calculations: ratio of stock/rate is unit-invariant
-        final daysUntilStockout = dailyRate > 0.001
-            ? (stock / dailyRate)
-            : double.infinity;
-        final daysUntilRestock  = (dailyRate > 0.001 && stock > restock)
-            ? ((stock - restock) / dailyRate)
+        final fSU      = toSU(fRaw);
+        final daily    = fSU / _periodDays;
+        final daysLeft = daily > 0.001 ? stock / daily : double.infinity;
+        final daysRest = daily > 0.001 && stock > restock
+            ? (stock - restock) / daily
             : (stock <= restock ? 0.0 : double.infinity);
 
-        final forecastNext30 = hasSufficientData
-            ? des.forecastAhead(1).clamp(0.0, double.infinity)
-            : dailyRate * 30;
-        final recommended30 = math.max(0.0, forecastNext30 - stock);
+        final srcs = sourcesMap[id] ?? [];
 
-        items.add(_ForecastItem(
-          materialId:        matId,
-          name:              name,
-          unit:              unit,
-          currentStock:      stock,
-          restockLevel:      restock,
-          dailyRate:         dailyRate,
-          dailyRateP1:       r1,
-          dailyRateP2:       r2,
-          dailyRateP3:       r3,
-          daysUntilStockout: daysUntilStockout,
-          daysUntilRestock:  daysUntilRestock,
-          consumed90d:       totalConsumed,
-          replenished90d:    replenished,
-          recommended30:     recommended30,
-          desResult:         des,
+        // Weighted MAPE from sources; fall back to material-level DES MAPE
+        double? wMape;
+        final withMape = srcs.where((s) => s.mape != null).toList();
+        if (withMape.isNotEmpty) {
+          final totalC = withMape.fold<double>(
+              0.0, (acc, s) => acc + s.contribution);
+          if (totalC > 0) {
+            wMape = withMape.fold<double>(
+                0.0, (acc, s) => acc + s.mape! * s.contribution / totalC);
+          }
+        } else {
+          wMape = mDes.mape;
+        }
+
+        final ps = (periodSqft[id] ?? List.filled(_nPeriods, 0.0))
+            .map(toSU).toList();
+
+        result.add(_Material(
+          id: id, name: name, unit: unit,
+          stock: stock, restock: restock,
+          forecastUnits: fSU, dailyRate: daily,
+          daysLeft: daysLeft, daysToRestock: daysRest,
+          // No accuracy metric for synthetic baseline forecasts
+          weightedMape: isSynthetic ? null : wMape,
+          sources: srcs, periods: ps,
+          synthetic: isSynthetic,
         ));
       }
 
-      setState(() {
-        _items   = items;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error   = e.toString();
-        _loading = false;
-      });
+      setState(() { _all = result; _loading = false; });
+    } catch (e, st) {
+      setState(() { _error = '$e\n$st'; _loading = false; });
     }
   }
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  // ── Filtered / sorted list ──────────────────────────────────────────────────
 
-  List<_ForecastItem> get _filtered {
-    var list = _items.where((it) {
+  List<_Material> get _visible {
+    var list = _all.where((m) {
       switch (_filter) {
-        case 'Critical': return it.urgency == _Urgency.critical;
-        case 'At Risk':  return it.urgency == _Urgency.atRisk;
-        case 'Healthy':  return it.urgency == _Urgency.healthy;
-        default:         return true;
+        case 'Critical':  return m.status == _Status.critical;
+        case 'At Risk':   return m.status == _Status.atRisk;
+        case 'Healthy':   return m.status == _Status.healthy;
+        case 'No Demand': return m.status == _Status.noDemand;
+        default:          return true;
       }
     }).toList();
-
     list.sort((a, b) {
       switch (_sort) {
-        case 'Name':
-          return a.name.compareTo(b.name);
-        case 'Consumption':
-          return b.dailyRate.compareTo(a.dailyRate);
+        case 'Name':     return a.name.compareTo(b.name);
+        case 'Forecast': return b.forecastUnits.compareTo(a.forecastUnits);
         case 'MAPE':
-          final ma = a.mape ?? double.infinity;
-          final mb = b.mape ?? double.infinity;
-          return mb.compareTo(ma);
+          final ma = a.weightedMape ?? double.infinity;
+          final mb = b.weightedMape ?? double.infinity;
+          return ma.compareTo(mb);
         default:
-          final da = a.daysUntilStockout.isInfinite ? 99999 : a.daysUntilStockout;
-          final db = b.daysUntilStockout.isInfinite ? 99999 : b.daysUntilStockout;
+          final da = a.daysLeft.isInfinite ? 99999.0 : a.daysLeft;
+          final db = b.daysLeft.isInfinite ? 99999.0 : b.daysLeft;
           return da.compareTo(db);
       }
     });
-
     return list;
   }
 
-  int _countByUrgency(_Urgency u) =>
-      _items.where((it) => it.urgency == u).length;
+  int _cnt(_Status s) => _all.where((m) => m.status == s).length;
 
-  // ── Build ──────────────────────────────────────────────────────────────────
+  // ── Build ───────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              color: _navyBlue.withValues(alpha: 0.4),
-              strokeWidth: 2,
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Analysing inventory…',
-              style: TextStyle(color: _Glass.textMuted, fontSize: 13),
-            ),
-          ],
-        ),
-      );
-    }
+    if (_loading) return _splash('Running DES forecast…');
+    if (_error != null) return _errView();
+    if (_all.isEmpty) return _splash('No raw materials found.');
 
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline,
-                  color: _Glass.accentRose, size: 44),
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: const TextStyle(
-                    color: _Glass.textSecondary, fontSize: 13),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: _load,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 10),
-                  decoration: _Glass.solidPill(_navyBlue, glow: true),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.refresh_rounded,
-                          size: 14, color: Colors.white),
-                      SizedBox(width: 6),
-                      Text('Retry',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (_items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: _Glass.glass(radius: 22),
-              child: const Icon(Icons.inventory_2_outlined,
-                  size: 32, color: _Glass.textMuted),
-            ),
-            const SizedBox(height: 20),
-            const Text('No materials found',
-                style: TextStyle(
-                    color: _Glass.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700)),
-          ],
-        ),
-      );
-    }
-
-    final filtered = _filtered;
-    final critical = _countByUrgency(_Urgency.critical);
-    final atRisk   = _countByUrgency(_Urgency.atRisk);
-    final healthy  = _countByUrgency(_Urgency.healthy);
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: _blurFilter,
-        child: Container(
-          decoration: _Glass.glass(radius: 20, elevated: true),
-          child: Column(
-            children: [
-              // ── Forecast header band ─────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFAFBFC),
-                  border: Border(
-                    bottom: BorderSide(
-                        color: _Glass.borderDim, width: 0.8),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Title row
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Inventory Forecast',
-                                style: TextStyle(
-                                  color: _Glass.textPrimary,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.3,
-                                ),
-                              ),
-                              SizedBox(height: 1),
-                              Text(
-                                'DES model · 90-day history · MAPE accuracy',
-                                style: TextStyle(
-                                    color: _Glass.textMuted, fontSize: 11),
-                              ),
-                            ],
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: _load,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 9),
-                            decoration: BoxDecoration(
-                              color: _Glass.surfaceThin,
-                              borderRadius: BorderRadius.circular(99),
-                              border: Border.all(
-                                  color: _Glass.borderMid, width: 0.9),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.refresh_rounded,
-                                    size: 14,
-                                    color: _Glass.textSecondary),
-                                SizedBox(width: 6),
-                                Text('Refresh',
-                                    style: TextStyle(
-                                        color: _Glass.textSecondary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    // ── Urgency summary tiles ──────────────────────────────
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _SummaryTile(
-                            label: 'Critical',
-                            count: critical,
-                            color: _Glass.accentRose,
-                            icon: Icons.warning_amber_rounded,
-                            isActive: _filter == 'Critical',
-                            onTap: () => setState(() => _filter =
-                            _filter == 'Critical' ? 'All' : 'Critical'),
-                          ),
-                          _SummaryTile(
-                            label: 'At Risk',
-                            count: atRisk,
-                            color: _Glass.accentAmber,
-                            icon: Icons.access_time_rounded,
-                            isActive: _filter == 'At Risk',
-                            onTap: () => setState(() => _filter =
-                            _filter == 'At Risk' ? 'All' : 'At Risk'),
-                          ),
-                          _SummaryTile(
-                            label: 'Healthy',
-                            count: healthy,
-                            color: _Glass.accentEmerald,
-                            icon: Icons.check_circle_outline_rounded,
-                            isActive: _filter == 'Healthy',
-                            onTap: () => setState(() => _filter =
-                            _filter == 'Healthy' ? 'All' : 'Healthy'),
-                          ),
-                          _SummaryTile(
-                            label: 'No Data',
-                            count: _items
-                                .where((i) => i.urgency == _Urgency.noData)
-                                .length,
-                            color: _Glass.textMuted,
-                            icon: Icons.help_outline_rounded,
-                            isActive: false,
-                            onTap: () {},
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // ── Sort chips ─────────────────────────────────────────
-                    Row(
-                      children: [
-                        const Text('Sort: ',
-                            style: TextStyle(
-                                color: _Glass.textMuted, fontSize: 11)),
-                        ...['Days Left', 'Name', 'Consumption', 'MAPE']
-                            .map((s) => Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: GestureDetector(
-                            onTap: () => setState(() => _sort = s),
-                            child: AnimatedContainer(
-                              duration:
-                              const Duration(milliseconds: 150),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: _sort == s
-                                    ? _navyBlue
-                                    : _Glass.surfaceThin,
-                                borderRadius: BorderRadius.circular(99),
-                                border: Border.all(
-                                  color: _sort == s
-                                      ? Colors.white
-                                      .withValues(alpha: 0.20)
-                                      : _Glass.borderMid,
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Text(
-                                s,
-                                style: TextStyle(
-                                  color: _sort == s
-                                      ? Colors.white
-                                      : _Glass.textSecondary,
-                                  fontSize: 12,
-                                  fontWeight: _sort == s
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ),
-                        )),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-
-                    // ── Legends ────────────────────────────────────────────
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 4,
-                      children: const [
-                        _LegendDot(
-                            color: _Glass.accentRose,
-                            label: 'Critical ≤7d'),
-                        _LegendDot(
-                            color: _Glass.accentAmber,
-                            label: 'At Risk ≤21d'),
-                        _LegendDot(
-                            color: _Glass.accentEmerald,
-                            label: 'Healthy >21d'),
-                        _LegendDot(
-                            color: _Glass.accentEmerald,
-                            label: 'MAPE Excellent <10%'),
-                        _LegendDot(
-                            color: Color(0xFF65A30D),
-                            label: 'Good 10–25%'),
-                        _LegendDot(
-                            color: _Glass.accentAmber,
-                            label: 'Fair 25–50%'),
-                        _LegendDot(
-                            color: _Glass.accentRose,
-                            label: 'Poor ≥50%'),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // ── Cards list ───────────────────────────────────────────────
-              Expanded(
-                child: filtered.isEmpty
-                    ? Center(
-                  child: Text(
-                    'No materials in "$_filter" category',
-                    style: const TextStyle(
-                        color: _Glass.textMuted, fontSize: 13),
-                  ),
-                )
-                    : RefreshIndicator(
-                  onRefresh: _load,
-                  color: _navyBlue,
-                  backgroundColor: _Glass.surface,
-                  child: Scrollbar(
-                    thumbVisibility: true,
-                    trackVisibility: true,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(14),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) =>
-                      const SizedBox(height: 8),
-                      itemBuilder: (_, i) =>
-                          _ForecastCard(item: filtered[i]),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+    return Column(children: [
+      _header(),
+      Expanded(
+        child: _visible.isEmpty
+            ? Center(child: Text('No "$_filter" materials.',
+                style: const TextStyle(color: _muted)))
+            : RefreshIndicator(
+                onRefresh: _load, color: _navy,
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                  itemCount: _visible.length,
+                  separatorBuilder: (ctx, idx) => const SizedBox(height: 8),
+                  itemBuilder: (ctx, i) => _MatCard(mat: _visible[i]),
+                )),
       ),
+    ]);
+  }
+
+  // ── Header ──────────────────────────────────────────────────────────────────
+
+  Widget _header() {
+    return Container(
+      color: const Color(0xFFF8FAFC),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Title row
+        Row(children: [
+          const Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Inventory Forecast',
+                  style: TextStyle(color: _navy, fontSize: 15,
+                      fontWeight: FontWeight.w800)),
+              SizedBox(height: 1),
+              Text("Holt's DES (α+β auto) · 3-yr history · BOM explosion",
+                  style: TextStyle(color: _muted, fontSize: 10)),
+            ],
+          )),
+          _HdrBtn('Import', Icons.upload_file_rounded, _navy, () async {
+            await showSalesImportSheet(context);
+            if (mounted) _load();
+          }),
+          const SizedBox(width: 6),
+          _HdrBtn('Diagnose', Icons.troubleshoot_rounded, _amber, () =>
+              _openDiag(context)),
+          const SizedBox(width: 6),
+          _HdrBtn('Refresh', Icons.refresh_rounded, _slate, _load),
+        ]),
+        const SizedBox(height: 10),
+
+        // Status summary chips
+        SingleChildScrollView(scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            _SChip('Critical',  _cnt(_Status.critical),  _rose,    _filter == 'Critical',
+                () => _setFilter('Critical')),
+            _SChip('At Risk',   _cnt(_Status.atRisk),    _amber,   _filter == 'At Risk',
+                () => _setFilter('At Risk')),
+            _SChip('Healthy',   _cnt(_Status.healthy),   _emerald, _filter == 'Healthy',
+                () => _setFilter('Healthy')),
+            _SChip('No Demand', _cnt(_Status.noDemand),  _slate,   _filter == 'No Demand',
+                () => _setFilter('No Demand')),
+          ]),
+        ),
+        const SizedBox(height: 8),
+
+        // Sort row
+        SingleChildScrollView(scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            const Text('Sort: ', style: TextStyle(color: _muted, fontSize: 11)),
+            ...['Days Left', 'Name', 'Forecast', 'MAPE'].map((s) =>
+              Padding(padding: const EdgeInsets.only(right: 6),
+                child: GestureDetector(onTap: () => setState(() => _sort = s),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _sort == s ? _navy : Colors.transparent,
+                      borderRadius: BorderRadius.circular(99),
+                      border: Border.all(
+                          color: _sort == s ? _navy : _border)),
+                    child: Text(s, style: TextStyle(
+                      color: _sort == s ? Colors.white : _slate,
+                      fontSize: 11,
+                      fontWeight: _sort == s
+                          ? FontWeight.w700 : FontWeight.w500)),
+                  ),
+                )),
+            ),
+          ]),
+        ),
+      ]),
     );
   }
+
+  void _setFilter(String f) =>
+      setState(() => _filter = _filter == f ? 'All' : f);
+
+  void _openDiag(BuildContext ctx) => showModalBottomSheet(
+    context: ctx, isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => const _DiagSheet(),
+  );
+
+  Widget _splash(String msg) => Center(child: Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      if (_loading)
+        const CircularProgressIndicator(color: _navy, strokeWidth: 2),
+      if (!_loading)
+        const Icon(Icons.inventory_2_outlined, size: 40, color: _muted),
+      const SizedBox(height: 14),
+      Text(msg, style: const TextStyle(color: _muted, fontSize: 13)),
+    ],
+  ));
+
+  Widget _errView() => Center(child: Padding(
+    padding: const EdgeInsets.all(20),
+    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      const Icon(Icons.error_outline, color: _rose, size: 44),
+      const SizedBox(height: 12),
+      Text(_error!, style: const TextStyle(color: _slate, fontSize: 11),
+          textAlign: TextAlign.center),
+      const SizedBox(height: 16),
+      ElevatedButton.icon(onPressed: _load,
+          icon: const Icon(Icons.refresh, size: 16),
+          label: const Text('Retry'),
+          style: ElevatedButton.styleFrom(backgroundColor: _navy,
+              foregroundColor: Colors.white)),
+    ]),
+  ));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Data model
+// Material card
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum _Urgency   { critical, atRisk, healthy, noData }
-enum _MapeGrade { excellent, good, fair, poor, unavailable }
-
-class _ForecastItem {
-  final String materialId, name, unit;
-  final double currentStock, restockLevel;
-
-  /// Forward daily rate derived from the DES forecast for the next period.
-  final double dailyRate;
-
-  /// Raw daily rates per 30-day window (used for the trend display).
-  final double dailyRateP1, dailyRateP2, dailyRateP3;
-
-  final double daysUntilStockout, daysUntilRestock;
-  final double consumed90d, replenished90d, recommended30;
-
-  /// Full DES result (forecasts, actuals, MAPE, level/trend).
-  final _DesResult desResult;
-
-  const _ForecastItem({
-    required this.materialId,
-    required this.name,
-    required this.unit,
-    required this.currentStock,
-    required this.restockLevel,
-    required this.dailyRate,
-    required this.dailyRateP1,
-    required this.dailyRateP2,
-    required this.dailyRateP3,
-    required this.daysUntilStockout,
-    required this.daysUntilRestock,
-    required this.consumed90d,
-    required this.replenished90d,
-    required this.recommended30,
-    required this.desResult,
-  });
-
-  // ── Convenience passthrough ────────────────────────────────────────────────
-
-  double? get mape => desResult.mape;
-
-  _Urgency get urgency {
-    if (dailyRate < 0.001) return _Urgency.noData;
-    if (daysUntilStockout <= 7 || currentStock <= 0) return _Urgency.critical;
-    if (daysUntilStockout <= 21 || currentStock <= restockLevel) {
-      return _Urgency.atRisk;
-    }
-    return _Urgency.healthy;
-  }
-
-  Color get urgencyColor {
-    switch (urgency) {
-      case _Urgency.critical: return _Glass.accentRose;
-      case _Urgency.atRisk:   return _Glass.accentAmber;
-      case _Urgency.healthy:  return _Glass.accentEmerald;
-      case _Urgency.noData:   return _Glass.textMuted;
-    }
-  }
-
-  String get urgencyLabel {
-    switch (urgency) {
-      case _Urgency.critical: return 'Critical';
-      case _Urgency.atRisk:   return 'At Risk';
-      case _Urgency.healthy:  return 'Healthy';
-      case _Urgency.noData:   return 'No Data';
-    }
-  }
-
-  String get daysLabel => daysUntilStockout.isInfinite
-      ? '∞'
-      : daysUntilStockout.toStringAsFixed(0);
-
-  _MapeGrade get mapeGrade {
-    if (mape == null) return _MapeGrade.unavailable;
-    if (mape! < 10)   return _MapeGrade.excellent;
-    if (mape! < 25)   return _MapeGrade.good;
-    if (mape! < 50)   return _MapeGrade.fair;
-    return _MapeGrade.poor;
-  }
-
-  String get mapeLabel =>
-      mape == null ? 'N/A' : '${mape!.toStringAsFixed(1)}%';
-
-  String get mapeGradeLabel {
-    switch (mapeGrade) {
-      case _MapeGrade.excellent:   return 'Excellent';
-      case _MapeGrade.good:        return 'Good';
-      case _MapeGrade.fair:        return 'Fair';
-      case _MapeGrade.poor:        return 'Poor';
-      case _MapeGrade.unavailable: return 'No Data';
-    }
-  }
-
-  Color get mapeColor {
-    switch (mapeGrade) {
-      case _MapeGrade.excellent:   return _Glass.accentEmerald;
-      case _MapeGrade.good:        return const Color(0xFF65A30D);
-      case _MapeGrade.fair:        return _Glass.accentAmber;
-      case _MapeGrade.poor:        return _Glass.accentRose;
-      case _MapeGrade.unavailable: return _Glass.textMuted;
-    }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Forecast card
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _ForecastCard extends StatefulWidget {
-  final _ForecastItem item;
-  const _ForecastCard({required this.item});
-
+class _MatCard extends StatefulWidget {
+  final _Material mat;
+  const _MatCard({required this.mat});
   @override
-  State<_ForecastCard> createState() => _ForecastCardState();
+  State<_MatCard> createState() => _MatCardState();
 }
 
-class _ForecastCardState extends State<_ForecastCard> {
-  bool _expanded = false;
+class _MatCardState extends State<_MatCard> {
+  bool _open = false;
 
-  String _fmtNum(double v) {
+  static String _fmt(double v) {
     if (v == v.truncateToDouble()) return v.toInt().toString();
-    return v.abs() < 1 ? v.toStringAsFixed(3) : v.toStringAsFixed(2);
+    return v < 1 ? v.toStringAsFixed(3) : v.toStringAsFixed(2);
   }
 
   @override
   Widget build(BuildContext context) {
-    final it       = widget.item;
-    final color    = it.urgencyColor;
-    final stockPct = it.restockLevel > 0
-        ? (it.currentStock / (it.restockLevel * 3)).clamp(0.0, 1.0)
-        : (it.currentStock > 0 ? 1.0 : 0.0);
+    final m     = widget.mat;
+    final color = m.statusColor;
+    final dLabel = m.daysLeft.isInfinite ? '∞' : m.daysLeft.toStringAsFixed(0);
+
+    // Stock bar
+    final sPct = m.restock > 0
+        ? (m.stock / (m.restock * 3)).clamp(0.0, 1.0)
+        : (m.stock > 0 ? 1.0 : 0.0);
 
     return GestureDetector(
-      onTap: () => setState(() => _expanded = !_expanded),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      onTap: () => setState(() => _open = !_open),
+      child: Container(
         decoration: BoxDecoration(
-          color: _expanded
-              ? color.withValues(alpha: 0.04)
-              : _Glass.surfaceMid,
-          borderRadius: BorderRadius.circular(14),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: _expanded
-                ? color.withValues(alpha: 0.35)
-                : _Glass.borderMid,
-            width: _expanded ? 1.0 : 0.8,
-          ),
-          boxShadow: const [_Glass.rowShadow],
+              color: _open ? color.withValues(alpha: 0.5) : const Color(0xFFE2E8F0),
+              width: _open ? 1.2 : 0.8),
+          boxShadow: const [BoxShadow(
+              color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))],
         ),
-        child: Column(
-          children: [
-            // ── Collapsed row ──────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Row(
-                children: [
-                  // Days circle
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: color.withValues(alpha: 0.10),
-                      border: Border.all(
-                          color: color.withValues(alpha: 0.35)),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            it.daysLabel,
-                            style: TextStyle(
-                              color: color,
-                              fontSize:
-                              it.daysLabel.length > 3 ? 9 : 13,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            'days',
-                            style: TextStyle(
-                              color: color.withValues(alpha: 0.6),
-                              fontSize: 7,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-                  // Name + bar + badges
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                it.name,
-                                style: const TextStyle(
-                                  color: _Glass.textPrimary,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            // Urgency badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: color.withValues(alpha: 0.10),
-                                borderRadius: BorderRadius.circular(99),
-                                border: Border.all(
-                                    color: color.withValues(alpha: 0.35),
-                                    width: 0.8),
-                              ),
-                              child: Text(
-                                it.urgencyLabel,
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 5),
-
-                        // Stock progress bar
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: stockPct,
-                            minHeight: 4,
-                            backgroundColor: _Glass.borderMid
-                                .withValues(alpha: 0.4),
-                            valueColor:
-                            AlwaysStoppedAnimation<Color>(color),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-
-                        Row(
-                          children: [
-                            Text(
-                              it.unit.isNotEmpty
-                                  ? 'Stock: ${_fmtNum(it.currentStock)} × ${it.unit}'
-                                  : 'Stock: ${_fmtNum(it.currentStock)}',
-                              style: const TextStyle(
-                                  color: _Glass.textSecondary,
-                                  fontSize: 11),
-                            ),
-                            const Spacer(),
-                            // MAPE inline badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: it.mapeColor
-                                    .withValues(alpha: 0.10),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                    color: it.mapeColor
-                                        .withValues(alpha: 0.30),
-                                    width: 0.8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.analytics_outlined,
-                                      color: it.mapeColor, size: 8),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    'MAPE ${it.mapeLabel}',
-                                    style: TextStyle(
-                                      color: it.mapeColor,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Chevron
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6),
-                    child: AnimatedRotation(
-                      turns: _expanded ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 180),
-                      child: const Icon(Icons.keyboard_arrow_down,
-                          color: _Glass.textMuted, size: 16),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Expanded detail ────────────────────────────────────────────
-            if (_expanded)
+          // ── Collapsed row ──────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              // Days badge
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                width: 46, height: 46,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: 0.10),
+                  border: Border.all(color: color.withValues(alpha: 0.4))),
+                child: Center(child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Divider(color: _Glass.borderDim, height: 1),
-                    const SizedBox(height: 10),
-
-                    // MAPE accuracy panel
-                    _MapePanel(item: it),
-                    const SizedBox(height: 8),
-
-                    // Period trend sparkline
-                    _PeriodTrend(item: it),
-                    const SizedBox(height: 8),
-
-                    // Stat chips
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        _StatChip(
-                          label: 'Days to Stockout',
-                          value: it.daysUntilStockout.isInfinite
-                              ? '∞ (no usage)'
-                              : '~${it.daysUntilStockout.toStringAsFixed(0)} days',
-                          color: color,
-                        ),
-                        _StatChip(
-                          label: 'Days to Restock Level',
-                          value: it.dailyRate < 0.001
-                              ? '—'
-                              : it.daysUntilRestock <= 0
-                              ? 'Already below!'
-                              : '~${it.daysUntilRestock.toStringAsFixed(0)} days',
-                          color: _Glass.accentAmber,
-                        ),
-                        _StatChip(
-                          label: '90-Day Consumption',
-                          value: it.consumed90d > 0
-                              ? _fmtNum(it.consumed90d)
-                              : 'No order data',
-                          color: const Color(0xFF1D4ED8),
-                        ),
-                        _StatChip(
-                          label: '90-Day Replenishments',
-                          value: it.replenished90d > 0
-                              ? _fmtNum(it.replenished90d)
-                              : 'None logged',
-                          color: _Glass.accentEmerald,
-                        ),
-                        _StatChip(
-                          label: 'Restock Level',
-                          value: _fmtNum(it.restockLevel),
-                          color: _Glass.textSecondary,
-                        ),
-                        _StatChip(
-                          label: 'DES Next-30d Forecast',
-                          value: it.desResult.aLast > 0.001 || it.desResult.bLast.abs() > 0.001
-                              ? '${_fmtNum(it.desResult.forecastAhead(1).clamp(0, double.infinity))} ${it.unit}'
-                              : 'Insufficient data',
-                          color: _navyBlue,
-                        ),
-                      ],
-                    ),
-
-                    // Recommendation box
-                    if (it.dailyRate > 0.001) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: color.withValues(alpha: 0.20),
-                              width: 0.8),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.lightbulb_outline_rounded,
-                                color: color, size: 14),
-                            const SizedBox(width: 7),
-                            Expanded(
-                              child: Text(
-                                _buildRecommendation(it),
-                                style: TextStyle(
-                                    color: color,
-                                    fontSize: 11,
-                                    height: 1.4),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    if (it.dailyRate < 0.001) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: _Glass.surfaceThin,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: _Glass.borderMid, width: 0.8),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.info_outline,
-                                color: _Glass.textMuted, size: 13),
-                            SizedBox(width: 7),
-                            Expanded(
-                              child: Text(
-                                'No consumption data in the last 90 days. '
-                                    'Forecast will update once orders using this material are completed.',
-                                style: TextStyle(
-                                    color: _Glass.textMuted,
-                                    fontSize: 11,
-                                    height: 1.4),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                    Text(dLabel, style: TextStyle(color: color,
+                        fontSize: dLabel.length > 3 ? 9 : 14,
+                        fontWeight: FontWeight.w800)),
+                    Text('days', style: TextStyle(
+                        color: color.withValues(alpha: 0.6), fontSize: 7)),
                   ],
-                ),
+                )),
               ),
+              const SizedBox(width: 10),
+
+              // Main info
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Name + status badge
+                  Row(children: [
+                    Expanded(child: Text(m.name,
+                        style: const TextStyle(color: _navy,
+                            fontSize: 13, fontWeight: FontWeight.w700),
+                        maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    if (m.synthetic) ...[
+                      const SizedBox(width: 4),
+                      _Badge('~Est', _slate),
+                    ],
+                    const SizedBox(width: 6),
+                    _Badge(m.statusLabel, color),
+                  ]),
+                  const SizedBox(height: 5),
+
+                  // Stock bar
+                  ClipRRect(borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: sPct, minHeight: 5,
+                      backgroundColor: const Color(0xFFE2E8F0),
+                      valueColor: AlwaysStoppedAnimation(color))),
+                  const SizedBox(height: 4),
+
+                  // Stock numbers + MAPE badge
+                  Row(children: [
+                    Text(
+                      m.unit.isEmpty
+                          ? 'Stock: ${_fmt(m.stock)}'
+                          : 'Stock: ${_fmt(m.stock)} ${m.unit}',
+                      style: const TextStyle(
+                          color: _slate, fontSize: 11)),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: m.mapeColor.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                            color: m.mapeColor.withValues(alpha: 0.35),
+                            width: 0.7)),
+                      child: Text('MAPE ${m.mapeText}',
+                          style: TextStyle(color: m.mapeColor,
+                              fontSize: 10, fontWeight: FontWeight.w700)),
+                    ),
+                  ]),
+
+                  // Forecast pill
+                  if (m.forecastUnits > 0.001) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '${m.synthetic ? 'Est. baseline' : 'Forecast'} next 30d: '
+                      '${_fmt(m.forecastUnits)}'
+                      '${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
+                      style: TextStyle(
+                          color: m.synthetic
+                              ? _slate.withValues(alpha: 0.7)
+                              : _navy.withValues(alpha: 0.65),
+                          fontSize: 11, fontWeight: FontWeight.w600)),
+                  ],
+                ],
+              )),
+
+              // Chevron
+              Padding(padding: const EdgeInsets.only(left: 4, top: 2),
+                child: AnimatedRotation(
+                  turns: _open ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(Icons.expand_more,
+                      color: _muted, size: 18))),
+            ]),
+          ),
+
+          // ── Expanded detail ────────────────────────────────────────────────
+          if (_open) ...[
+            Divider(height: 1,
+                color: color.withValues(alpha: 0.20)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+
+                // ── Key stats grid ─────────────────────────────────────────
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  _StatBox('Forecast (30d)',
+                    m.forecastUnits < 0.001 ? 'No demand'
+                        : '${_fmt(m.forecastUnits)} ${m.unit}',
+                    _navy),
+                  _StatBox('Days to Stockout',
+                    m.daysLeft.isInfinite ? '∞'
+                        : '~${m.daysLeft.toStringAsFixed(0)} d', color),
+                  _StatBox('Days to Restock Lvl',
+                    m.daysToRestock <= 0 ? 'Already below!'
+                        : m.daysToRestock.isInfinite ? '∞'
+                        : '~${m.daysToRestock.toStringAsFixed(0)} d',
+                    _amber),
+                  _StatBox('Restock Level',
+                    '${_fmt(m.restock)} ${m.unit}', _slate),
+                  _StatBox('MAPE', '${m.mapeText}  ${m.mapeGrade}',
+                    m.mapeColor),
+                  _StatBox('Suggest Reorder',
+                    math.max(0, m.forecastUnits - m.stock) < 0.001
+                        ? 'None' : '${_fmt(math.max(0, m.forecastUnits - m.stock))} ${m.unit}',
+                    _emerald),
+                ]),
+                const SizedBox(height: 12),
+
+                // ── DES explanation ────────────────────────────────────────
+                sectionLabel('Double Exponential Smoothing  (Holt\'s Linear Trend)'),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                    _mono('Init:     L₁ = X₁,  T₁ = X₂ − X₁'),
+                    _mono('Level:    Lₜ = α·Xₜ + (1−α)·(Lₜ₋₁ + Tₜ₋₁)'),
+                    _mono('Trend:    Tₜ = β·(Lₜ − Lₜ₋₁) + (1−β)·Tₜ₋₁'),
+                    _mono('Forecast: F{t+m} = Lₜ + m·Tₜ'),
+                    _mono('MAPE: mean(|Xₜ−Fₜ|/Xₜ)×100  over non-zero periods'),
+                    const SizedBox(height: 4),
+                    Text('α and β are auto-selected per product to minimise MAPE.',
+                        style: TextStyle(color: _slate.withValues(alpha: 0.7),
+                            fontSize: 9, fontStyle: FontStyle.italic)),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+
+                // ── BOM source products ────────────────────────────────────
+                sectionLabel('BOM Explosion — Contributing Products'),
+                const SizedBox(height: 6),
+                if (m.sources.isEmpty)
+                  m.synthetic ? _syntheticNote(m) : _noDemandNote()
+                else
+                  _sourcesTable(m),
+                const SizedBox(height: 12),
+
+                // ── Period history table ───────────────────────────────────
+                sectionLabel('Consumption History  (last 12 of 36 periods)'),
+                const SizedBox(height: 6),
+                _periodTable(m),
+                const SizedBox(height: 8),
+
+                // ── Recommendation ─────────────────────────────────────────
+                _recoBox(m, color),
+              ]),
+            ),
           ],
-        ),
+        ]),
       ),
     );
   }
 
-  String _buildRecommendation(_ForecastItem it) {
-    final orderQty = it.recommended30;
-    final daysStr  = it.daysUntilStockout.isInfinite
-        ? 'no foreseeable stockout'
-        : '~${it.daysUntilStockout.toStringAsFixed(0)} days until stockout';
-    final mapeNote = it.mape != null
-        ? ' (MAPE ${it.mapeLabel} — ${it.mapeGradeLabel})'
-        : '';
+  // ── Sub-widgets ─────────────────────────────────────────────────────────────
 
-    if (it.urgency == _Urgency.critical) {
-      return 'Urgent: $daysStr$mapeNote. '
-          'Order at least ${_fmtNum(orderQty)} ${it.unit} immediately '
-          'to cover the next 30 days per DES forecast.';
-    }
-    if (it.urgency == _Urgency.atRisk) {
-      return 'Reorder soon — $daysStr$mapeNote. '
-          'DES-recommended order for a 30-day buffer: '
-          '${_fmtNum(orderQty)} ${it.unit}.';
-    }
-    return 'Stock is healthy ($daysStr)$mapeNote. '
-        'DES next-30d top-up (if needed): ${_fmtNum(orderQty)} ${it.unit}.';
+  Widget _sourcesTable(_Material m) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(8)),
+      child: Column(children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: const BoxDecoration(
+            color: Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
+          child: Row(children: [
+            _th('Product', flex: 4),
+            _th('α / β',   flex: 2),
+            _th('F(t+1)',  flex: 2, right: true),
+            _th('× qpu',   flex: 2, right: true),
+            _th('Demand',  flex: 2, right: true),
+            _th('MAPE',    flex: 2, right: true),
+          ]),
+        ),
+        const Divider(height: 1, color: Color(0xFFE2E8F0)),
+        for (int i = 0; i < m.sources.length; i++) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Row(children: [
+                _td(m.sources[i].name, flex: 4, bold: true),
+                _td('${m.sources[i].alpha}/${m.sources[i].beta}',
+                    flex: 2, mono: true),
+                _td(m.sources[i].forecastQty.toStringAsFixed(1),
+                    flex: 2, right: true),
+                _td('× ${m.sources[i].qpu.toStringAsFixed(2)}',
+                    flex: 2, right: true),
+                _td(m.sources[i].contribution.toStringAsFixed(2),
+                    flex: 2, right: true, bold: true),
+                _td(m.sources[i].mape == null
+                    ? '—'
+                    : '${m.sources[i].mape!.toStringAsFixed(1)}%',
+                    flex: 2, right: true,
+                    color: m.sources[i].mape == null ? _muted
+                        : m.sources[i].mape! < 10 ? _emerald
+                        : m.sources[i].mape! < 25 ? _lime
+                        : m.sources[i].mape! < 50 ? _amber : _rose),
+              ]),
+            ]),
+          ),
+          if (i < m.sources.length - 1)
+            const Divider(height: 1, color: Color(0xFFF1F5F9)),
+        ],
+        // Total row
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: const BoxDecoration(
+            color: Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.vertical(bottom: Radius.circular(8))),
+          child: Row(children: [
+            const Expanded(flex: 4,
+                child: Text('Total forecast need',
+                    style: TextStyle(color: _slate, fontSize: 10,
+                        fontWeight: FontWeight.w700))),
+            const Expanded(flex: 2, child: SizedBox()),
+            const Expanded(flex: 2, child: SizedBox()),
+            const Expanded(flex: 2, child: SizedBox()),
+            Expanded(flex: 2,
+                child: Text(_fmt(m.forecastUnits),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(color: _navy.withValues(alpha: 0.9),
+                        fontSize: 11, fontWeight: FontWeight.w800))),
+            Expanded(flex: 2,
+                child: Text(
+                  m.weightedMape == null ? '—'
+                      : '${m.weightedMape!.toStringAsFixed(1)}%',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(color: m.mapeColor,
+                      fontSize: 10, fontWeight: FontWeight.w700))),
+          ]),
+        ),
+      ]),
+    );
   }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAPE accuracy panel  — now shows true DES one-step-ahead APE breakdown
-// ─────────────────────────────────────────────────────────────────────────────
+  Widget _periodTable(_Material m) {
+    final ps    = m.periods;
+    final start = math.max(0, ps.length - 12);
+    final slice = ps.sublist(start);
 
-class _MapePanel extends StatelessWidget {
-  final _ForecastItem item;
-  const _MapePanel({required this.item});
+    return Container(
+      decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          borderRadius: BorderRadius.circular(8)),
+      child: Column(children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: const BoxDecoration(
+              color: Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
+          child: Row(children: [
+            _th('Period', flex: 3),
+            _th('Actual Consumption', flex: 4, right: true),
+            _th(m.unit.isNotEmpty ? m.unit : 'units', flex: 3, right: true),
+          ]),
+        ),
+        const Divider(height: 1, color: Color(0xFFE2E8F0)),
+        for (int i = 0; i < slice.length; i++) ...[
+          Builder(builder: (_) {
+            final v      = slice[i];
+            final fromEnd = slice.length - 1 - i;
+            final label  = fromEnd == 0 ? 'P1  last 30d'
+                : fromEnd == 1 ? 'P2  30–60d ago'
+                : fromEnd == 2 ? 'P3  60–90d ago'
+                : 'P${fromEnd + 1}  ${(fromEnd + 1) * 30}d+';
+            return Container(
+              color: fromEnd < 3
+                  ? _navy.withValues(alpha: 0.02) : null,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 5),
+              child: Row(children: [
+                Expanded(flex: 3, child: Text(label,
+                    style: TextStyle(
+                      color: fromEnd < 3 ? _navy.withValues(alpha: 0.75) : _slate,
+                      fontSize: 10,
+                      fontWeight: fromEnd < 3
+                          ? FontWeight.w700 : FontWeight.w400))),
+                Expanded(flex: 4, child: Text(
+                    v < 0.001 ? '—' : _fmt(v),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      color: v > 0.001 ? _navy : _muted,
+                      fontSize: 10,
+                      fontWeight: v > 0.001
+                          ? FontWeight.w600 : FontWeight.w400))),
+                const Expanded(flex: 3, child: SizedBox()),
+              ]),
+            );
+          }),
+          if (i < slice.length - 1)
+            const Divider(height: 1, color: Color(0xFFF8FAFC)),
+        ],
+        // Forecast row
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+              color: _navy.withValues(alpha: 0.06),
+              borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(8))),
+          child: Row(children: [
+            const Expanded(flex: 3,
+                child: Text('Forecast P0  next 30d',
+                    style: TextStyle(color: _navy, fontSize: 10,
+                        fontWeight: FontWeight.w800))),
+            Expanded(flex: 4, child: Text(
+                m.forecastUnits < 0.001 ? '0' : _fmt(m.forecastUnits),
+                textAlign: TextAlign.right,
+                style: const TextStyle(color: _navy, fontSize: 11,
+                    fontWeight: FontWeight.w800))),
+            const Expanded(flex: 3, child: SizedBox()),
+          ]),
+        ),
+      ]),
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    final color = item.mapeColor;
-
+  Widget _recoBox(_Material m, Color color) {
+    String text;
+    if (m.dailyRate < 0.001) {
+      text = m.sources.isEmpty
+          ? 'No BOM-linked product sales found. Add bill_of_materials in '
+            'Admin → Products, then Import sales data to get a demand forecast.'
+          : 'Demand is present but too low to forecast meaningful consumption. '
+            'Stock should be sufficient unless demand spikes unexpectedly.';
+    } else if (m.synthetic) {
+      final dStr = m.daysLeft.isInfinite
+          ? 'no foreseeable stockout'
+          : '~${m.daysLeft.toStringAsFixed(0)} days until stockout (estimated)';
+      final u = m.unit.isNotEmpty ? m.unit : 'units';
+      final need = math.max(0.0, m.forecastUnits - m.stock);
+      if (m.status == _Status.critical) {
+        text = 'URGENT — $dStr. Estimated reorder: ${_fmt(need)} $u. '
+            '(Baseline forecast — import real sales to improve accuracy.)';
+      } else if (m.status == _Status.atRisk) {
+        text = 'Reorder soon — $dStr. Recommended: ${_fmt(need)} $u. '
+            '(Baseline forecast — import real sales to improve accuracy.)';
+      } else {
+        text = 'Stock OK ($dStr). '
+            '${need < 0.001 ? 'No top-up needed.' : 'Top-up if needed: ${_fmt(need)} $u.'} '
+            '(Baseline forecast — import real sales to improve accuracy.)';
+      }
+    } else {
+      final dStr = m.daysLeft.isInfinite
+          ? 'no foreseeable stockout'
+          : '~${m.daysLeft.toStringAsFixed(0)} days until stockout';
+      final mNote = m.weightedMape != null
+          ? ' · MAPE ${m.mapeText} (${m.mapeGrade})' : '';
+      final need = math.max(0.0, m.forecastUnits - m.stock);
+      final u    = m.unit.isNotEmpty ? m.unit : 'units';
+      if (m.status == _Status.critical) {
+        text = 'URGENT — $dStr$mNote. Order ≥${_fmt(need)} $u now.';
+      } else if (m.status == _Status.atRisk) {
+        text = 'Reorder soon — $dStr$mNote. Recommended: ${_fmt(need)} $u.';
+      } else {
+        text = 'Stock OK ($dStr)$mNote. '
+            '${need < 0.001 ? 'No top-up needed.' : 'Top-up if needed: ${_fmt(need)} $u.'}';
+      }
+    }
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.20), width: 0.8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header row
-          Row(
-            children: [
-              Icon(Icons.analytics_outlined, color: color, size: 13),
-              const SizedBox(width: 5),
-              Text(
-                'Forecast Accuracy (MAPE)',
-                style: TextStyle(
-                    color: color,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '${item.mapeLabel}  •  ${item.mapeGradeLabel}',
-                  style: TextStyle(
-                      color: color,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-
-          if (item.mape != null) ...[
-            const SizedBox(height: 8),
-
-            // MAPE bar with threshold markers
-            LayoutBuilder(builder: (context, constraints) {
-              final totalWidth = constraints.maxWidth;
-              return Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: Container(
-                      height: 6,
-                      color: _Glass.borderMid.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: FractionallySizedBox(
-                      widthFactor:
-                      (item.mape! / 100).clamp(0.0, 1.0),
-                      child: Container(
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          borderRadius:
-                          BorderRadius.all(Radius.circular(3)),
-                          gradient: LinearGradient(
-                            colors: [
-                              Color(0xFF10B981),
-                              Color(0xFF65A30D),
-                              Color(0xFFB45309),
-                              Color(0xFFEF4444),
-                            ],
-                            stops: [0.0, 0.25, 0.50, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  for (final pct in [10.0, 25.0, 50.0])
-                    Positioned(
-                      left: totalWidth * (pct / 100) - 0.5,
-                      child: Container(
-                        width: 1,
-                        height: 6,
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
-                    ),
-                ],
-              );
-            }),
-
-            const SizedBox(height: 4),
-            const Row(
-              children: [
-                Text('0%',
-                    style:
-                    TextStyle(color: _Glass.textMuted, fontSize: 8)),
-                Spacer(),
-                Text('10',
-                    style:
-                    TextStyle(color: _Glass.textMuted, fontSize: 8)),
-                SizedBox(width: 24),
-                Text('25',
-                    style:
-                    TextStyle(color: _Glass.textMuted, fontSize: 8)),
-                SizedBox(width: 24),
-                Text('50',
-                    style:
-                    TextStyle(color: _Glass.textMuted, fontSize: 8)),
-                Spacer(),
-                Text('100%',
-                    style:
-                    TextStyle(color: _Glass.textMuted, fontSize: 8)),
-              ],
-            ),
-
-            const SizedBox(height: 6),
-
-            // DES one-step-ahead APE breakdown
-            _DesApeBreakdown(item: item),
-
-            const SizedBox(height: 4),
-            Text(
-              'MAPE = (1/n) Σ |X_t − F_t| / X_t × 100  '
-                  'where F_t is the DES one-step-ahead forecast  (α = 0.5).',
-              style: TextStyle(
-                  color: color.withValues(alpha: 0.65),
-                  fontSize: 9,
-                  height: 1.4),
-            ),
-          ] else ...[
-            const SizedBox(height: 5),
-            const Text(
-              'Need at least two 30-day periods with order data to compute MAPE.',
-              style: TextStyle(
-                  color: _Glass.textMuted,
-                  fontSize: 10,
-                  height: 1.4),
-            ),
-          ],
-        ],
-      ),
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.25))),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.lightbulb_outline, color: color, size: 14),
+        const SizedBox(width: 7),
+        Expanded(child: Text(text,
+            style: TextStyle(color: color.withValues(alpha: 0.85),
+                fontSize: 11, height: 1.4))),
+      ]),
     );
   }
-}
 
-/// Shows each DES one-step-ahead APE, sourced directly from [_DesResult].
-class _DesApeBreakdown extends StatelessWidget {
-  final _ForecastItem item;
-  const _DesApeBreakdown({required this.item});
-
-  Color _apeColor(double v) {
-    if (v < 10) return _Glass.accentEmerald;
-    if (v < 25) return const Color(0xFF65A30D);
-    if (v < 50) return _Glass.accentAmber;
-    return _Glass.accentRose;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final des      = item.desResult;
-    final sfx      = item.unit.isNotEmpty ? ' ${item.unit}/d' : '/d';
-
-    // forecasts[i] and actuals[i] are paired; actuals[0]=r2, actuals[1]=r1
-    // label index: step 0 = t2 (30–60d), step 1 = t3 (last 30d)
-    final stepLabels = ['60–90d → 30–60d', '30–60d → last 30d'];
-
-    if (des.forecasts.isEmpty) return const SizedBox.shrink();
-
-    String f(double v) => v.toStringAsFixed(2);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('DES one-step APE breakdown:',
-            style: TextStyle(color: _Glass.textMuted, fontSize: 9)),
-        const SizedBox(height: 3),
-        for (int i = 0; i < des.forecasts.length; i++) ...[
-          Builder(builder: (_) {
-            final forecast = des.forecasts[i];
-            final actual   = des.actuals[i];
-            final ape      = actual > 0.001
-                ? ((actual - forecast) / actual).abs() * 100
-                : null;
-            final label    = i < stepLabels.length
-                ? stepLabels[i]
-                : 'Step ${i + 1}';
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(label,
-                        style: const TextStyle(
-                            color: _Glass.textMuted, fontSize: 9)),
-                  ),
-                  Text('F: ${f(forecast)}$sfx',
-                      style: const TextStyle(
-                          color: _Glass.textMuted, fontSize: 9)),
-                  const SizedBox(width: 5),
-                  Text('A: ${f(actual)}$sfx',
-                      style: const TextStyle(
-                          color: _Glass.textSecondary, fontSize: 9)),
-                  const SizedBox(width: 5),
-                  if (ape != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: _apeColor(ape).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'APE ${ape.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                            color: _apeColor(ape),
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700),
-                      ),
-                    )
-                  else
-                    const Text('APE —',
-                        style: TextStyle(
-                            color: _Glass.textMuted, fontSize: 9)),
-                ],
-              ),
-            );
-          }),
-        ],
-      ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Period trend widget  — now shows DES forecast alongside actual
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _PeriodTrend extends StatelessWidget {
-  final _ForecastItem item;
-  const _PeriodTrend({required this.item});
-
-  String _fmtRate(double r) =>
-      r < 0.001 ? '—' : r.toStringAsFixed(2);
-
-  @override
-  Widget build(BuildContext context) {
-    final r3 = item.dailyRateP3; // X_1 — oldest
-    final r2 = item.dailyRateP2; // X_2
-    final r1 = item.dailyRateP1; // X_3 — most recent
-
-    // DES forecasts for t=2 and t=3 (one-step-ahead)
-    final des       = item.desResult;
-    final f2 = des.forecasts.isNotEmpty ? des.forecasts[0] : null; // forecast for X_2 period
-    final f3 = des.forecasts.length > 1  ? des.forecasts[1] : null; // forecast for X_3 period
-    // DES forecast one period beyond available data (next 30d)
-    final fNext = (r3 > 0.001 || r2 > 0.001 || r1 > 0.001)
-        ? des.forecastAhead(1).clamp(0.0, double.infinity)
-        : null;
-
-    String arrow(double prev, double curr) {
-      if (prev < 0.001 || curr < 0.001) return '•';
-      final diff = curr - prev;
-      if (diff.abs() < prev * 0.05) return '→';
-      return diff > 0 ? '↑' : '↓';
-    }
-
-    Color arrowColor(double prev, double curr) {
-      if (prev < 0.001 || curr < 0.001) return _Glass.textMuted;
-      final diff = curr - prev;
-      if (diff.abs() < prev * 0.05) return _Glass.textSecondary;
-      return diff > 0 ? _Glass.accentAmber : _Glass.accentEmerald;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: _Glass.surfaceThin,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _Glass.borderMid, width: 0.8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Consumption trend  (avg daily rate per 30-day window)',
-            style: TextStyle(color: _Glass.textMuted, fontSize: 9),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _TrendCell(
-                label: '60–90 d ago',
-                rate: _fmtRate(r3),
-                unit: item.unit,
-              ),
-              Text(
-                ' ${arrow(r3, r2)} ',
-                style: TextStyle(
-                  color: arrowColor(r3, r2),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              _TrendCell(
-                label: '30–60 d ago',
-                rate: _fmtRate(r2),
-                unit: item.unit,
-                desRate: f2 != null ? _fmtRate(f2) : null,
-              ),
-              Text(
-                ' ${arrow(r2, r1)} ',
-                style: TextStyle(
-                  color: arrowColor(r2, r1),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              _TrendCell(
-                label: 'Last 30 d',
-                rate: _fmtRate(r1),
-                unit: item.unit,
-                highlight: true,
-                desRate: f3 != null ? _fmtRate(f3) : null,
-              ),
-              Text(
-                ' → ',
-                style: TextStyle(
-                  color: _navyBlue.withValues(alpha: 0.5),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              _TrendCell(
-                label: 'Next 30 d (DES)',
-                rate: fNext != null
-                    ? _fmtRate(fNext / 30) // convert period total back to daily
-                    : '—',
-                unit: item.unit,
-                isDes: true,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TrendCell extends StatelessWidget {
-  final String label, rate, unit;
-  final String? desRate; // DES one-step forecast for this cell's period
-  final bool highlight;
-  final bool isDes;      // true for the forward-looking DES cell
-
-  const _TrendCell({
-    required this.label,
-    required this.rate,
-    required this.unit,
-    this.desRate,
-    this.highlight = false,
-    this.isDes = false,
-  });
-
-  @override
-  Widget build(BuildContext context) => Expanded(
-    child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      decoration: isDes
-          ? BoxDecoration(
-        color: _navyBlue.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-            color: _navyBlue.withValues(alpha: 0.25), width: 0.8),
-      )
-          : highlight
-          ? BoxDecoration(
-        color: _navyBlue.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(6),
-        border:
-        Border.all(color: _Glass.borderMid, width: 0.8),
-      )
-          : null,
-      child: Column(
-        children: [
-          // Actual rate
-          Text(
-            rate,
-            style: TextStyle(
-              color: isDes
-                  ? _navyBlue
-                  : highlight
-                  ? _Glass.textPrimary
-                  : _Glass.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            '${unit.isNotEmpty ? '$unit/' : ''}day',
-            style: const TextStyle(color: _Glass.textMuted, fontSize: 7),
-          ),
-          // DES forecast sub-label (shown on actual-period cells)
-          if (desRate != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              'F: $desRate',
-              style: TextStyle(
-                color: _navyBlue.withValues(alpha: 0.6),
-                fontSize: 7,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-          const SizedBox(height: 1),
-          Text(
-            label,
-            style: TextStyle(
-              color: isDes
-                  ? _navyBlue.withValues(alpha: 0.7)
-                  : highlight
-                  ? _Glass.textSecondary
-                  : _Glass.textMuted,
-              fontSize: 7,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    ),
+  Widget _syntheticNote(_Material m) => Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFCBD5E1))),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Icon(Icons.auto_graph_rounded, color: _slate, size: 14),
+      const SizedBox(width: 8),
+      Expanded(child: Text(
+        'No BOM-linked sales found. This forecast is a DES baseline derived '
+        'from the restock level (${_fmt(m.restock)} ${m.unit}/month). '
+        'Import real sales data or complete orders to replace this estimate.',
+        style: const TextStyle(color: _slate, fontSize: 10, height: 1.4))),
+    ]),
   );
+
+  Widget _noDemandNote() => Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0))),
+    child: Row(children: [
+      const Icon(Icons.info_outline, color: _muted, size: 14),
+      const SizedBox(width: 8),
+      const Expanded(child: Text(
+        'No product in the catalog has a BOM entry for this material, '
+        'or no sales exist for products that use it. '
+        'Check Admin → Products → Bill of Materials.',
+        style: TextStyle(color: _slate, fontSize: 10, height: 1.4))),
+    ]),
+  );
+
+  Widget _th(String t, {int flex = 1, bool right = false}) =>
+      Expanded(flex: flex, child: Text(t,
+          textAlign: right ? TextAlign.right : TextAlign.left,
+          style: const TextStyle(color: _muted, fontSize: 9,
+              fontWeight: FontWeight.w700)));
+
+  Widget _td(String t, {int flex = 1, bool right = false,
+    bool bold = false, bool mono = false, Color? color}) =>
+      Expanded(flex: flex, child: Text(t,
+          textAlign: right ? TextAlign.right : TextAlign.left,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: color ?? _slate,
+            fontSize: 10,
+            fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+            fontFamily: mono ? 'monospace' : null)));
+
+  static Widget _mono(String t) => Padding(
+    padding: const EdgeInsets.only(bottom: 2),
+    child: Text(t, style: const TextStyle(
+        color: _slate, fontSize: 9.5, fontFamily: 'monospace', height: 1.5)));
+
+  static Widget sectionLabel(String t) => Text(t,
+      style: const TextStyle(color: _navy, fontSize: 11,
+          fontWeight: FontWeight.w700));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Summary tile
+// Small reusable widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _SummaryTile extends StatelessWidget {
+class _HdrBtn extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _HdrBtn(this.label, this.icon, this.color, this.onTap);
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: color.withValues(alpha: 0.25))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 13, color: color.withValues(alpha: 0.85)),
+        const SizedBox(width: 5),
+        Text(label, style: TextStyle(color: color.withValues(alpha: 0.85),
+            fontSize: 11, fontWeight: FontWeight.w700)),
+      ]),
+    ));
+}
+
+class _SChip extends StatelessWidget {
   final String label;
   final int count;
   final Color color;
-  final IconData icon;
-  final bool isActive;
+  final bool active;
   final VoidCallback onTap;
-
-  const _SummaryTile({
-    required this.label,
-    required this.count,
-    required this.color,
-    required this.icon,
-    required this.isActive,
-    required this.onTap,
-  });
+  const _SChip(this.label, this.count, this.color, this.active, this.onTap);
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? _navyBlue : _Glass.surfaceMid,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isActive
-                ? Colors.white.withValues(alpha: 0.20)
-                : _Glass.borderMid,
-            width: 0.8,
-          ),
-          boxShadow: const [_Glass.rowShadow],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: isActive ? color.withValues(alpha: 0.9) : color,
-              size: 14,
-            ),
-            const SizedBox(width: 7),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  count.toString(),
-                  style: TextStyle(
-                    color: isActive ? Colors.white : _Glass.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    height: 1,
-                  ),
-                ),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: isActive
-                        ? Colors.white.withValues(alpha: 0.7)
-                        : _Glass.textSecondary,
-                    fontSize: 9,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => GestureDetector(onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: active ? _navy : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: active ? _navy : const Color(0xFFE2E8F0))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 8, height: 8,
+            decoration: BoxDecoration(
+                color: active ? color.withValues(alpha: 0.8) : color,
+                shape: BoxShape.circle)),
+        const SizedBox(width: 7),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('$count', style: TextStyle(
+            color: active ? Colors.white : _navy,
+            fontSize: 15, fontWeight: FontWeight.w800, height: 1)),
+          Text(label, style: TextStyle(
+            color: active
+                ? Colors.white.withValues(alpha: 0.7) : _slate,
+            fontSize: 9)),
+        ]),
+      ]),
+    ));
+}
+
+class _Badge extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _Badge(this.label, this.color);
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: color.withValues(alpha: 0.40))),
+    child: Text(label, style: TextStyle(
+        color: color, fontSize: 9, fontWeight: FontWeight.w700)));
+}
+
+class _StatBox extends StatelessWidget {
+  final String label, value;
+  final Color color;
+  const _StatBox(this.label, this.value, this.color);
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+    decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.20))),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: TextStyle(
+          color: color.withValues(alpha: 0.7),
+          fontSize: 9, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 2),
+      Text(value, style: TextStyle(
+          color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+    ]));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Stat chip
+// Diagnostic sheet
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _StatChip extends StatelessWidget {
-  final String label, value;
-  final Color color;
-  const _StatChip({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
+class _DiagSheet extends StatefulWidget {
+  const _DiagSheet();
+  @override
+  State<_DiagSheet> createState() => _DiagSheetState();
+}
+
+class _DiagSheetState extends State<_DiagSheet> {
+  bool _loading = true;
+  String? _error;
+  Map<String, dynamic>? _res;
+
+  @override
+  void initState() { super.initState(); _run(); }
+
+  Future<void> _run() async {
+    try {
+      final db       = FirebaseFirestore.instance;
+      final prodSnap = await db.collection('Products').get();
+      final matSnap  = await db.collection('RawMaterials').get();
+      final srSnap   = await db.collection('Sales_Records').get();
+      final ordSnap  = await db.collection('Orders')
+          .where('status', isEqualTo: 'completed').get();
+
+      final bomByName = <String, List>{};
+      final allNames  = <String>{};
+      for (final d in prodSnap.docs) {
+        final bom  = (d.data()['bill_of_materials'] as List?) ?? [];
+        final name = (d.data()['product_name']?.toString() ?? '').trim();
+        if (name.isEmpty) continue;
+        allNames.add(name);
+        bomByName[name.toLowerCase()] = bom;
+      }
+      final validMats = matSnap.docs.map((d) => d.id).toSet();
+
+      final matched   = <String, int>{};
+      final unmatched = <String, int>{};
+      final noBom     = <String, int>{};
+      final badMat    = <String, int>{};
+      int csvDocs = 0, csvLines = 0, ordDocs = ordSnap.docs.length, ordMatch = 0;
+
+      for (final doc in ordSnap.docs) {
+        bool hit = false;
+        for (final p in (doc.data()['products'] as List? ?? [])
+            .cast<Map<String, dynamic>>()) {
+          final name = (p['name']?.toString() ?? '').trim();
+          final bom  = bomByName[name.toLowerCase()] ?? [];
+          if (bom.isNotEmpty) {
+            hit = true;
+            for (final b in bom.cast<Map<String, dynamic>>()) {
+              final mid = b['material_id']?.toString() ?? '';
+              if (mid.isNotEmpty && !validMats.contains(mid)) {
+                badMat[mid] = (badMat[mid] ?? 0) + 1;
+              }
+            }
+          }
+        }
+        if (hit) ordMatch++;
+      }
+
+      for (final doc in srSnap.docs) {
+        final items = (doc.data()['products'] as List? ?? [])
+            .cast<Map<String, dynamic>>();
+        if (items.isEmpty) continue;
+        csvDocs++;
+        for (final item in items) {
+          csvLines++;
+          final name = (item['name']?.toString() ?? '').trim();
+          if (name.isEmpty) continue;
+          final bom = bomByName[name.toLowerCase()] ?? [];
+          if (bom.isEmpty) {
+            if (allNames.any((n) => n.toLowerCase() == name.toLowerCase())) {
+              noBom[name] = (noBom[name] ?? 0) + 1;
+            } else {
+              unmatched[name] = (unmatched[name] ?? 0) + 1;
+            }
+          } else {
+            final qty = (item['qty'] as num?)?.toInt() ?? 0;
+            matched[name] = (matched[name] ?? 0) + qty;
+            for (final b in bom.cast<Map<String, dynamic>>()) {
+              final mid = b['material_id']?.toString() ?? '';
+              if (mid.isNotEmpty && !validMats.contains(mid)) {
+                badMat[mid] = (badMat[mid] ?? 0) + 1;
+              }
+            }
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+        _res = {
+          'products': allNames.length, 'materials': validMats.length,
+          'csvDocs': csvDocs, 'csvLines': csvLines,
+          'ordDocs': ordDocs, 'ordMatch': ordMatch,
+          'matched': matched, 'unmatched': unmatched,
+          'noBom': noBom, 'badMat': badMat,
+        };
+        _loading = false;
+      });
+      }
+    } catch (e) {
+      if (mounted) { setState(() { _error = e.toString(); _loading = false; }); }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-            color: color.withValues(alpha: 0.20), width: 0.8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-                color: color.withValues(alpha: 0.7),
-                fontSize: 9,
-                fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
+      height: MediaQuery.of(context).size.height * 0.82,
+      decoration: const BoxDecoration(
+          color: Color(0xFFFAFAFC),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      child: Column(children: [
+        // Handle + header
+        Center(child: Container(margin: const EdgeInsets.only(top: 12),
+            width: 36, height: 4,
+            decoration: BoxDecoration(color: const Color(0xFFD1D5DB),
+                borderRadius: BorderRadius.circular(2)))),
+        Padding(padding: const EdgeInsets.fromLTRB(18, 10, 12, 10),
+          child: Row(children: [
+            const Icon(Icons.troubleshoot_rounded,
+                color: Color(0xFFB45309), size: 20),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('Forecast Diagnostic',
+                style: TextStyle(color: _navy, fontSize: 15,
+                    fontWeight: FontWeight.w800))),
+            IconButton(onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded,
+                    color: _muted, size: 20)),
+          ])),
+        const Divider(height: 1, color: Color(0xFFE5E7EB)),
+        Expanded(child: _loading
+          ? const Center(child: CircularProgressIndicator(
+              strokeWidth: 2, color: _navy))
+          : _error != null
+              ? Center(child: Text(_error!,
+                  style: const TextStyle(color: _rose, fontSize: 11)))
+              : _body()),
+      ]),
     );
   }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Legend dot
-// ─────────────────────────────────────────────────────────────────────────────
+  Widget _body() {
+    final r = _res!;
+    final matched   = r['matched']   as Map<String, int>;
+    final unmatched = r['unmatched'] as Map<String, int>;
+    final noBom     = r['noBom']     as Map<String, int>;
+    final badMat    = r['badMat']    as Map<String, int>;
 
-class _LegendDot extends StatelessWidget {
-  final Color color;
-  final String label;
-  const _LegendDot({required this.color, required this.label});
+    return ListView(padding: const EdgeInsets.all(18), children: [
+      _sec('Overview'),
+      _row('Products in catalog',      '${r['products']}'),
+      _row('Raw materials',             '${r['materials']}'),
+      _row('Sales Records (CSV docs)', '${r['csvDocs']}'),
+      _row('Total CSV line items',     '${r['csvLines']}'),
+      _row('Completed Orders',         '${r['ordDocs']}'),
+      _row('Orders with BOM match',    '${r['ordMatch']}'),
+      const SizedBox(height: 14),
 
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-              color: color, shape: BoxShape.circle)),
-      const SizedBox(width: 4),
-      Text(label,
-          style: const TextStyle(
-              color: _Glass.textMuted, fontSize: 9)),
-    ],
-  );
+      _sec('Matched ✓', color: _emerald),
+      matched.isEmpty
+          ? _hint('None matched yet — import CSV sales data.')
+          : Column(children: matched.entries.map((e) =>
+              _row(e.key, 'qty: ${e.value}', color: _emerald)).toList()),
+      const SizedBox(height: 14),
+
+      _sec('NOT in Catalog ✗', color: _rose),
+      unmatched.isEmpty
+          ? _hint('All CSV product names matched the catalog.')
+          : Column(children: [
+              _hint('Fix: make sure product_name in CSV exactly matches '
+                  'the product_name in Products.'),
+              ...unmatched.entries.map((e) =>
+                  _row('"${e.key}"', '${e.value} items', color: _rose)),
+            ]),
+      const SizedBox(height: 14),
+
+      _sec('In Catalog — No BOM ⚠', color: _amber),
+      noBom.isEmpty
+          ? _hint('All matched products have BOM entries.')
+          : Column(children: [
+              _hint('Add bill_of_materials in Admin → Products.'),
+              ...noBom.entries.map((e) =>
+                  _row(e.key, '${e.value} items', color: _amber)),
+            ]),
+      const SizedBox(height: 14),
+
+      _sec('Invalid BOM material_id ✗', color: _rose),
+      badMat.isEmpty
+          ? _hint('All BOM material IDs are valid.')
+          : Column(children: [
+              _hint('Fix: check material_id in BOM matches the '
+                  'RawMaterials document ID exactly.'),
+              ...badMat.entries.map((e) =>
+                  _row('"${e.key}"', '${e.value} entries', color: _rose)),
+            ]),
+      const SizedBox(height: 24),
+    ]);
+  }
+
+  Widget _sec(String t, {Color color = _navy}) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(t, style: TextStyle(color: color, fontSize: 12,
+        fontWeight: FontWeight.w800)));
+
+  Widget _row(String l, String v, {Color? color}) =>
+      Padding(padding: const EdgeInsets.only(bottom: 5),
+        child: Row(children: [
+          Expanded(child: Text(l, style: TextStyle(
+              color: color ?? const Color(0xFF374151), fontSize: 12,
+              fontWeight: color != null ? FontWeight.w600 : FontWeight.w400))),
+          Text(v, style: TextStyle(
+              color: color ?? _slate, fontSize: 12,
+              fontWeight: FontWeight.w600)),
+        ]));
+
+  Widget _hint(String t) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Container(
+      padding: const EdgeInsets.all(9),
+      decoration: BoxDecoration(
+          color: const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: const Color(0xFFE5E7EB))),
+      child: Text(t, style: const TextStyle(
+          color: _slate, fontSize: 10, height: 1.5))));
 }

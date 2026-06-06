@@ -6,6 +6,7 @@ import '../services/paymongo_service.dart';
 import 'app_theme.dart';
 import 'payment_webview_screen.dart';
 import 'invoice_screen.dart';
+import 'design_file_viewer.dart';
 
 class CustomerOrdersScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -968,11 +969,8 @@ class _OrderDetailSheet extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text('Note: $notes', style: const TextStyle(color: Colors.white38, fontSize: 11)),
                   ],
-                  if (fileCount > 0) ...[
-                    const SizedBox(height: 4),
-                    Text('$fileCount file${fileCount != 1 ? 's' : ''} attached',
-                        style: const TextStyle(color: Color(0xFFFFD700), fontSize: 11)),
-                  ],
+                  if (fileCount > 0)
+                    DesignFilesSection(products: [p]),
                 ],
               ),
             );

@@ -614,7 +614,9 @@ class _QueueStatusList extends StatelessWidget {
         'Nov',
         'Dec',
       ];
-      return '${m[d.month - 1]} ${d.day}, ${d.year}';
+      final hh = d.hour.toString().padLeft(2, '0');
+      final mm = d.minute.toString().padLeft(2, '0');
+      return '${m[d.month - 1]} ${d.day}, ${d.year} $hh:$mm';
     } catch (_) {
       return '—';
     }
@@ -642,10 +644,19 @@ class _QueueStatusList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Map queue job status names to Orders collection status values
+    final String ordersStatus;
+    if (jobStatus == 'active') {
+      ordersStatus = 'in_production';
+    } else if (jobStatus == 'completed') {
+      ordersStatus = 'ready';
+    } else {
+      ordersStatus = jobStatus;
+    }
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('Order_Queue')
-          .where('job_status', isEqualTo: jobStatus)
+          .collection('Orders')
+          .where('status', isEqualTo: ordersStatus)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -736,10 +747,14 @@ class _QueueStatusList extends StatelessWidget {
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
                   final data = docs[i].data() as Map<String, dynamic>;
-                  final orderId = data['order_id']?.toString() ?? '—';
+                  final orderId = data['order_id']?.toString() ?? docs[i].id;
                   final customer = data['customer_name']?.toString() ?? '—';
                   final customerId = data['customer_id']?.toString() ?? '';
-                  final status = data['job_status']?.toString() ?? jobStatus;
+                  // Normalize from Orders status to queue display convention
+                  final rawStatus = data['status']?.toString() ?? data['job_status']?.toString() ?? jobStatus;
+                  final status = rawStatus == 'in_production' ? 'active'
+                      : rawStatus == 'ready' ? 'completed'
+                      : rawStatus;
                   final total = (data['total_price'] as num?)?.toDouble() ?? 0;
                   final products =
                       (data['products'] as List?)
@@ -1198,7 +1213,9 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
         'Nov',
         'Dec',
       ];
-      return '${m[d.month - 1]} ${d.day}, ${d.year}';
+      final hh = d.hour.toString().padLeft(2, '0');
+      final mm = d.minute.toString().padLeft(2, '0');
+      return '${m[d.month - 1]} ${d.day}, ${d.year} $hh:$mm';
     } catch (_) {
       return '—';
     }
@@ -2053,6 +2070,28 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
   static final _dateFmt = DateFormat('MMM dd, yyyy hh:mm a');
 
   @override
+  void initState() {
+    super.initState();
+    _purgeOrderDeductionLogs();
+  }
+
+  Future<void> _purgeOrderDeductionLogs() async {
+    const batchSize = 400;
+    while (true) {
+      final snap = await FirebaseFirestore.instance
+          .collection('InventoryLogs')
+          .where('update_method', isEqualTo: 'order_deduction')
+          .limit(batchSize)
+          .get();
+      if (snap.docs.isEmpty) break;
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in snap.docs) batch.delete(doc.reference);
+      await batch.commit();
+      if (snap.docs.length < batchSize) break;
+    }
+  }
+
+  @override
   void dispose() {
     _empCtrl.dispose();
     _matCtrl.dispose();
@@ -2457,6 +2496,9 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
 
                 final filtered = docs.where((d) {
                   final data = d.data() as Map<String, dynamic>;
+                  if (data['update_method']?.toString() == 'order_deduction') {
+                    return false;
+                  }
                   final emp =
                       data['updated_by_name']?.toString().toLowerCase() ?? '';
                   final mat =

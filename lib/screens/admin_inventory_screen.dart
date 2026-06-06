@@ -1,18 +1,19 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'app_theme.dart';
+import 'employee_inventory_forecast_screen.dart';
 
-// ── Breakpoints ───────────────────────────────────────────────────────────────
-const double _kTableMinWidth = 548.0;
+// â”€â”€ Breakpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const double _kTableMinWidth = 628.0;
 
-// ── Shared colour constants (same as product management & admin logs) ─────────
+// â”€â”€ Shared colour constants (same as product management & admin logs) â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const Color _amber = Color(0xFFB45309);
 const Color _navyBlue = Color(0xFF0F1A2E);
 
-// ── Liquid Glass Design Tokens ────────────────────────────────────────────────
+// â”€â”€ Liquid Glass Design Tokens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _Glass {
   static const Color surface = Color(0xF8FFFFFF);
   static const Color surfaceMid = Color(0xF0FFFFFF);
@@ -65,10 +66,10 @@ class _Glass {
       );
 }
 
-// ── Shared blur filter ────────────────────────────────────────────────────────
+// â”€â”€ Shared blur filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 final _blurFilter = ImageFilter.blur(sigmaX: 14, sigmaY: 14);
 
-// ── Sub-tab enum ──────────────────────────────────────────────────────────────
+// â”€â”€ Sub-tab enum â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 enum _InventoryTab { inventory, forecast }
 
 // =============================================================================
@@ -84,6 +85,8 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
   _InventoryTab _activeTab = _InventoryTab.inventory;
   String? _statusFilter;
   bool _seeding = false;
+  bool _seedingHistory = false;
+  bool _clearingHistory = false;
 
   @override
   void initState() {
@@ -92,7 +95,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
   }
 
   // One-time migration: replaces all raw material documents with the new
-  // authoritative list of 33 materials.  Idempotent — checks RM-001 name
+  // authoritative list of 33 materials.  Idempotent â€” checks RM-001 name
   // before running, so it silently skips after the first successful run.
   Future<void> _syncRawMaterials() async {
     try {
@@ -137,11 +140,11 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
         await batch.commit();
       }
     } catch (_) {
-      // Silent — retries on next open until it succeeds.
+      // Silent â€” retries on next open until it succeeds.
     }
   }
 
-  // Counts derived from the live stream — kept here so the header can use them.
+  // Counts derived from the live stream â€” kept here so the header can use them.
   Map<String, int> _counts = {};
   int _total = 0;
 
@@ -150,12 +153,10 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     'Low Stock',
     'Critical',
     'Out of Stock',
-    'Deficit',
   ];
 
   String _computeStatus(num current, num restock) {
-    if (current < 0) return 'Deficit';
-    if (current == 0) return 'Out of Stock';
+    if (current <= 0) return 'Out of Stock';
     if (current <= restock * 0.5) return 'Critical';
     if (current <= restock) return 'Low Stock';
     return 'In Stock';
@@ -169,8 +170,6 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
         return _amber;
       case 'Critical':
         return const Color(0xFFDC2626);
-      case 'Deficit':
-        return const Color(0xFF9333EA); // purple — used more than available
       default:
         return _Glass.accentRose;
     }
@@ -181,7 +180,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     try {
       final col = FirebaseFirestore.instance.collection('RawMaterials');
 
-      // Only seed materials that do not already exist — never overwrite
+      // Only seed materials that do not already exist â€” never overwrite
       // existing documents so configured dimensions and stock are preserved.
       final existingSnap = await col.get();
       final existingIds = existingSnap.docs.map((d) => d.id).toSet();
@@ -191,7 +190,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
           .toList();
 
       if (missing.isEmpty) {
-        if (mounted) _snack('All materials already exist — nothing to seed', _Glass.accentEmerald);
+        if (mounted) _snack('All materials already exist â€” nothing to seed', _Glass.accentEmerald);
         return;
       }
 
@@ -227,6 +226,183 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
         ),
       );
 
+  // ── Historical data seeder ─────────────────────────────────────────────────
+
+  Future<void> _seedHistoricalData() async {
+    setState(() => _seedingHistory = true);
+    try {
+      final db  = FirebaseFirestore.instance;
+      final rng = math.Random(42);
+      final now = DateTime.now();
+      const numPeriods = 12;
+
+      // Build materialId → first product that uses it (via BOM)
+      final prodSnap = await db.collection('Products').get();
+      final matProd = <String, _SeedEntry>{};
+      for (final doc in prodSnap.docs) {
+        final name = (doc.data()['product_name']?.toString() ?? '').trim();
+        if (name.isEmpty) continue;
+        final bom = (doc.data()['bill_of_materials'] as List?)
+            ?.cast<Map<String, dynamic>>() ?? [];
+        for (final b in bom) {
+          final mid = b['material_id']?.toString() ?? '';
+          if (mid.isEmpty || matProd.containsKey(mid)) continue;
+          final qpu = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+          matProd[mid] = _SeedEntry(name, qpu,
+              b['for_material_option']?.toString() ?? '');
+        }
+      }
+
+      if (matProd.isEmpty) {
+        _snack(
+          'No products with BOM entries found — '
+          'add Bill of Materials to products first.',
+          _Glass.accentRose,
+        );
+        return;
+      }
+
+      // Delete any existing seed records first
+      await _deleteSeedRecords(db);
+
+      // Build all write payloads
+      final writes = <({String id, Map<String, dynamic> data})>[];
+      for (final e in matProd.entries) {
+        final mid  = e.key;
+        final prod = e.value;
+        final safeId = mid.replaceAll('-', '').toLowerCase();
+
+        for (int p = 0; p < numPeriods; p++) {
+          // Sinusoidal season + noise so MAPE is non-trivial
+          final seasonal = 1.0 + 0.45 * math.sin(p * math.pi / 6.0);
+          final noise    = 0.75 + rng.nextDouble() * 0.50;
+          final qty      = (2.5 * seasonal * noise).round().clamp(1, 9);
+
+          // Middle of period p (0 = oldest, 11 = most recent)
+          final periodsFromNow = numPeriods - p;
+          final saleDate = now.subtract(
+            Duration(days: periodsFromNow * 30 - 15),
+          );
+
+          final docId = 'hs-$safeId-p${(p + 1).toString().padLeft(2, '0')}';
+          writes.add((
+            id: docId,
+            data: {
+              'order_id'       : docId,
+              'invoice_number' : 'HIST-${mid.toUpperCase()}-P${p + 1}',
+              'customer_name'  : 'Historical Seed',
+              'order_total'    : 0.0,
+              'sale_amount'    : 0.0,
+              'payment_method' : 'seed',
+              'payment_type'   : 'full',
+              'sale_date'      : Timestamp.fromDate(saleDate),
+              'order_status'   : 'completed',
+              'payment_status' : 'paid',
+              'is_historical'  : true,
+              'import_source'  : 'historical_seed',
+              'products'       : [
+                {
+                  'name'      : prod.productName,
+                  'type'      : prod.variant,
+                  'size'      : '',
+                  'qty'       : qty,
+                  'unit_price': 0.0,
+                  'item_total': 0.0,
+                }
+              ],
+            },
+          ));
+        }
+      }
+
+      // Commit in batches of 400
+      const batchSize = 400;
+      for (int s = 0; s < writes.length; s += batchSize) {
+        final batch = db.batch();
+        for (final w in writes.skip(s).take(batchSize)) {
+          batch.set(db.collection('Sales_Records').doc(w.id), w.data);
+        }
+        await batch.commit();
+      }
+
+      if (mounted) {
+        _snack(
+          '${matProd.length} materials × 12 periods seeded — '
+          'refresh the Forecast tab to see MAPE.',
+          _Glass.accentEmerald,
+        );
+      }
+    } catch (e) {
+      if (mounted) _snack('Seed error: $e', _Glass.accentRose);
+    } finally {
+      if (mounted) setState(() => _seedingHistory = false);
+    }
+  }
+
+  Future<void> _deleteSeedRecords(FirebaseFirestore db) async {
+    while (true) {
+      final snap = await db
+          .collection('Sales_Records')
+          .where('import_source', isEqualTo: 'historical_seed')
+          .limit(400)
+          .get();
+      if (snap.docs.isEmpty) break;
+      final batch = db.batch();
+      for (final d in snap.docs) batch.delete(d.reference);
+      await batch.commit();
+    }
+  }
+
+  Future<void> _clearHistoricalData() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.25),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _Glass.surface,
+        elevation: 32,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: _Glass.borderMid),
+        ),
+        title: const Text('Clear Seeded History',
+            style: TextStyle(
+                color: _Glass.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w800)),
+        content: const Text(
+          'Deletes all auto-seeded records.\n'
+          'Real imported or system orders are NOT affected.',
+          style: TextStyle(
+              color: _Glass.textSecondary, fontSize: 13, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: _Glass.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: _Glass.accentRose),
+            child: const Text('Clear',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _clearingHistory = true);
+    try {
+      await _deleteSeedRecords(FirebaseFirestore.instance);
+      if (mounted) _snack('Seeded history cleared', _Glass.accentEmerald);
+    } catch (e) {
+      if (mounted) _snack('Error: $e', _Glass.accentRose);
+    } finally {
+      if (mounted) setState(() => _clearingHistory = false);
+    }
+  }
+
   void _handleAddMaterial() => showDialog(
     context: context,
     barrierDismissible: false,
@@ -245,13 +421,13 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     ),
   );
 
-  // ── build ───────────────────────────────────────────────────────────────────
+  // â”€â”€ build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Header card ──────────────────────────────────────────────────────
+        // â”€â”€ Header card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         ClipRRect(
           borderRadius: BorderRadius.circular(20),
           child: BackdropFilter(
@@ -262,7 +438,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Row 1: icon + title + Add Material + Re-seed ────────────
+                  // â”€â”€ Row 1: icon + title + Add Material + Re-seed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -299,7 +475,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                             ),
                             SizedBox(height: 1),
                             Text(
-                              'Raw materials — stock levels and forecast',
+                              'Raw materials â€” stock levels and forecast',
                               style: TextStyle(
                                 color: _Glass.textMuted,
                                 fontSize: 11,
@@ -309,8 +485,8 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                         ),
                       ),
 
-                      // Re-seed (ghost pill, right of title, left of Add)
                       if (_activeTab == _InventoryTab.inventory) ...[
+                        // Re-seed ghost pill
                         GestureDetector(
                           onTap: _seeding ? null : _seedInitialData,
                           child: AnimatedOpacity(
@@ -318,16 +494,12 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                             duration: const Duration(milliseconds: 150),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 9,
-                              ),
+                                  horizontal: 14, vertical: 9),
                               decoration: BoxDecoration(
                                 color: _Glass.surfaceThin,
                                 borderRadius: BorderRadius.circular(99),
                                 border: Border.all(
-                                  color: _Glass.borderMid,
-                                  width: 0.9,
-                                ),
+                                    color: _Glass.borderMid, width: 0.9),
                                 boxShadow: const [_Glass.rowShadow],
                               ),
                               child: Row(
@@ -338,62 +510,139 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                                           width: 13,
                                           height: 13,
                                           child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: _Glass.textSecondary,
-                                          ),
+                                              strokeWidth: 2,
+                                              color: _Glass.textSecondary),
                                         )
-                                      : const Icon(
-                                          Icons.refresh_rounded,
+                                      : const Icon(Icons.refresh_rounded,
                                           size: 14,
-                                          color: _Glass.textSecondary,
-                                        ),
+                                          color: _Glass.textSecondary),
                                   const SizedBox(width: 6),
-                                  const Text(
-                                    'Re-seed',
-                                    style: TextStyle(
-                                      color: _Glass.textSecondary,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+                                  const Text('Re-seed',
+                                      style: TextStyle(
+                                          color: _Glass.textSecondary,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600)),
                                 ],
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
-                      ],
-
-                      // Add Material (primary pill)
-                      GestureDetector(
-                        onTap: _handleAddMaterial,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 9,
-                          ),
-                          decoration: _Glass.solidPill(_navyBlue, glow: true),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.add_rounded,
-                                size: 14,
-                                color: Colors.white,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Add Material',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
+                        // Add Material primary pill
+                        GestureDetector(
+                          onTap: _handleAddMaterial,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 9),
+                            decoration: _Glass.solidPill(_navyBlue, glow: true),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.add_rounded,
+                                    size: 14, color: Colors.white),
+                                SizedBox(width: 6),
+                                Text('Add Material',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700)),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
+                      ] else ...[
+                        // Seed History pill
+                        GestureDetector(
+                          onTap: (_seedingHistory || _clearingHistory)
+                              ? null
+                              : _seedHistoricalData,
+                          child: AnimatedOpacity(
+                            opacity: _seedingHistory ? 0.5 : 1.0,
+                            duration: const Duration(milliseconds: 150),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 9),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981)
+                                    .withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(99),
+                                border: Border.all(
+                                    color: const Color(0xFF10B981)
+                                        .withValues(alpha: 0.35),
+                                    width: 0.9),
+                                boxShadow: const [_Glass.rowShadow],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _seedingHistory
+                                      ? const SizedBox(
+                                          width: 13,
+                                          height: 13,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Color(0xFF10B981)),
+                                        )
+                                      : const Icon(Icons.auto_graph_rounded,
+                                          size: 14,
+                                          color: Color(0xFF10B981)),
+                                  const SizedBox(width: 6),
+                                  const Text('Seed 12-mo History',
+                                      style: TextStyle(
+                                          color: Color(0xFF10B981),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Clear seeded history pill
+                        GestureDetector(
+                          onTap: (_seedingHistory || _clearingHistory)
+                              ? null
+                              : _clearHistoricalData,
+                          child: AnimatedOpacity(
+                            opacity: _clearingHistory ? 0.5 : 1.0,
+                            duration: const Duration(milliseconds: 150),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 9),
+                              decoration: BoxDecoration(
+                                color: _Glass.accentRose.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(99),
+                                border: Border.all(
+                                    color: _Glass.accentRose
+                                        .withValues(alpha: 0.30),
+                                    width: 0.9),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _clearingHistory
+                                      ? const SizedBox(
+                                          width: 13,
+                                          height: 13,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: _Glass.accentRose),
+                                        )
+                                      : const Icon(Icons.delete_sweep_rounded,
+                                          size: 14,
+                                          color: _Glass.accentRose),
+                                  const SizedBox(width: 6),
+                                  const Text('Clear Seed',
+                                      style: TextStyle(
+                                          color: _Glass.accentRose,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
 
@@ -401,7 +650,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                   Divider(height: 1, color: _Glass.borderDim),
                   const SizedBox(height: 12),
 
-                  // ── Row 2: sub-tab pills ────────────────────────────────────
+                  // â”€â”€ Row 2: sub-tab pills â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                   Row(
                     children: [
                       _TabPill(
@@ -423,7 +672,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                     ],
                   ),
 
-                  // ── Row 3: status filter pills with counts (Inventory tab only)
+                  // â”€â”€ Row 3: status filter pills with counts (Inventory tab only)
                   if (_activeTab == _InventoryTab.inventory) ...[
                     const SizedBox(height: 12),
                     SingleChildScrollView(
@@ -465,17 +714,17 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
 
         const SizedBox(height: 10),
 
-        // ── Body ─────────────────────────────────────────────────────────────
+        // â”€â”€ Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Expanded(
           child: _activeTab == _InventoryTab.forecast
-              ? const _ForecastContent()
+              ? const EmployeeInventoryForecastScreen()
               : _buildInventoryContent(),
         ),
       ],
     );
   }
 
-  // ── Inventory content ───────────────────────────────────────────────────────
+  // â”€â”€ Inventory content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildInventoryContent() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -697,7 +946,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     );
   }
 
-  // ── Dialogs ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Dialogs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _confirmDelete(BuildContext context, Map<String, dynamic> m) {
     final docId = m['doc_id']?.toString() ?? '';
     final name = m['material_name']?.toString() ?? docId;
@@ -884,7 +1133,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
 }
 
 // =============================================================================
-// _TabPill — pill-shaped sub-tab (same style as category pills)
+// _TabPill â€” pill-shaped sub-tab (same style as category pills)
 // =============================================================================
 class _TabPill extends StatelessWidget {
   final String label;
@@ -936,9 +1185,9 @@ class _TabPill extends StatelessWidget {
 }
 
 // =============================================================================
-// _FilterPill — status filter pill with inline count
+// _FilterPill â€” status filter pill with inline count
 // Design: dot + label run together; count sits in a clean filled chip,
-// no border — just background tint. Consistent across all states.
+// no border â€” just background tint. Consistent across all states.
 // =============================================================================
 class _FilterPill extends StatelessWidget {
   final String label;
@@ -980,7 +1229,7 @@ class _FilterPill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Dot — always the status color; on active navy bg a thin white
+            // Dot â€” always the status color; on active navy bg a thin white
             // halo ring makes it pop against the dark fill.
             Container(
               width: 8,
@@ -1009,7 +1258,7 @@ class _FilterPill extends StatelessWidget {
               ),
             ),
 
-            // Count chip — borderless, just a tinted background
+            // Count chip â€” borderless, just a tinted background
             if (count != null) ...[
               const SizedBox(width: 7),
               AnimatedContainer(
@@ -1058,8 +1307,12 @@ class _TableHeader extends StatelessWidget {
         SizedBox(width: 74, child: Text('Code', style: _h)),
         Expanded(child: Text('Material', style: _h)),
         SizedBox(
-          width: 150,
+          width: 120,
           child: Text('Available Stock', style: _h, textAlign: TextAlign.center),
+        ),
+        SizedBox(
+          width: 110,
+          child: Text('Restock Level', style: _h, textAlign: TextAlign.center),
         ),
         SizedBox(
           width: 90,
@@ -1100,20 +1353,32 @@ class _MaterialRow extends StatelessWidget {
     final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
     final baseUom  = data['base_uom']?.toString() ??
         (su == 'Piece' ? 'pc' : 'sqft');
+    final restock      = (data['restock_level'] as num?)?.toDouble() ?? 0;
     final subLine      = _buildMatSubLine(data);
     final isStructured = su.isNotEmpty;
     final isPiece      = su == 'Piece';
-    final isDeficit    = current < 0;
-    final stockColor   = isDeficit
-        ? const Color(0xFF9333EA) // purple for deficit
-        : _Glass.textPrimary;
+
+    String fmtRestock(double val) {
+      if (!isStructured) return _fmtNum(val);
+      if (isPiece) {
+        if (baseUom == 'sheet' && unitSqft > 1) {
+          final packs = unitSqft > 0 ? val / unitSqft : 0.0;
+          return '${_fmtNum(val)} sh / ${_fmtNum(packs)} pk';
+        }
+        final label = baseUom == 'sheet' ? 'sh' : 'pcs';
+        return '${_fmtNum(val)} $label';
+      }
+      final stockUnits = unitSqft > 0 ? val / unitSqft : 0.0;
+      final label = _stockUnitLabel(su);
+      return '${_fmtNum(stockUnits)} ${label}s';
+    }
 
     // Available stock display
     Widget stockCell;
     if (!isStructured) {
       stockCell = Text(
         _fmtNum(current),
-        style: TextStyle(color: stockColor, fontSize: 13, fontWeight: FontWeight.w700),
+        style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
         textAlign: TextAlign.center,
       );
     } else if (isPiece) {
@@ -1123,10 +1388,10 @@ class _MaterialRow extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('${_fmtNum(current)} sheets',
-                style: TextStyle(color: stockColor, fontSize: 12, fontWeight: FontWeight.w700),
+                style: const TextStyle(color: _Glass.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
                 textAlign: TextAlign.center),
             Text('${_fmtNum(packs)} packs',
-                style: TextStyle(color: isDeficit ? stockColor : _Glass.textMuted, fontSize: 11),
+                style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
                 textAlign: TextAlign.center),
           ],
         );
@@ -1134,7 +1399,7 @@ class _MaterialRow extends StatelessWidget {
         final label = baseUom == 'sheet' ? 'sheets' : 'pcs';
         stockCell = Text(
           '${_fmtNum(current)} $label',
-          style: TextStyle(color: stockColor, fontSize: 13, fontWeight: FontWeight.w700),
+          style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
           textAlign: TextAlign.center,
         );
       }
@@ -1147,12 +1412,12 @@ class _MaterialRow extends StatelessWidget {
         children: [
           Text(
             '${_fmtNum(current)} $baseUom',
-            style: TextStyle(color: stockColor, fontSize: 12, fontWeight: FontWeight.w700),
+            style: const TextStyle(color: _Glass.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
             textAlign: TextAlign.center,
           ),
           Text(
             '${_fmtNum(stockUnits)} ${label}s',
-            style: TextStyle(color: isDeficit ? stockColor : _Glass.textMuted, fontSize: 11),
+            style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
             textAlign: TextAlign.center,
           ),
         ],
@@ -1210,7 +1475,22 @@ class _MaterialRow extends StatelessWidget {
             ),
           ),
           // Available stock
-          SizedBox(width: 150, child: Center(child: stockCell)),
+          SizedBox(width: 120, child: Center(child: stockCell)),
+          // Restock level
+          SizedBox(
+            width: 110,
+            child: Center(
+              child: Text(
+                restock > 0 ? fmtRestock(restock) : '—',
+                style: const TextStyle(
+                  color: _Glass.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
           // Status badge
           SizedBox(
             width: 90,
@@ -1304,7 +1584,7 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
   String _wUnit    = 'ft';
   final _lCtrl     = TextEditingController();
   String _lUnit    = 'm';
-  String _baseUom  = 'pc'; // 'pc' | 'sheet' — only relevant for Piece type
+  String _baseUom  = 'pc'; // 'pc' | 'sheet' â€” only relevant for Piece type
   final _packSizeCtrl = TextEditingController(text: '1'); // sheets per pack
   final _restockCtrl = TextEditingController(text: '5');
   final _stockCtrl   = TextEditingController(text: '0');
@@ -1380,7 +1660,7 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ── Title bar ─────────────────────────────────────────────────
+              // â”€â”€ Title bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
                 child: Row(
@@ -1409,7 +1689,7 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
               ),
               const Divider(color: _Glass.borderMid, height: 16, thickness: 0.8),
 
-              // ── Form ──────────────────────────────────────────────────────
+              // â”€â”€ Form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
                 child: Form(
@@ -1469,7 +1749,7 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            '→ ${_fmtNum(_unitSizeSqft)} sheets per pack',
+                            'â†’ ${_fmtNum(_unitSizeSqft)} sheets per pack',
                             style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
                           ),
                         ],
@@ -1578,7 +1858,7 @@ class _AddMaterialDialogState extends State<_AddMaterialDialog> {
                 ),
               ),
 
-              // ── Action bar ────────────────────────────────────────────────
+              // â”€â”€ Action bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               Container(
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
                 decoration: const BoxDecoration(
@@ -2258,1553 +2538,6 @@ class _DimensionRow extends StatelessWidget {
   );
 }
 
-// =============================================================================
-// Forecast content (unchanged algorithm, updated tokens & styling)
-// =============================================================================
-class _ForecastContent extends StatefulWidget {
-  const _ForecastContent();
-  @override
-  State<_ForecastContent> createState() => _ForecastContentState();
-}
-
-class _ForecastContentState extends State<_ForecastContent> {
-  bool _loading = true;
-  String? _error;
-  List<_FItem> _items = [];
-  String _filter = 'All';
-  String _sort = 'Days Left';
-
-  static const _winDays = 90;
-  static const _perDays = 30;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final db = FirebaseFirestore.instance;
-      final now = DateTime.now();
-      final nowTs = Timestamp.fromDate(now);
-      final p1Start = Timestamp.fromDate(
-        now.subtract(const Duration(days: 30)),
-      );
-      final p2Start = Timestamp.fromDate(
-        now.subtract(const Duration(days: 60)),
-      );
-      final p3Start = Timestamp.fromDate(
-        now.subtract(const Duration(days: 90)),
-      );
-
-      final matSnap = await db.collection('RawMaterials').get();
-      final mats = {for (final d in matSnap.docs) d.id: d.data()};
-
-      final prodSnap = await db.collection('Products').get();
-      final bomById = <String, List<Map<String, dynamic>>>{};
-      final bomByName = <String, List<Map<String, dynamic>>>{};
-      for (final d in prodSnap.docs) {
-        final bom =
-            (d.data()['bill_of_materials'] as List?)
-                ?.cast<Map<String, dynamic>>() ??
-            [];
-        bomById[d.id] = bom;
-        final n = d.data()['product_name']?.toString() ?? '';
-        if (n.isNotEmpty) bomByName[n] = bom;
-      }
-
-      void accum(
-        List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-        Timestamp from,
-        Timestamp to,
-        Map<String, double> out,
-      ) {
-        for (final doc in docs) {
-          final ts = doc.data()['created_at'] as Timestamp?;
-          if (ts == null || ts.compareTo(from) < 0 || ts.compareTo(to) >= 0)
-            continue;
-          for (final p
-              in (doc.data()['products'] as List?)
-                      ?.cast<Map<String, dynamic>>() ??
-                  []) {
-            final pid     = p['product_id']?.toString() ?? '';
-            final nm      = p['name']?.toString() ?? '';
-            final variant = p['material']?.toString() ?? '';
-            final qty     = (p['qty'] as num?)?.toDouble() ?? 1;
-            for (final b in bomById[pid] ?? bomByName[nm] ?? []) {
-              final forVariant = b['for_material_option']?.toString() ?? '';
-              if (forVariant.isNotEmpty && forVariant != variant) continue;
-              final mid = b['material_id']?.toString() ?? '';
-              final qpu = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1;
-              if (mid.isNotEmpty) out[mid] = (out[mid] ?? 0) + qty * qpu;
-            }
-          }
-        }
-      }
-
-      // Fetch completed orders, sales records and inventory logs in parallel
-      final fetchResults = await Future.wait([
-        db.collection('Orders').where('status', isEqualTo: 'completed').get(),
-        db.collection('Sales_Records').get(),
-        db.collection('InventoryLogs').get(),
-      ]);
-      final orderSnap    = fetchResults[0];
-      final salesRecSnap = fetchResults[1];
-      final logSnap      = fetchResults[2];
-
-      final c1 = <String, double>{};
-      final c2 = <String, double>{};
-      final c3 = <String, double>{};
-
-      // From completed Orders (uses created_at)
-      accum(orderSnap.docs, p1Start, nowTs, c1);
-      accum(orderSnap.docs, p2Start, p1Start, c2);
-      accum(orderSnap.docs, p3Start, p2Start, c3);
-
-      // From Sales_Records — imported records store products in a products[] array
-      // each item: { name: product_name, type: variant_name, qty: N }
-      // BOM entries have for_material_option: '' (all) or a specific variant name.
-      for (final period in [
-        (p1Start, nowTs,   c1),
-        (p2Start, p1Start, c2),
-        (p3Start, p2Start, c3),
-      ]) {
-        for (final doc in salesRecSnap.docs) {
-          final ts = doc.data()['sale_date'] as Timestamp?;
-          if (ts == null) continue;
-          if (ts.compareTo(period.$1) < 0) continue;
-          if (ts.compareTo(period.$2) >= 0) continue;
-
-          final lineItems =
-              (doc.data()['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-          for (final item in lineItems) {
-            final productName = item['name']?.toString() ?? '';
-            final variantName = item['type']?.toString() ?? '';
-            final qty = (item['qty'] as num?)?.toDouble() ?? 1.0;
-            if (productName.isEmpty || qty <= 0) continue;
-
-            final bom = bomByName[productName] ?? [];
-            for (final b in bom) {
-              final forVariant = b['for_material_option']?.toString() ?? '';
-              if (forVariant.isNotEmpty && forVariant != variantName) continue;
-              final mid = b['material_id']?.toString() ?? '';
-              final qpu = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
-              if (mid.isNotEmpty) period.$3[mid] = (period.$3[mid] ?? 0) + qty * qpu;
-            }
-          }
-        }
-      }
-
-      final repMap = <String, double>{};
-      for (final d in logSnap.docs) {
-        final ts = d.data()['timestamp'] as Timestamp?;
-        if (ts != null && ts.compareTo(p3Start) < 0) continue;
-        final mid = d.data()['material_id']?.toString() ?? '';
-        final qty = (d.data()['quantity_added'] as num?)?.toDouble() ?? 0;
-        if (mid.isNotEmpty) repMap[mid] = (repMap[mid] ?? 0) + qty;
-      }
-
-      final items = <_FItem>[];
-      for (final e in mats.entries) {
-        final mid  = e.key;
-        final data = e.value;
-        final name = data['material_name']?.toString() ?? mid;
-        final su       = data['stocking_unit']?.toString() ?? '';
-        final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
-        final unitDesc = data['unit_description']?.toString() ?? '';
-        final unit = unitDesc.isNotEmpty ? unitDesc : (su.isNotEmpty ? su : '');
-
-        final rawStk = (data['current_stock'] as num?)?.toDouble() ?? 0;
-        final rawRst = (data['restock_level'] as num?)?.toDouble() ?? 0;
-
-        // Convert base units (sqft) → stocking units for display
-        final isNewStyle = unitSqft > 0.001 && su.isNotEmpty;
-        final stk = isNewStyle ? rawStk / unitSqft : rawStk;
-        final rst = isNewStyle ? rawRst / unitSqft : rawRst;
-
-        final rawV1 = c1[mid] ?? 0.0;
-        final rawV2 = c2[mid] ?? 0.0;
-        final rawV3 = c3[mid] ?? 0.0;
-        final v1 = isNewStyle ? rawV1 / unitSqft : rawV1;
-        final v2 = isNewStyle ? rawV2 / unitSqft : rawV2;
-        final v3 = isNewStyle ? rawV3 / unitSqft : rawV3;
-
-        final r1 = v1 / _perDays;
-        final r2 = v2 / _perDays;
-        final r3 = v3 / _perDays;
-        final total = v1 + v2 + v3;
-
-        final rawRep = repMap[mid] ?? 0.0;
-        final rep = isNewStyle ? rawRep / unitSqft : rawRep;
-
-        final daily = total > 0
-            ? total / _winDays
-            : (rep > 0 ? rep / _winDays : 0.0);
-        double? mape;
-        {
-          final errs = <double>[];
-          if (r2 > 0.001 && r3 > 0) errs.add(((r2 - r3) / r2).abs() * 100);
-          if (r1 > 0.001 && r2 > 0) errs.add(((r1 - r2) / r1).abs() * 100);
-          if (errs.isNotEmpty)
-            mape = errs.reduce((a, b) => a + b) / errs.length;
-        }
-        final dOut = daily > 0.001 ? stk / daily : double.infinity;
-        final dRe = (daily > 0.001 && stk > rst)
-            ? (stk - rst) / daily
-            : (stk <= rst ? 0.0 : double.infinity);
-        final rec = daily > 0 ? math.max(0.0, daily * 30 - stk) : 0.0;
-        items.add(
-          _FItem(
-            id: mid,
-            name: name,
-            unit: unit,
-            stock: stk,
-            restock: rst,
-            daily: daily,
-            r1: r1,
-            r2: r2,
-            r3: r3,
-            dOut: dOut,
-            dRe: dRe,
-            consumed: total,
-            replenished: rep,
-            rec30: rec,
-            mape: mape,
-          ),
-        );
-      }
-      setState(() {
-        _items = items;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  List<_FItem> get _filtered {
-    var list = _items.where((it) {
-      switch (_filter) {
-        case 'Critical':
-          return it.urgency == _FUrg.critical;
-        case 'At Risk':
-          return it.urgency == _FUrg.atRisk;
-        case 'Healthy':
-          return it.urgency == _FUrg.healthy;
-        default:
-          return true;
-      }
-    }).toList();
-    list.sort((a, b) {
-      switch (_sort) {
-        case 'Name':
-          return a.name.compareTo(b.name);
-        case 'Consumption':
-          return b.daily.compareTo(a.daily);
-        case 'MAPE':
-          return (b.mape ?? double.infinity).compareTo(
-            a.mape ?? double.infinity,
-          );
-        default:
-          return (a.dOut.isInfinite ? 99999.0 : a.dOut).compareTo(
-            b.dOut.isInfinite ? 99999.0 : b.dOut,
-          );
-      }
-    });
-    return list;
-  }
-
-  int _cnt(_FUrg u) => _items.where((it) => it.urgency == u).length;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget body;
-
-    if (_loading) {
-      body = Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              color: _navyBlue.withValues(alpha: 0.4),
-              strokeWidth: 2,
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Analysing forecast…',
-              style: TextStyle(color: _Glass.textMuted, fontSize: 13),
-            ),
-          ],
-        ),
-      );
-    } else if (_error != null) {
-      body = Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                color: _Glass.accentRose,
-                size: 44,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: const TextStyle(
-                  color: _Glass.textSecondary,
-                  fontSize: 13,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: _load,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
-                  ),
-                  decoration: _Glass.solidPill(_navyBlue, glow: true),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.refresh_rounded,
-                        size: 14,
-                        color: Colors.white,
-                      ),
-                      SizedBox(width: 6),
-                      Text(
-                        'Retry',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    } else if (_items.isEmpty) {
-      body = const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.trending_up_rounded, size: 44, color: _Glass.textMuted),
-            SizedBox(height: 12),
-            Text(
-              'No materials found',
-              style: TextStyle(color: _Glass.textSecondary, fontSize: 14),
-            ),
-          ],
-        ),
-      );
-    } else {
-      final filtered = _filtered;
-      body = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Forecast header band
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFAFBFC),
-              border: Border(
-                bottom: BorderSide(color: _Glass.borderDim, width: 0.8),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Inventory Forecast',
-                            style: TextStyle(
-                              color: _Glass.textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                          SizedBox(height: 1),
-                          Text(
-                            'Based on last 90 days · MAPE accuracy',
-                            style: TextStyle(
-                              color: _Glass.textMuted,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: _load,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 9,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _Glass.surfaceThin,
-                          borderRadius: BorderRadius.circular(99),
-                          border: Border.all(
-                            color: _Glass.borderMid,
-                            width: 0.9,
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.refresh_rounded,
-                              size: 14,
-                              color: _Glass.textSecondary,
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              'Refresh',
-                              style: TextStyle(
-                                color: _Glass.textSecondary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Urgency tiles
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _FTile(
-                        label: 'Critical',
-                        count: _cnt(_FUrg.critical),
-                        color: _Glass.accentRose,
-                        icon: Icons.warning_amber_rounded,
-                        isActive: _filter == 'Critical',
-                        onTap: () => setState(
-                          () => _filter = _filter == 'Critical'
-                              ? 'All'
-                              : 'Critical',
-                        ),
-                      ),
-                      _FTile(
-                        label: 'At Risk',
-                        count: _cnt(_FUrg.atRisk),
-                        color: _amber,
-                        icon: Icons.access_time_rounded,
-                        isActive: _filter == 'At Risk',
-                        onTap: () => setState(
-                          () => _filter = _filter == 'At Risk'
-                              ? 'All'
-                              : 'At Risk',
-                        ),
-                      ),
-                      _FTile(
-                        label: 'Healthy',
-                        count: _cnt(_FUrg.healthy),
-                        color: _Glass.accentEmerald,
-                        icon: Icons.check_circle_outline_rounded,
-                        isActive: _filter == 'Healthy',
-                        onTap: () => setState(
-                          () => _filter = _filter == 'Healthy'
-                              ? 'All'
-                              : 'Healthy',
-                        ),
-                      ),
-                      _FTile(
-                        label: 'No Data',
-                        count: _cnt(_FUrg.noData),
-                        color: _Glass.textMuted,
-                        icon: Icons.help_outline_rounded,
-                        isActive: false,
-                        onTap: () {},
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Sort chips
-                Row(
-                  children: [
-                    const Text(
-                      'Sort: ',
-                      style: TextStyle(color: _Glass.textMuted, fontSize: 11),
-                    ),
-                    ...['Days Left', 'Name', 'Consumption', 'MAPE'].map(
-                      (s) => Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: GestureDetector(
-                          onTap: () => setState(() => _sort = s),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _sort == s
-                                  ? _navyBlue
-                                  : _Glass.surfaceThin,
-                              borderRadius: BorderRadius.circular(99),
-                              border: Border.all(
-                                color: _sort == s
-                                    ? Colors.white.withValues(alpha: 0.20)
-                                    : _Glass.borderMid,
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Text(
-                              s,
-                              style: TextStyle(
-                                color: _sort == s
-                                    ? Colors.white
-                                    : _Glass.textSecondary,
-                                fontSize: 12,
-                                fontWeight: _sort == s
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 4,
-                  children: const [
-                    _FLDot(color: _Glass.accentRose, label: 'Critical ≤7d'),
-                    _FLDot(color: _amber, label: 'At Risk ≤21d'),
-                    _FLDot(color: _Glass.accentEmerald, label: 'Healthy >21d'),
-                    _FLDot(
-                      color: _Glass.accentEmerald,
-                      label: 'MAPE Excellent <10%',
-                    ),
-                    _FLDot(color: Color(0xFF65A30D), label: 'Good 10–25%'),
-                    _FLDot(color: _amber, label: 'Fair 25–50%'),
-                    _FLDot(color: _Glass.accentRose, label: 'Poor ≥50%'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          Expanded(
-            child: filtered.isEmpty
-                ? Center(
-                    child: Text(
-                      'No materials in "$_filter"',
-                      style: const TextStyle(
-                        color: _Glass.textMuted,
-                        fontSize: 13,
-                      ),
-                    ),
-                  )
-                : Builder(builder: (ctx) {
-                    final scrollCtrl = ScrollController();
-                    return Scrollbar(
-                      controller: scrollCtrl,
-                      thumbVisibility: true,
-                      trackVisibility: true,
-                      child: ListView.separated(
-                        controller: scrollCtrl,
-                        padding: const EdgeInsets.all(14),
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (_, i) => _FCard(item: filtered[i]),
-                      ),
-                    );
-                  }),
-          ),
-        ],
-      );
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: _blurFilter,
-        child: Container(
-          decoration: _Glass.glass(radius: 20, elevated: true),
-          child: body,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Forecast model ────────────────────────────────────────────────────────────
-enum _FUrg { critical, atRisk, healthy, noData }
-
-enum _FMGrade { excellent, good, fair, poor, unavailable }
-
-class _FItem {
-  final String id, name, unit;
-  final double stock, restock, daily, r1, r2, r3;
-  final double dOut, dRe, consumed, replenished, rec30;
-  final double? mape;
-
-  const _FItem({
-    required this.id,
-    required this.name,
-    required this.unit,
-    required this.stock,
-    required this.restock,
-    required this.daily,
-    required this.r1,
-    required this.r2,
-    required this.r3,
-    required this.dOut,
-    required this.dRe,
-    required this.consumed,
-    required this.replenished,
-    required this.rec30,
-    required this.mape,
-  });
-
-  _FUrg get urgency {
-    if (daily < 0.001) return _FUrg.noData;
-    if (dOut <= 7 || stock <= 0) return _FUrg.critical;
-    if (dOut <= 21 || stock <= restock) return _FUrg.atRisk;
-    return _FUrg.healthy;
-  }
-
-  Color get uColor {
-    switch (urgency) {
-      case _FUrg.critical:
-        return _Glass.accentRose;
-      case _FUrg.atRisk:
-        return _amber;
-      case _FUrg.healthy:
-        return _Glass.accentEmerald;
-      case _FUrg.noData:
-        return _Glass.textMuted;
-    }
-  }
-
-  String get uLabel {
-    switch (urgency) {
-      case _FUrg.critical:
-        return 'Critical';
-      case _FUrg.atRisk:
-        return 'At Risk';
-      case _FUrg.healthy:
-        return 'Healthy';
-      case _FUrg.noData:
-        return 'No Data';
-    }
-  }
-
-  String get daysLabel => dOut.isInfinite ? '∞' : dOut.toStringAsFixed(0);
-
-  _FMGrade get mapeGrade {
-    if (mape == null) return _FMGrade.unavailable;
-    if (mape! < 10) return _FMGrade.excellent;
-    if (mape! < 25) return _FMGrade.good;
-    if (mape! < 50) return _FMGrade.fair;
-    return _FMGrade.poor;
-  }
-
-  String get mapeLabel => mape == null ? 'N/A' : '${mape!.toStringAsFixed(1)}%';
-  String get mapeGradeLabel {
-    switch (mapeGrade) {
-      case _FMGrade.excellent:
-        return 'Excellent';
-      case _FMGrade.good:
-        return 'Good';
-      case _FMGrade.fair:
-        return 'Fair';
-      case _FMGrade.poor:
-        return 'Poor';
-      case _FMGrade.unavailable:
-        return 'N/A';
-    }
-  }
-
-  Color get mColor {
-    switch (mapeGrade) {
-      case _FMGrade.excellent:
-        return _Glass.accentEmerald;
-      case _FMGrade.good:
-        return const Color(0xFF65A30D);
-      case _FMGrade.fair:
-        return _amber;
-      case _FMGrade.poor:
-        return _Glass.accentRose;
-      case _FMGrade.unavailable:
-        return _Glass.textMuted;
-    }
-  }
-}
-
-// ── Forecast card ─────────────────────────────────────────────────────────────
-class _FCard extends StatefulWidget {
-  final _FItem item;
-  const _FCard({required this.item});
-  @override
-  State<_FCard> createState() => _FCardState();
-}
-
-class _FCardState extends State<_FCard> {
-  bool _expanded = false;
-  String _fmt(double v) {
-    if (v == v.truncateToDouble()) return v.toInt().toString();
-    return v.abs() < 1 ? v.toStringAsFixed(3) : v.toStringAsFixed(2);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final it = widget.item;
-    final color = it.uColor;
-    final stockPct = it.restock > 0
-        ? (it.stock / (it.restock * 3)).clamp(0.0, 1.0)
-        : (it.stock > 0 ? 1.0 : 0.0);
-
-    return GestureDetector(
-      onTap: () => setState(() => _expanded = !_expanded),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          color: _expanded ? color.withValues(alpha: 0.04) : _Glass.surfaceMid,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _expanded ? color.withValues(alpha: 0.35) : _Glass.borderMid,
-            width: _expanded ? 1.0 : 0.8,
-          ),
-          boxShadow: const [_Glass.rowShadow],
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: color.withValues(alpha: 0.10),
-                      border: Border.all(color: color.withValues(alpha: 0.35)),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            it.daysLabel,
-                            style: TextStyle(
-                              color: color,
-                              fontSize: it.daysLabel.length > 3 ? 9 : 13,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            'days',
-                            style: TextStyle(
-                              color: color.withValues(alpha: 0.6),
-                              fontSize: 7,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                it.name,
-                                style: const TextStyle(
-                                  color: _Glass.textPrimary,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: color.withValues(alpha: 0.10),
-                                borderRadius: BorderRadius.circular(99),
-                                border: Border.all(
-                                  color: color.withValues(alpha: 0.35),
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Text(
-                                it.uLabel,
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 5),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: stockPct,
-                            minHeight: 4,
-                            backgroundColor: _Glass.borderMid.withValues(
-                              alpha: 0.4,
-                            ),
-                            valueColor: AlwaysStoppedAnimation<Color>(color),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Text(
-                              it.unit.isNotEmpty
-                                  ? 'Stock: ${_fmt(it.stock)} × ${it.unit}'
-                                  : 'Stock: ${_fmt(it.stock)}',
-                              style: const TextStyle(
-                                color: _Glass.textSecondary,
-                                fontSize: 11,
-                              ),
-                            ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: it.mColor.withValues(alpha: 0.10),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: it.mColor.withValues(alpha: 0.30),
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.analytics_outlined,
-                                    color: it.mColor,
-                                    size: 8,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    'MAPE ${it.mapeLabel}',
-                                    style: TextStyle(
-                                      color: it.mColor,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6),
-                    child: AnimatedRotation(
-                      turns: _expanded ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 180),
-                      child: const Icon(
-                        Icons.keyboard_arrow_down,
-                        color: _Glass.textMuted,
-                        size: 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            if (_expanded)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Divider(color: _Glass.borderDim, height: 1),
-                    const SizedBox(height: 10),
-                    _FMapePanel(item: it),
-                    const SizedBox(height: 8),
-                    _FPeriodTrend(item: it),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        _FStatChip(
-                          label: 'Days to Stockout',
-                          value: it.dOut.isInfinite
-                              ? '∞'
-                              : '~${it.dOut.toStringAsFixed(0)} days',
-                          color: color,
-                        ),
-                        _FStatChip(
-                          label: 'Days to Restock',
-                          value: it.daily < 0.001
-                              ? '—'
-                              : it.dRe <= 0
-                              ? 'Already below!'
-                              : '~${it.dRe.toStringAsFixed(0)} days',
-                          color: _amber,
-                        ),
-                        _FStatChip(
-                          label: '90d Consumed',
-                          value: it.consumed > 0
-                              ? _fmt(it.consumed)
-                              : 'No data',
-                          color: const Color(0xFF1D4ED8),
-                        ),
-                        _FStatChip(
-                          label: '90d Replenished',
-                          value: it.replenished > 0
-                              ? _fmt(it.replenished)
-                              : 'None',
-                          color: _Glass.accentEmerald,
-                        ),
-                        _FStatChip(
-                          label: 'Restock Level',
-                          value: _fmt(it.restock),
-                          color: _Glass.textSecondary,
-                        ),
-                      ],
-                    ),
-                    if (it.daily > 0.001) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: color.withValues(alpha: 0.20),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              Icons.lightbulb_outline_rounded,
-                              color: color,
-                              size: 14,
-                            ),
-                            const SizedBox(width: 7),
-                            Expanded(
-                              child: Text(
-                                _rec(it),
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: 11,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    if (it.daily < 0.001) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: _Glass.surfaceThin,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: _Glass.borderMid,
-                            width: 0.8,
-                          ),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              color: _Glass.textMuted,
-                              size: 13,
-                            ),
-                            SizedBox(width: 7),
-                            Expanded(
-                              child: Text(
-                                'No consumption data in the last 90 days. '
-                                'Forecast updates once orders for this material complete.',
-                                style: TextStyle(
-                                  color: _Glass.textMuted,
-                                  fontSize: 11,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _rec(_FItem it) {
-    final dStr = it.dOut.isInfinite
-        ? 'no foreseeable stockout'
-        : '~${it.dOut.toStringAsFixed(0)} days until stockout';
-    final mn = it.mape != null
-        ? ' (MAPE ${it.mapeLabel} — ${it.mapeGradeLabel})'
-        : '';
-    if (it.urgency == _FUrg.critical)
-      return 'Urgent: $dStr$mn. Order at least ${_fmt(it.rec30)} ${it.unit} immediately.';
-    if (it.urgency == _FUrg.atRisk)
-      return 'Reorder soon — $dStr$mn. 30-day buffer: ${_fmt(it.rec30)} ${it.unit}.';
-    return 'Healthy ($dStr)$mn. 30-day top-up if needed: ${_fmt(it.rec30)} ${it.unit}.';
-  }
-}
-
-// ── MAPE panel ────────────────────────────────────────────────────────────────
-class _FMapePanel extends StatelessWidget {
-  final _FItem item;
-  const _FMapePanel({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = item.mColor;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.20), width: 0.8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.analytics_outlined, color: color, size: 13),
-              const SizedBox(width: 5),
-              Text(
-                'Forecast Accuracy (MAPE)',
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '${item.mapeLabel}  •  ${item.mapeGradeLabel}',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (item.mape != null) ...[
-            const SizedBox(height: 8),
-            LayoutBuilder(
-              builder: (_, c) {
-                final w = c.maxWidth;
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(3),
-                      child: Container(
-                        height: 6,
-                        color: _Glass.borderMid.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(3),
-                      child: FractionallySizedBox(
-                        widthFactor: (item.mape! / 100).clamp(0.0, 1.0),
-                        child: Container(
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            borderRadius: BorderRadius.all(Radius.circular(3)),
-                            gradient: LinearGradient(
-                              colors: [
-                                Color(0xFF10B981),
-                                Color(0xFF65A30D),
-                                Color(0xFFB45309),
-                                Color(0xFFEF4444),
-                              ],
-                              stops: [0.0, 0.25, 0.50, 1.0],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    for (final pct in [10.0, 25.0, 50.0])
-                      Positioned(
-                        left: w * (pct / 100) - 0.5,
-                        child: Container(
-                          width: 1,
-                          height: 6,
-                          color: Colors.white.withValues(alpha: 0.7),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 4),
-            const Row(
-              children: [
-                Text(
-                  '0%',
-                  style: TextStyle(color: _Glass.textMuted, fontSize: 8),
-                ),
-                Spacer(),
-                Text(
-                  '10',
-                  style: TextStyle(color: _Glass.textMuted, fontSize: 8),
-                ),
-                SizedBox(width: 24),
-                Text(
-                  '25',
-                  style: TextStyle(color: _Glass.textMuted, fontSize: 8),
-                ),
-                SizedBox(width: 24),
-                Text(
-                  '50',
-                  style: TextStyle(color: _Glass.textMuted, fontSize: 8),
-                ),
-                Spacer(),
-                Text(
-                  '100%',
-                  style: TextStyle(color: _Glass.textMuted, fontSize: 8),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            _FApeRows(item: item),
-            const SizedBox(height: 4),
-            Text(
-              'MAPE = avg |actual − forecast| / actual × 100 across 30-day windows.',
-              style: TextStyle(
-                color: color.withValues(alpha: 0.65),
-                fontSize: 9,
-                height: 1.4,
-              ),
-            ),
-          ] else ...[
-            const SizedBox(height: 5),
-            const Text(
-              'Need at least two 30-day periods with order data to compute MAPE.',
-              style: TextStyle(
-                color: _Glass.textMuted,
-                fontSize: 10,
-                height: 1.4,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _FApeRows extends StatelessWidget {
-  final _FItem item;
-  const _FApeRows({required this.item});
-
-  Color _ac(double v) {
-    if (v < 10) return _Glass.accentEmerald;
-    if (v < 25) return const Color(0xFF65A30D);
-    if (v < 50) return _amber;
-    return _Glass.accentRose;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final r1 = item.r1;
-    final r2 = item.r2;
-    final r3 = item.r3;
-    final a1 = (r2 > 0.001 && r3 > 0) ? ((r2 - r3) / r2).abs() * 100 : null;
-    final a2 = (r1 > 0.001 && r2 > 0) ? ((r1 - r2) / r1).abs() * 100 : null;
-    if (a1 == null && a2 == null) return const SizedBox.shrink();
-    String f(double v) => v.toStringAsFixed(2);
-    final sfx = item.unit.isNotEmpty ? ' ${item.unit}/d' : '/d';
-
-    Widget row(String lbl, double fc, double ac, double ape) => Padding(
-      padding: const EdgeInsets.only(bottom: 3),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              lbl,
-              style: const TextStyle(color: _Glass.textMuted, fontSize: 9),
-            ),
-          ),
-          Text(
-            'F: ${f(fc)}$sfx',
-            style: const TextStyle(color: _Glass.textMuted, fontSize: 9),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            'A: ${f(ac)}$sfx',
-            style: const TextStyle(color: _Glass.textSecondary, fontSize: 9),
-          ),
-          const SizedBox(width: 5),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-            decoration: BoxDecoration(
-              color: _ac(ape).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              'APE ${ape.toStringAsFixed(1)}%',
-              style: TextStyle(
-                color: _ac(ape),
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Period breakdown:',
-          style: TextStyle(color: _Glass.textMuted, fontSize: 9),
-        ),
-        const SizedBox(height: 3),
-        if (a1 != null) row('60–90 d → 30–60 d', r3, r2, a1),
-        if (a2 != null) row('30–60 d → last 30 d', r2, r1, a2),
-      ],
-    );
-  }
-}
-
-// ── Period trend ──────────────────────────────────────────────────────────────
-class _FPeriodTrend extends StatelessWidget {
-  final _FItem item;
-  const _FPeriodTrend({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final r3 = item.r3;
-    final r2 = item.r2;
-    final r1 = item.r1;
-    String fmt(double r) => r < 0.001 ? '—' : r.toStringAsFixed(2);
-
-    String arrow(double p, double c) {
-      if (p < 0.001 || c < 0.001) return '•';
-      final d = c - p;
-      if (d.abs() < p * 0.05) return '→';
-      return d > 0 ? '↑' : '↓';
-    }
-
-    Color arrowC(double p, double c) {
-      if (p < 0.001 || c < 0.001) return _Glass.textMuted;
-      final d = c - p;
-      if (d.abs() < p * 0.05) return _Glass.textSecondary;
-      return d > 0 ? _amber : _Glass.accentEmerald;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: _Glass.surfaceThin,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _Glass.borderMid, width: 0.8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Consumption trend  (avg daily rate per 30-day period)',
-            style: TextStyle(color: _Glass.textMuted, fontSize: 9),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _FTCell(label: '60–90 d ago', rate: fmt(r3), unit: item.unit),
-              Text(
-                ' ${arrow(r3, r2)} ',
-                style: TextStyle(
-                  color: arrowC(r3, r2),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              _FTCell(label: '30–60 d ago', rate: fmt(r2), unit: item.unit),
-              Text(
-                ' ${arrow(r2, r1)} ',
-                style: TextStyle(
-                  color: arrowC(r2, r1),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              _FTCell(
-                label: 'Last 30 d',
-                rate: fmt(r1),
-                unit: item.unit,
-                highlight: true,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FTCell extends StatelessWidget {
-  final String label, rate, unit;
-  final bool highlight;
-  const _FTCell({
-    required this.label,
-    required this.rate,
-    required this.unit,
-    this.highlight = false,
-  });
-
-  @override
-  Widget build(BuildContext context) => Expanded(
-    child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      decoration: highlight
-          ? BoxDecoration(
-              color: _navyBlue.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: _Glass.borderMid, width: 0.8),
-            )
-          : null,
-      child: Column(
-        children: [
-          Text(
-            rate,
-            style: TextStyle(
-              color: highlight ? _Glass.textPrimary : _Glass.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            '${unit.isNotEmpty ? '$unit/' : ''}day',
-            style: const TextStyle(color: _Glass.textMuted, fontSize: 7),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            label,
-            style: TextStyle(
-              color: highlight ? _Glass.textSecondary : _Glass.textMuted,
-              fontSize: 7,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-// ── Forecast summary tile ─────────────────────────────────────────────────────
-class _FTile extends StatelessWidget {
-  final String label;
-  final int count;
-  final Color color;
-  final IconData icon;
-  final bool isActive;
-  final VoidCallback onTap;
-  const _FTile({
-    required this.label,
-    required this.count,
-    required this.color,
-    required this.icon,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isActive ? _navyBlue : _Glass.surfaceMid,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isActive
-              ? Colors.white.withValues(alpha: 0.20)
-              : _Glass.borderMid,
-          width: 0.8,
-        ),
-        boxShadow: const [_Glass.rowShadow],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: isActive ? color.withValues(alpha: 0.9) : color,
-            size: 14,
-          ),
-          const SizedBox(width: 7),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$count',
-                style: TextStyle(
-                  color: isActive ? Colors.white : _Glass.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  height: 1,
-                ),
-              ),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isActive
-                      ? Colors.white.withValues(alpha: 0.7)
-                      : _Glass.textSecondary,
-                  fontSize: 9,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _FStatChip extends StatelessWidget {
-  final String label, value;
-  final Color color;
-  const _FStatChip({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.07),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: color.withValues(alpha: 0.20), width: 0.8),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: color.withValues(alpha: 0.7),
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _FLDot extends StatelessWidget {
-  final Color color;
-  final String label;
-  const _FLDot({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 6,
-        height: 6,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      ),
-      const SizedBox(width: 4),
-      Text(label, style: const TextStyle(color: _Glass.textMuted, fontSize: 9)),
-    ],
-  );
-}
 
 // =============================================================================
 // Inventory dimension helpers
@@ -3821,8 +2554,7 @@ double _calcUnitSqft(double wV, String wU, double lV, String lU) =>
 
 String _fmtNum(double v) {
   if (v == v.truncateToDouble()) return v.toInt().toString();
-  // Values < 1 need 3 decimal places so 0.9963 shows as "0.996" not "1.00"
-  return v.abs() < 1 ? v.toStringAsFixed(3) : v.toStringAsFixed(2);
+  return v.toStringAsFixed(2);
 }
 
 String _stockUnitLabel(String su) {
@@ -3850,11 +2582,21 @@ String _buildMatSubLine(Map<String, dynamic> data) {
   return '$su (${_fmtNum(wv)}$wu × ${_fmtNum(lv)}$lu)';
 }
 
+
 // =============================================================================
-// Authoritative raw-material list — 33 materials (replaces old seed list)
+// Seed-entry helper (used by _seedHistoricalData)
+// =============================================================================
+class _SeedEntry {
+  final String productName;
+  final double qpu;     // quantity_per_unit from BOM
+  final String variant; // for_material_option (may be empty)
+  const _SeedEntry(this.productName, this.qpu, this.variant);
+}
+// =============================================================================
+// Authoritative raw-material list â€” 33 materials (replaces old seed list)
 // =============================================================================
 const _kNewMaterials = [
-  // ── Rolls — width in ft, length in m ──────────────────────────────────────
+  // â”€â”€ Rolls â€” width in ft, length in m â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {'material_id':'RM-001','material_name':'Vinyl Matte Sticker','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':2050.53,'current_stock':0.0},
   {'material_id':'RM-002','material_name':'Clear Matte Printable','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':2050.53,'current_stock':0.0},
   {'material_id':'RM-003','material_name':'Clear Glossy Printable','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':1230.32,'current_stock':0.0},
@@ -3865,7 +2607,7 @@ const _kNewMaterials = [
   {'material_id':'RM-008','material_name':'Sticker Glossy (paper)','stocking_unit':'Roll','width_value':2.5,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':410.11,'base_uom':'sqft','unit_description':'Roll (2.5ft × 50m)','restock_level':1230.32,'current_stock':0.0},
   {'material_id':'RM-009','material_name':'Tarpaulin 13oz','stocking_unit':'Roll','width_value':10.0,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':1640.42,'base_uom':'sqft','unit_description':'Roll (10ft × 50m)','restock_level':4921.26,'current_stock':0.0},
   {'material_id':'RM-010','material_name':'Tarpaulin 10oz','stocking_unit':'Roll','width_value':10.0,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':1640.42,'base_uom':'sqft','unit_description':'Roll (10ft × 50m)','restock_level':4921.26,'current_stock':0.0},
-  // ── Sheets — width & length in ft ─────────────────────────────────────────
+  // â”€â”€ Sheets â€” width & length in ft â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {'material_id':'RM-011','material_name':'Composite Panel 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':160.0,'current_stock':0.0},
   {'material_id':'RM-012','material_name':'Acrylic Clear 5mm 3x8','stocking_unit':'Sheet','width_value':3.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':24.0,'base_uom':'sqft','unit_description':'Sheet (3ft × 8ft)','restock_level':48.0,'current_stock':0.0},
   {'material_id':'RM-013','material_name':'Acrylic Chalk White 4x4','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':4.0,'length_unit':'ft','unit_size_sqft':16.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 4ft)','restock_level':32.0,'current_stock':0.0},
@@ -3878,28 +2620,28 @@ const _kNewMaterials = [
   {'material_id':'RM-020','material_name':'Sintra Board 3mm 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':96.0,'current_stock':0.0},
   {'material_id':'RM-021','material_name':'Sintra Board 5mm 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':64.0,'current_stock':0.0},
   {'material_id':'RM-022','material_name':'Plastic PVC Board 4x8','stocking_unit':'Sheet','width_value':4.0,'width_unit':'ft','length_value':8.0,'length_unit':'ft','unit_size_sqft':32.0,'base_uom':'sqft','unit_description':'Sheet (4ft × 8ft)','restock_level':96.0,'current_stock':0.0},
-  // ── Piece — no dimensions ─────────────────────────────────────────────────
+  // â”€â”€ Piece â€” no dimensions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {'material_id':'RM-023','material_name':'Metal Furring','stocking_unit':'Piece','unit_size_sqft':1.0,'base_uom':'pc','unit_description':'Piece','restock_level':10.0,'current_stock':0.0},
-  // ── Roll — Panaflex ───────────────────────────────────────────────────────
+  // â”€â”€ Roll â€” Panaflex â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {'material_id':'RM-024','material_name':'Panaflex Flex','stocking_unit':'Roll','width_value':10.0,'width_unit':'ft','length_value':50.0,'length_unit':'m','unit_size_sqft':1640.42,'base_uom':'sqft','unit_description':'Roll (10ft × 50m)','restock_level':4921.26,'current_stock':0.0},
-  // ── Photo paper packs — base UoM = sheet ─────────────────────────────────
+  // â”€â”€ Photo paper packs â€” base UoM = sheet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {'material_id':'RM-025','material_name':'Photo Paper 4R','stocking_unit':'Piece','unit_size_sqft':100.0,'base_uom':'sheet','unit_description':'Pack (100 sheets)','restock_level':200.0,'current_stock':0.0},
-  // ── Sheets — Card stock ───────────────────────────────────────────────────
+  // â”€â”€ Sheets â€” Card stock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {'material_id':'RM-026','material_name':'Card Stock Matte','stocking_unit':'Sheet','width_value':1.083,'width_unit':'ft','length_value':0.875,'length_unit':'ft','unit_size_sqft':0.95,'base_uom':'sqft','unit_description':'Sheet (1.083ft × 0.875ft)','restock_level':4.74,'current_stock':0.0},
   {'material_id':'RM-027','material_name':'Card Stock Glossy','stocking_unit':'Sheet','width_value':1.083,'width_unit':'ft','length_value':0.875,'length_unit':'ft','unit_size_sqft':0.95,'base_uom':'sqft','unit_description':'Sheet (1.083ft × 0.875ft)','restock_level':4.74,'current_stock':0.0},
-  // ── Stand units ───────────────────────────────────────────────────────────
+  // â”€â”€ Stand units â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {'material_id':'RM-028','material_name':'Roll-up Stand','stocking_unit':'Piece','unit_size_sqft':1.0,'base_uom':'pc','unit_description':'Piece','restock_level':5.0,'current_stock':0.0},
-  // ── More photo paper packs ────────────────────────────────────────────────
+  // â”€â”€ More photo paper packs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {'material_id':'RM-029','material_name':'Photo Paper 3R','stocking_unit':'Piece','unit_size_sqft':100.0,'base_uom':'sheet','unit_description':'Pack (100 sheets)','restock_level':100.0,'current_stock':0.0},
   {'material_id':'RM-030','material_name':'Photo Paper 5R','stocking_unit':'Piece','unit_size_sqft':100.0,'base_uom':'sheet','unit_description':'Pack (100 sheets)','restock_level':100.0,'current_stock':0.0},
   {'material_id':'RM-031','material_name':'Photo Paper 8R/A4','stocking_unit':'Piece','unit_size_sqft':50.0,'base_uom':'sheet','unit_description':'Pack (50 sheets)','restock_level':50.0,'current_stock':0.0},
-  // ── Equipment units ───────────────────────────────────────────────────────
+  // â”€â”€ Equipment units â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {'material_id':'RM-032','material_name':'X-banner Frame','stocking_unit':'Piece','unit_size_sqft':1.0,'base_uom':'pc','unit_description':'Piece','restock_level':5.0,'current_stock':0.0},
   {'material_id':'RM-033','material_name':'PVC ID Card Blank','stocking_unit':'Piece','unit_size_sqft':1.0,'base_uom':'pc','unit_description':'Piece','restock_level':20.0,'current_stock':0.0},
 ];
 
 // =============================================================================
-// Legacy seed data (kept for reference — superseded by _kNewMaterials)
+// Legacy seed data (kept for reference â€” superseded by _kNewMaterials)
 // =============================================================================
 const _kInitialMaterials = [
   {

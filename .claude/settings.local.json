@@ -58,7 +58,19 @@
       "Bash(GOOGLE_CLOUD_PROJECT=imprenta-x-system FIREBASE_CONFIG='{\"projectId\":\"imprenta-x-system\"}' node -e ' *)",
       "Bash(node -e ' *)",
       "Bash(node *)",
-      "Bash(del *)"
+      "Bash(del *)",
+      "Bash(powershell -Command \"\\(Get-Content lib\\\\screens\\\\employee_inventory_forecast_screen.dart | Measure-Object -Line\\).Lines\")",
+      "Bash(powershell -Command \"Select-String -Path 'lib\\\\screens\\\\employee_inventory_forecast_screen.dart' -Pattern '^class _LegendDot' | Select-Object LineNumber\")",
+      "Bash(powershell -Command \"Select-String -Path 'lib\\\\screens\\\\employee_inventory_forecast_screen.dart' -Pattern '^class _' | Select-Object LineNumber, Line\")",
+      "Bash(powershell -Command \"Select-String -Path 'lib\\\\screens\\\\employee_inventory_screen.dart' -Pattern 'Forecast|forecast|tab|Tab|_Embedded' | Select-Object LineNumber, Line | Select-Object -First 30\")",
+      "Bash(powershell -Command \"Select-String -Path 'lib\\\\screens\\\\admin_inventory_screen.dart' -Pattern 'qr|QR|Qr' | Select-Object LineNumber, Line | Select-Object -First 20\")",
+      "Bash(powershell -Command \"Select-String -Path 'lib\\\\screens\\\\*.dart' -Pattern '[Dd]eficit' | Select-Object LineNumber, Line, Filename\")",
+      "Bash(powershell -Command \"Select-String -Path 'pubspec.yaml' -Pattern 'qr_flutter'\")",
+      "Bash(firebase projects:list)",
+      "Bash(firebase firestore:get /Products)",
+      "Bash(gcloud auth *)",
+      "Bash(firebase login:ci --no-localhost)",
+      "PowerShell(Get-ChildItem *)"
     ]
   }
 }

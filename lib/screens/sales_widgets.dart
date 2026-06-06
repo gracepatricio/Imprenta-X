@@ -822,7 +822,7 @@ class _DateFilterButton extends StatelessWidget {
           const SizedBox(width: 4),
           InkWell(
             borderRadius: BorderRadius.circular(8),
-            onTap: () => onChanged(null),
+            onTap: () => onChanged(_pLast31()),
             child: Padding(
               padding: const EdgeInsets.all(7),
               child: Icon(

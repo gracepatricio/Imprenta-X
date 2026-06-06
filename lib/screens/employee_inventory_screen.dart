@@ -4,6 +4,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'app_theme.dart';
 import 'employee_inventory_forecast_screen.dart';
 import 'platform_utils.dart';
@@ -68,7 +69,7 @@ class _Glass {
 final _blurFilter = ImageFilter.blur(sigmaX: 14, sigmaY: 14);
 
 // ── Breakpoint ────────────────────────────────────────────────────────────────
-const double _kTableMinWidth = 500.0;
+const double _kTableMinWidth = 536.0;
 
 // ── Dimension helpers (mirrors admin screen) ──────────────────────────────────
 double _toFeet(double v, String unit) {
@@ -273,6 +274,91 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  // ── QR dialog ───────────────────────────────────────────────────────────────
+  void _showQr(BuildContext context, Map<String, dynamic> m) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.25),
+      builder: (_) => AlertDialog(
+        backgroundColor: _Glass.surface,
+        elevation: 32,
+        shadowColor: Colors.black.withValues(alpha: 0.3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: _Glass.borderMid, width: 1),
+        ),
+        title: Text(
+          m['material_name']?.toString() ?? '',
+          style: const TextStyle(
+            color: _Glass.textPrimary,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 204,
+              height: 204,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _Glass.borderMid),
+                boxShadow: const [_Glass.rowShadow],
+              ),
+              padding: const EdgeInsets.all(12),
+              child: QrImageView(
+                data: m['material_id']?.toString() ?? 'NO-ID',
+                version: QrVersions.auto,
+                size: 180,
+                gapless: false,
+                backgroundColor: Colors.white,
+                errorStateBuilder: (_, __) => const Center(
+                  child: Text('QR error',
+                      style: TextStyle(color: Colors.red, fontSize: 12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              m['material_id']?.toString() ?? '',
+              style: const TextStyle(
+                color: _Glass.textSecondary,
+                fontSize: 14,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Print and attach to raw material storage',
+              style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+              decoration: _Glass.glass(radius: 99),
+              child: const Text(
+                'Close',
+                style: TextStyle(
+                  color: _Glass.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1238,6 +1324,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                           filtered[idx],
                           method: 'manual',
                         ),
+                        onQrTap: () => _showQr(context, filtered[idx]),
                       );
                     },
                   );
@@ -1461,14 +1548,18 @@ class _TableHeader extends StatelessWidget {
         SizedBox(width: 74, child: Text('Code', style: _h)),
         Expanded(child: Text('Material', style: _h)),
         SizedBox(
-          width: 150,
+          width: 120,
           child: Text('Available Stock', style: _h, textAlign: TextAlign.center),
+        ),
+        SizedBox(
+          width: 110,
+          child: Text('Restock Level', style: _h, textAlign: TextAlign.center),
         ),
         SizedBox(
           width: 90,
           child: Text('Status', style: _h, textAlign: TextAlign.center),
         ),
-        SizedBox(width: 60),
+        SizedBox(width: 96),
       ],
     ),
   );
@@ -1482,11 +1573,13 @@ class _TableRow extends StatelessWidget {
   final Color statusColor;
   final bool isLast;
   final VoidCallback onEdit;
+  final VoidCallback onQrTap;
 
   const _TableRow({
     required this.data,
     required this.statusColor,
     required this.onEdit,
+    required this.onQrTap,
     this.isLast = false,
   });
 
@@ -1496,6 +1589,7 @@ class _TableRow extends StatelessWidget {
     final name    = data['material_name']?.toString() ?? '';
     final status  = data['_status']?.toString() ?? '';
     final current  = (data['current_stock'] as num?)?.toDouble() ?? 0;
+    final restock  = (data['restock_level'] as num?)?.toDouble() ?? 0;
     final su       = data['stocking_unit']?.toString() ?? '';
     final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
     final baseUom  = data['base_uom']?.toString() ??
@@ -1503,6 +1597,22 @@ class _TableRow extends StatelessWidget {
     final subLine      = _buildMatSubLine(data);
     final isStructured = su.isNotEmpty;
     final isPiece      = su == 'Piece';
+
+    // Shared helper: formats a base-unit (sqft/pc) value into the right display
+    String fmtStock(double val) {
+      if (!isStructured) return _fmtNum(val);
+      if (isPiece) {
+        if (baseUom == 'sheet' && unitSqft > 1) {
+          final packs = unitSqft > 0 ? val / unitSqft : 0.0;
+          return '${_fmtNum(val)} sh / ${_fmtNum(packs)} pk';
+        }
+        final label = baseUom == 'sheet' ? 'sh' : 'pcs';
+        return '${_fmtNum(val)} $label';
+      }
+      final stockUnits = unitSqft > 0 ? val / unitSqft : 0.0;
+      final label = _stockUnitLabel(su);
+      return '${_fmtNum(stockUnits)} ${label}s';
+    }
 
     // Available stock cell
     Widget stockCell;
@@ -1586,7 +1696,18 @@ class _TableRow extends StatelessWidget {
               ],
             ),
           ),
-          SizedBox(width: 150, child: Center(child: stockCell)),
+          SizedBox(width: 120, child: Center(child: stockCell)),
+          SizedBox(
+            width: 110,
+            child: Center(
+              child: Text(
+                restock > 0 ? fmtStock(restock) : '—',
+                style: const TextStyle(
+                    color: _Glass.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
           SizedBox(
             width: 90,
             child: Center(
@@ -1605,24 +1726,44 @@ class _TableRow extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 60,
-            child: Center(
-              child: GestureDetector(
-                onTap: onEdit,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: _navyBlue,
-                    borderRadius: BorderRadius.circular(99),
-                    boxShadow: [
-                      BoxShadow(color: _navyBlue.withValues(alpha: 0.22),
-                          blurRadius: 10, offset: const Offset(0, 4)),
-                    ],
+            width: 96,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                GestureDetector(
+                  onTap: onQrTap,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: _navyBlue,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.20),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: const Icon(Icons.qr_code_rounded, color: Colors.white, size: 13),
                   ),
-                  child: const Text('Edit',
-                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
                 ),
-              ),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: onEdit,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFB45309).withValues(alpha: 0.10),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFB45309).withValues(alpha: 0.35),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: const Icon(Icons.edit_outlined, color: Color(0xFFB45309), size: 13),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
