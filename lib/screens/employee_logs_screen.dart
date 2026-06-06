@@ -4066,10 +4066,10 @@ class _QueueListState extends State<_QueueList> {
   Widget build(BuildContext context) {
     // Map queue job status names to Orders collection status values
     final String ordersStatus;
-    if (jobStatus == 'active') {
+    if (widget.jobStatus == 'active') {
       ordersStatus = 'in_production';
     } else {
-      ordersStatus = jobStatus;
+      ordersStatus = widget.jobStatus;
     }
     final query = FirebaseFirestore.instance
         .collection('Orders')
