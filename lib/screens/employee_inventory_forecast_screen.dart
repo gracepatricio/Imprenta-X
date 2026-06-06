@@ -269,11 +269,16 @@ class _EmployeeInventoryForecastScreenState
           final products = (orderDoc.data()['products'] as List?)
               ?.cast<Map<String, dynamic>>() ?? [];
           for (final p in products) {
-            final pid  = p['product_id']?.toString() ?? '';
-            final name = p['name']?.toString() ?? '';
-            final qty  = (p['qty'] as num?)?.toDouble() ?? 1;
-            final bom  = bomByProductId[pid] ?? bomByProductName[name] ?? [];
+            final pid     = p['product_id']?.toString() ?? '';
+            final name    = p['name']?.toString() ?? '';
+            // Orders store selected variant in 'material' field
+            final variant = p['material']?.toString() ?? '';
+            final qty     = (p['qty'] as num?)?.toDouble() ?? 1;
+            final bom     = bomByProductId[pid] ?? bomByProductName[name] ?? [];
             for (final bomItem in bom) {
+              // Skip if this BOM entry is for a specific variant that doesn't match
+              final forVariant = bomItem['for_material_option']?.toString() ?? '';
+              if (forVariant.isNotEmpty && forVariant != variant) continue;
               final matId = bomItem['material_id']?.toString() ?? '';
               final qpu   = (bomItem['quantity_per_unit'] as num?)?.toDouble() ?? 1;
               if (matId.isEmpty) continue;
@@ -302,7 +307,9 @@ class _EmployeeInventoryForecastScreenState
       accumulateOrders(orderSnap.docs, p2Start, p1Start, consumedP2);
       accumulateOrders(orderSnap.docs, p3Start, p2Start, consumedP3);
 
-      // From Sales_Records — historical & imported data (uses sale_date + product_name → BOM)
+      // From Sales_Records — historical & imported data
+      // Imported records store line items in a products[] array (name + type = variant).
+      // Each BOM entry has for_material_option: "" (all variants) or a specific variant name.
       for (final period in [
         (p1Start, nowTs,   consumedP1),
         (p2Start, p1Start, consumedP2),
@@ -313,15 +320,28 @@ class _EmployeeInventoryForecastScreenState
           if (ts == null) continue;
           if (ts.compareTo(period.$1) < 0) continue;
           if (ts.compareTo(period.$2) >= 0) continue;
-          final productName = doc.data()['product_name']?.toString() ?? '';
-          final qty = (doc.data()['quantity'] as num?)?.toDouble() ?? 1.0;
-          if (productName.isEmpty || qty <= 0) continue;
-          final bom = bomByProductName[productName] ?? [];
-          for (final bomItem in bom) {
-            final matId = bomItem['material_id']?.toString() ?? '';
-            final qpu   = (bomItem['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
-            if (matId.isEmpty) continue;
-            period.$3[matId] = (period.$3[matId] ?? 0) + qty * qpu;
+
+          // Imported records: products stored as array [{name, type, qty}]
+          final lineItems =
+              (doc.data()['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+          for (final item in lineItems) {
+            final productName = item['name']?.toString() ?? '';
+            final variantName = item['type']?.toString() ?? '';
+            final qty = (item['qty'] as num?)?.toDouble() ?? 1.0;
+            if (productName.isEmpty || qty <= 0) continue;
+
+            final bom = bomByProductName[productName] ?? [];
+            for (final bomItem in bom) {
+              // Apply only BOM entries for this variant OR entries for all variants ('')
+              final forVariant = bomItem['for_material_option']?.toString() ?? '';
+              if (forVariant.isNotEmpty && forVariant != variantName) continue;
+
+              final matId = bomItem['material_id']?.toString() ?? '';
+              final qpu   = (bomItem['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+              if (matId.isEmpty) continue;
+              period.$3[matId] = (period.$3[matId] ?? 0) + qty * qpu;
+            }
           }
         }
       }
@@ -930,8 +950,10 @@ class _ForecastCard extends StatefulWidget {
 class _ForecastCardState extends State<_ForecastCard> {
   bool _expanded = false;
 
-  String _fmtNum(double v) =>
-      v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+  String _fmtNum(double v) {
+    if (v == v.truncateToDouble()) return v.toInt().toString();
+    return v.abs() < 1 ? v.toStringAsFixed(3) : v.toStringAsFixed(2);
+  }
 
   @override
   Widget build(BuildContext context) {

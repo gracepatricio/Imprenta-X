@@ -57,7 +57,10 @@ class InventoryService {
   ///
   /// Throws if the product does not exist.
   /// Silently skips materials with empty IDs or that don't exist in Firestore.
-  static Future<void> deductForOrder({
+  /// Returns a list of human-readable deduction lines, e.g.
+  /// ["Tarpaulin 13oz: −6.0 sqft (now 3.0)", ...]
+  /// Returns empty list if no BOM is set for the product.
+  static Future<List<String>> deductForOrder({
     required String orderId,
     required String productId,
     required String productName,
@@ -78,16 +81,35 @@ class InventoryService {
           .map((e) => Map<String, dynamic>.from(e as Map)),
     );
 
+    // Resolve the effective variant to use for BOM filtering.
+    // Priority: (1) variant from order, (2) product's first material_option,
+    // (3) if still empty, apply NO variant filter (deduct all BOM items).
+    String effectiveMaterial = selectedMaterial?.trim() ?? '';
+    if (effectiveMaterial.isEmpty) {
+      final matOpts = productDoc.data()?['material_options'] as List?;
+      if (matOpts != null && matOpts.isNotEmpty) {
+        effectiveMaterial = matOpts.first.toString().trim();
+      }
+    }
+    // When effectiveMaterial is still empty (product has no material_options
+    // or variant was never configured), ignore for_material_option entirely
+    // so variant-specific BOM entries are not silently skipped.
+    final bool applyVariantFilter = effectiveMaterial.isNotEmpty;
+
     // Filter BOM by material option:
     // - Items with no for_material_option always apply (shared consumables).
-    // - Items with a for_material_option only apply when it matches the
-    //   customer's selection.
+    // - Items with a matching for_material_option apply for that variant.
+    // - If no variant is known, include all items regardless.
     final bom = rawBom.where((item) {
-      final opt = item['for_material_option']?.toString() ?? '';
-      return opt.isEmpty || opt == (selectedMaterial ?? '');
+      final opt = item['for_material_option']?.toString().trim() ?? '';
+      if (opt.isEmpty) return true;
+      if (!applyVariantFilter) return true;
+      return opt == effectiveMaterial;
     }).toList();
 
-    if (bom.isEmpty) return; // No BOM → nothing to deduct
+    if (bom.isEmpty) return []; // No BOM → nothing to deduct
+
+    final summaryLines = <String>[];
 
     // 2. Run a single Firestore transaction (all reads before all writes)
     await _db.runTransaction((tx) async {
@@ -115,16 +137,15 @@ class InventoryService {
 
         if (!snap.exists) continue;
 
+        final matData = snap.data() as Map<String, dynamic>? ?? {};
         final qtyPerUnit =
             (item['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
         final totalDeduction = qtyPerUnit * orderQuantity;
 
         final prevStock =
-            ((snap.data() as Map?)?['current_stock'] as num?)
-                    ?.toDouble() ??
-                0.0;
-        final newStock =
-            (prevStock - totalDeduction).clamp(0.0, double.maxFinite);
+            (matData['current_stock'] as num?)?.toDouble() ?? 0.0;
+        // Allow negative stock — shows the deficit clearly in the UI
+        final newStock = prevStock - totalDeduction;
 
         // Update raw material stock
         tx.update(ref, {
@@ -149,12 +170,34 @@ class InventoryService {
           'order_id': orderId,
           'product_name': productName,
         });
+
+        // Build human-readable summary line
+        final matName = item['material_name']?.toString() ??
+            matData['material_name']?.toString() ??
+            matId;
+        final su = matData['unit_description']?.toString() ??
+            matData['stocking_unit']?.toString() ??
+            '';
+        final sqft = (matData['unit_size_sqft'] as num?)?.toDouble() ?? 0.0;
+        final isNewStyle = sqft > 0.001 && su.isNotEmpty;
+        final deductDisp = isNewStyle
+            ? (totalDeduction / sqft)
+            : totalDeduction;
+        final newDisp = isNewStyle ? (newStock / sqft) : newStock;
+        final unitLabel = su.isNotEmpty ? ' $su' : '';
+        summaryLines.add(
+          '$matName: −${_fmt(deductDisp)}$unitLabel (now ${_fmt(newDisp)}$unitLabel)',
+        );
       }
     });
 
     // 3. Refresh product availability (non-critical, runs after transaction)
     await _refreshAvailability(productId, bom);
+    return summaryLines;
   }
+
+  static String _fmt(double v) =>
+      v == v.truncateToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
 
   // ── Manual replenish (mirrors employee screen — call if needed elsewhere) ──
 
@@ -232,7 +275,7 @@ class InventoryService {
       await _db
           .collection('Products')
           .doc(productId)
-          .update({'is_available': available});
+          .update({'is_available': available, 'availability_checked_at': FieldValue.serverTimestamp()});
     } catch (_) {
       // Non-critical — availability refresh failure does not break the order
     }

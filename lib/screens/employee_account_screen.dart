@@ -11,6 +11,11 @@ import '../services/auth_service.dart';
 // =============================================================================
 // Design Tokens — matches AdminAccountDashboard _G system
 // =============================================================================
+String _fmtStock(double v) {
+  if (v == v.truncateToDouble()) return v.toInt().toString();
+  return v.abs() < 1 ? v.toStringAsFixed(3) : v.toStringAsFixed(2);
+}
+
 class _G {
   static const Color navyBlue = Color(0xFF0F1A2E);
 
@@ -769,7 +774,8 @@ class _EmployeeDashboardContent extends StatelessWidget {
                     (data['current_stock'] as num?)?.toDouble() ?? 0;
                 final restock =
                     (data['restock_level'] as num?)?.toDouble() ?? 0;
-                if (current <= 0) return true;
+                if (current < 0) return true; // Deficit
+                if (current == 0) return true; // Out of stock
                 if (current <= restock * 0.5) return true;
                 if (current <= restock) return true;
                 return false;
@@ -862,14 +868,16 @@ class _EmployeeDashboardContent extends StatelessWidget {
 
                       String statusLabel;
                       Color statusColor;
-                      if (rawStock <= 0) {
+                      if (rawStock < 0) {
+                        statusLabel = 'Deficit'; statusColor = const Color(0xFF9333EA);
+                      } else if (rawStock == 0) {
                         statusLabel = 'Out of Stock'; statusColor = _G.accentRose;
                       } else if (rawStock <= rawRestock * 0.5) {
                         statusLabel = 'Critical'; statusColor = _G.accentRose;
                       } else {
                         statusLabel = 'Low Stock'; statusColor = _G.accentAmber;
                       }
-                      final isCritical = statusColor == _G.accentRose;
+                      final isCritical = statusColor == _G.accentRose || statusColor == const Color(0xFF9333EA);
                       final pct = rawRestock > 0
                           ? (rawStock / rawRestock).clamp(0.0, 1.0)
                           : 0.0;
@@ -943,7 +951,7 @@ class _EmployeeDashboardContent extends StatelessWidget {
                             Row(
                               children: [
                                 Text(
-                                  '${current == current.roundToDouble() ? current.toInt() : current.toStringAsFixed(2)} / ${restock == restock.roundToDouble() ? restock.toInt() : restock.toStringAsFixed(2)}${unit.isNotEmpty ? ' $unit' : ''}',
+                                  '${_fmtStock(current)} / ${_fmtStock(restock)}${unit.isNotEmpty ? ' $unit' : ''}',
                                   style: TextStyle(
                                     color: statusColor,
                                     fontSize: 11,

@@ -54,7 +54,11 @@
       "Bash(Sort-Object)",
       "Bash(grep -v \"//\\\\|_notesCtrl\\\\|notesCtrl\\\\|_notes \\\\|notes:.*item\\\\|'notes':.*item\\\\|notes.*_notes\")",
       "Bash(Get-Content \"C:\\\\Users\\\\ADMIN\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-ADMIN-AndroidStudioProjects-Imprenta-X-main\\\\75344024-fd34-436f-ae81-b3a0c70f4221\\\\tasks\\\\b4y2dh9y7.output\")",
-      "Bash(Select-Object -Last 5)"
+      "Bash(Select-Object -Last 5)",
+      "Bash(GOOGLE_CLOUD_PROJECT=imprenta-x-system FIREBASE_CONFIG='{\"projectId\":\"imprenta-x-system\"}' node -e ' *)",
+      "Bash(node -e ' *)",
+      "Bash(node *)",
+      "Bash(del *)"
     ]
   }
 }

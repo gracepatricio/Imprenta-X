@@ -150,10 +150,12 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     'Low Stock',
     'Critical',
     'Out of Stock',
+    'Deficit',
   ];
 
   String _computeStatus(num current, num restock) {
-    if (current <= 0) return 'Out of Stock';
+    if (current < 0) return 'Deficit';
+    if (current == 0) return 'Out of Stock';
     if (current <= restock * 0.5) return 'Critical';
     if (current <= restock) return 'Low Stock';
     return 'In Stock';
@@ -167,6 +169,8 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
         return _amber;
       case 'Critical':
         return const Color(0xFFDC2626);
+      case 'Deficit':
+        return const Color(0xFF9333EA); // purple — used more than available
       default:
         return _Glass.accentRose;
     }
@@ -1099,13 +1103,17 @@ class _MaterialRow extends StatelessWidget {
     final subLine      = _buildMatSubLine(data);
     final isStructured = su.isNotEmpty;
     final isPiece      = su == 'Piece';
+    final isDeficit    = current < 0;
+    final stockColor   = isDeficit
+        ? const Color(0xFF9333EA) // purple for deficit
+        : _Glass.textPrimary;
 
     // Available stock display
     Widget stockCell;
     if (!isStructured) {
       stockCell = Text(
         _fmtNum(current),
-        style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+        style: TextStyle(color: stockColor, fontSize: 13, fontWeight: FontWeight.w700),
         textAlign: TextAlign.center,
       );
     } else if (isPiece) {
@@ -1115,10 +1123,10 @@ class _MaterialRow extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('${_fmtNum(current)} sheets',
-                style: const TextStyle(color: _Glass.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
+                style: TextStyle(color: stockColor, fontSize: 12, fontWeight: FontWeight.w700),
                 textAlign: TextAlign.center),
             Text('${_fmtNum(packs)} packs',
-                style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                style: TextStyle(color: isDeficit ? stockColor : _Glass.textMuted, fontSize: 11),
                 textAlign: TextAlign.center),
           ],
         );
@@ -1126,7 +1134,7 @@ class _MaterialRow extends StatelessWidget {
         final label = baseUom == 'sheet' ? 'sheets' : 'pcs';
         stockCell = Text(
           '${_fmtNum(current)} $label',
-          style: const TextStyle(color: _Glass.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+          style: TextStyle(color: stockColor, fontSize: 13, fontWeight: FontWeight.w700),
           textAlign: TextAlign.center,
         );
       }
@@ -1139,12 +1147,12 @@ class _MaterialRow extends StatelessWidget {
         children: [
           Text(
             '${_fmtNum(current)} $baseUom',
-            style: const TextStyle(color: _Glass.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
+            style: TextStyle(color: stockColor, fontSize: 12, fontWeight: FontWeight.w700),
             textAlign: TextAlign.center,
           ),
           Text(
             '${_fmtNum(stockUnits)} ${label}s',
-            style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+            style: TextStyle(color: isDeficit ? stockColor : _Glass.textMuted, fontSize: 11),
             textAlign: TextAlign.center,
           ),
         ],
@@ -2324,10 +2332,13 @@ class _ForecastContentState extends State<_ForecastContent> {
               in (doc.data()['products'] as List?)
                       ?.cast<Map<String, dynamic>>() ??
                   []) {
-            final pid = p['product_id']?.toString() ?? '';
-            final nm = p['name']?.toString() ?? '';
-            final qty = (p['qty'] as num?)?.toDouble() ?? 1;
+            final pid     = p['product_id']?.toString() ?? '';
+            final nm      = p['name']?.toString() ?? '';
+            final variant = p['material']?.toString() ?? '';
+            final qty     = (p['qty'] as num?)?.toDouble() ?? 1;
             for (final b in bomById[pid] ?? bomByName[nm] ?? []) {
+              final forVariant = b['for_material_option']?.toString() ?? '';
+              if (forVariant.isNotEmpty && forVariant != variant) continue;
               final mid = b['material_id']?.toString() ?? '';
               final qpu = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1;
               if (mid.isNotEmpty) out[mid] = (out[mid] ?? 0) + qty * qpu;
@@ -2355,7 +2366,9 @@ class _ForecastContentState extends State<_ForecastContent> {
       accum(orderSnap.docs, p2Start, p1Start, c2);
       accum(orderSnap.docs, p3Start, p2Start, c3);
 
-      // From Sales_Records (uses sale_date + product_name → BOM)
+      // From Sales_Records — imported records store products in a products[] array
+      // each item: { name: product_name, type: variant_name, qty: N }
+      // BOM entries have for_material_option: '' (all) or a specific variant name.
       for (final period in [
         (p1Start, nowTs,   c1),
         (p2Start, p1Start, c2),
@@ -2366,14 +2379,23 @@ class _ForecastContentState extends State<_ForecastContent> {
           if (ts == null) continue;
           if (ts.compareTo(period.$1) < 0) continue;
           if (ts.compareTo(period.$2) >= 0) continue;
-          final productName = doc.data()['product_name']?.toString() ?? '';
-          final qty = (doc.data()['quantity'] as num?)?.toDouble() ?? 1.0;
-          if (productName.isEmpty || qty <= 0) continue;
-          final bom = bomByName[productName] ?? [];
-          for (final b in bom) {
-            final mid = b['material_id']?.toString() ?? '';
-            final qpu = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
-            if (mid.isNotEmpty) period.$3[mid] = (period.$3[mid] ?? 0) + qty * qpu;
+
+          final lineItems =
+              (doc.data()['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          for (final item in lineItems) {
+            final productName = item['name']?.toString() ?? '';
+            final variantName = item['type']?.toString() ?? '';
+            final qty = (item['qty'] as num?)?.toDouble() ?? 1.0;
+            if (productName.isEmpty || qty <= 0) continue;
+
+            final bom = bomByName[productName] ?? [];
+            for (final b in bom) {
+              final forVariant = b['for_material_option']?.toString() ?? '';
+              if (forVariant.isNotEmpty && forVariant != variantName) continue;
+              final mid = b['material_id']?.toString() ?? '';
+              final qpu = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+              if (mid.isNotEmpty) period.$3[mid] = (period.$3[mid] ?? 0) + qty * qpu;
+            }
           }
         }
       }
@@ -2957,8 +2979,10 @@ class _FCard extends StatefulWidget {
 
 class _FCardState extends State<_FCard> {
   bool _expanded = false;
-  String _fmt(double v) =>
-      v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+  String _fmt(double v) {
+    if (v == v.truncateToDouble()) return v.toInt().toString();
+    return v.abs() < 1 ? v.toStringAsFixed(3) : v.toStringAsFixed(2);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3795,8 +3819,11 @@ double _toFeet(double v, String unit) {
 double _calcUnitSqft(double wV, String wU, double lV, String lU) =>
     _toFeet(wV, wU) * _toFeet(lV, lU);
 
-String _fmtNum(double v) =>
-    v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+String _fmtNum(double v) {
+  if (v == v.truncateToDouble()) return v.toInt().toString();
+  // Values < 1 need 3 decimal places so 0.9963 shows as "0.996" not "1.00"
+  return v.abs() < 1 ? v.toStringAsFixed(3) : v.toStringAsFixed(2);
+}
 
 String _stockUnitLabel(String su) {
   if (su == 'Sheet') return 'sheet';

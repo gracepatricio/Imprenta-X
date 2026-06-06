@@ -1549,7 +1549,6 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
   Future<void> _loadProducts() async {
     final snap = await FirebaseFirestore.instance
         .collection('Products')
-        .where('is_available', isEqualTo: true)
         .get();
     if (mounted) {
       setState(() {
@@ -4121,6 +4120,11 @@ class _QueueCard extends StatelessWidget {
     if (confirmed != true) return;
 
     final db = FirebaseFirestore.instance;
+
+    // Guard: prevent double-deduction if already deducted
+    final alreadyDeducted =
+        data['bom_deducted'] == true;
+
     final batch = db.batch();
     batch.update(db.collection('Order_Queue').doc(queueDocId), {
       'job_status': 'active',
@@ -4131,44 +4135,61 @@ class _QueueCard extends StatelessWidget {
     });
     await batch.commit();
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      String employeeName = user.displayName ?? user.email ?? 'Employee';
-      try {
-        final userDoc = await db.collection('User').doc(user.uid).get();
-        if (userDoc.exists) {
-          employeeName = userDoc.data()?['full_name'] ?? employeeName;
-        }
-      } catch (_) {}
+    final allDeductionLines = <String>[];
+    final deductionErrors = <String>[];
 
-      final products = List<Map<String, dynamic>>.from(
-        ((data['products'] as List?) ?? []).map(
-          (e) => Map<String, dynamic>.from(e as Map),
-        ),
-      );
-
-      for (final p in products) {
-        final productId = p['product_id']?.toString() ?? '';
-        if (productId.isEmpty) continue;
-        final qty = (p['qty'] as num?)?.toDouble() ?? 1.0;
-        final widthFt = (p['width_ft'] as num?)?.toDouble();
-        final heightFt = (p['height_ft'] as num?)?.toDouble();
-        final selectedMaterial = p['material']?.toString();
-        final effectiveQty = (widthFt != null && heightFt != null)
-            ? widthFt * heightFt * qty
-            : qty;
+    if (!alreadyDeducted) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        String employeeName = user.displayName ?? user.email ?? 'Employee';
         try {
-          await InventoryService.deductForOrder(
-            orderId: orderId,
-            productId: productId,
-            productName: p['name']?.toString() ?? '',
-            orderQuantity: effectiveQty,
-            processedByUid: user.uid,
-            processedByName: employeeName,
-            selectedMaterial: selectedMaterial,
-          );
-        } catch (e) {
-          debugPrint('Inventory deduction failed for $productId: $e');
+          final userDoc = await db.collection('User').doc(user.uid).get();
+          if (userDoc.exists) {
+            employeeName = userDoc.data()?['full_name'] ?? employeeName;
+          }
+        } catch (_) {}
+
+        final products = List<Map<String, dynamic>>.from(
+          ((data['products'] as List?) ?? []).map(
+            (e) => Map<String, dynamic>.from(e as Map),
+          ),
+        );
+
+        for (final p in products) {
+          final productId = p['product_id']?.toString() ?? '';
+          if (productId.isEmpty) continue;
+          final qty = (p['qty'] as num?)?.toDouble() ?? 1.0;
+          final widthFt = (p['width_ft'] as num?)?.toDouble();
+          final heightFt = (p['height_ft'] as num?)?.toDouble();
+          final selectedMaterial = p['material']?.toString();
+          final effectiveQty = (widthFt != null && heightFt != null)
+              ? widthFt * heightFt * qty
+              : qty;
+          try {
+            final lines = await InventoryService.deductForOrder(
+              orderId: orderId,
+              productId: productId,
+              productName: p['name']?.toString() ?? '',
+              orderQuantity: effectiveQty,
+              processedByUid: user.uid,
+              processedByName: employeeName,
+              selectedMaterial: selectedMaterial,
+            );
+            allDeductionLines.addAll(lines);
+          } catch (e) {
+            final pName = p['name']?.toString() ?? productId;
+            deductionErrors.add('$pName: $e');
+            debugPrint('Inventory deduction failed for $productId: $e');
+          }
+        }
+
+        // Mark order as deducted so re-running Start Job won't double-deduct.
+        // Only stamp the flag when something was actually deducted.
+        if (deductionErrors.isEmpty && allDeductionLines.isNotEmpty) {
+          await db
+              .collection('Orders')
+              .doc(orderId)
+              .update({'bom_deducted': true});
         }
       }
     }
@@ -4194,12 +4215,61 @@ class _QueueCard extends StatelessWidget {
     }
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Started production for $orderId'),
-          backgroundColor: _Glass.accentBlue,
-        ),
-      );
+      if (deductionErrors.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Production started for $orderId, but some inventory deductions failed:\n${deductionErrors.join('\n')}',
+            ),
+            backgroundColor: Colors.orange.shade700,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      } else if (allDeductionLines.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Production started — inventory deducted:',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                ...allDeductionLines.map(
+                  (l) => Text(
+                    '  • $l',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: _Glass.accentBlue,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      } else if (alreadyDeducted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Production started for $orderId (inventory already deducted earlier)',
+            ),
+            backgroundColor: _Glass.accentBlue,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Production started for $orderId (no BOM set for products)',
+            ),
+            backgroundColor: _Glass.accentBlue,
+          ),
+        );
+      }
     }
   }
 
