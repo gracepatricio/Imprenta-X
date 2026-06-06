@@ -191,13 +191,13 @@ class InventoryService {
       }
     });
 
-    // 3. Refresh product availability (non-critical, runs after transaction)
-    await _refreshAvailability(productId, bom);
     return summaryLines;
   }
 
   static String _fmt(double v) =>
       v == v.truncateToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+
+  // ── Availability refresh ────────────────────────────────────────────────────
 
   // ── Manual replenish (mirrors employee screen — call if needed elsewhere) ──
 
@@ -242,43 +242,6 @@ class InventoryService {
         if (orderId != null) 'order_id': orderId,
       });
     });
-  }
-
-  // ── Availability refresh ────────────────────────────────────────────────────
-
-  /// Recomputes [is_available] for a product based on its BOM and current stock.
-  /// Only updates if no manual override is set.
-  static Future<void> _refreshAvailability(
-      String productId, List<Map<String, dynamic>> bom) async {
-    try {
-      final productDoc =
-          await _db.collection('Products').doc(productId).get();
-      if (!productDoc.exists) return;
-
-      // Respect manual override
-      if (productDoc.data()?['availability_override'] != null) return;
-
-      bool available = true;
-      for (final item in bom) {
-        final matId = item['material_id']?.toString() ?? '';
-        if (matId.isEmpty) continue;
-        final matDoc =
-            await _db.collection('RawMaterials').doc(matId).get();
-        final stock =
-            (matDoc.data()?['current_stock'] as num?)?.toDouble() ?? 0.0;
-        if (stock <= 0) {
-          available = false;
-          break;
-        }
-      }
-
-      await _db
-          .collection('Products')
-          .doc(productId)
-          .update({'is_available': available, 'availability_checked_at': FieldValue.serverTimestamp()});
-    } catch (_) {
-      // Non-critical — availability refresh failure does not break the order
-    }
   }
 
   // ── Batch availability refresh (call after seeding or bulk stock changes) ──

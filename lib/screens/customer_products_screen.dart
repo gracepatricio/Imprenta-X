@@ -17,6 +17,8 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
   final _scrollCtrl = ScrollController();
   String _searchQuery = '';
   String? _selectedCategory;
+  Map<String, double> _stockMap = {};
+  bool _stockLoaded = false;
 
   static const _categories = [
     'Large Format & Signage',
@@ -28,6 +30,19 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
   void initState() {
     super.initState();
     _selectedCategory = widget.initialCategory;
+    _loadStockMap();
+  }
+
+  Future<void> _loadStockMap() async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('RawMaterials').get();
+      if (!mounted) return;
+      final map = <String, double>{};
+      for (final doc in snap.docs) {
+        map[doc.id] = (doc.data()['current_stock'] as num?)?.toDouble() ?? 0.0;
+      }
+      setState(() { _stockMap = map; _stockLoaded = true; });
+    } catch (_) {}
   }
 
   @override
@@ -60,12 +75,10 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
 
               if (!isLoading && snapshot.hasData) {
                 products = snapshot.data!.docs.where((doc) {
+                  final data = doc.data() as Map;
+                  if (data['is_available'] == false) return false;
                   if (_searchQuery.isEmpty) return true;
-                  final name =
-                      (doc.data() as Map)['product_name']
-                          ?.toString()
-                          .toLowerCase() ??
-                      '';
+                  final name = data['product_name']?.toString().toLowerCase() ?? '';
                   return name.contains(_searchQuery.toLowerCase());
                 }).toList();
               }
@@ -170,10 +183,10 @@ childAspectRatio: 0.60,
                                         ),
                                     itemCount: products.length,
                                     itemBuilder: (_, i) => _ProductCard(
-                                      data:
-                                          products[i].data()
-                                              as Map<String, dynamic>,
+                                      data: products[i].data() as Map<String, dynamic>,
                                       docId: products[i].id,
+                                      stockMap: _stockMap,
+                                      stockLoaded: _stockLoaded,
                                     ),
                                   ),
                                 ],
@@ -193,9 +206,7 @@ childAspectRatio: 0.60,
   }
 
   Stream<QuerySnapshot> _buildQuery() {
-    var q = FirebaseFirestore.instance
-        .collection('Products')
-        .where('is_available', isEqualTo: true);
+    Query<Map<String, dynamic>> q = FirebaseFirestore.instance.collection('Products');
     if (_selectedCategory != null) {
       q = q.where('category', isEqualTo: _selectedCategory);
     }
@@ -750,7 +761,14 @@ class _EmptyState extends StatelessWidget {
 class _ProductCard extends StatefulWidget {
   final Map<String, dynamic> data;
   final String docId;
-  const _ProductCard({required this.data, required this.docId});
+  final Map<String, double> stockMap;
+  final bool stockLoaded;
+  const _ProductCard({
+    required this.data,
+    required this.docId,
+    required this.stockMap,
+    required this.stockLoaded,
+  });
 
   @override
   State<_ProductCard> createState() => _ProductCardState();
@@ -988,6 +1006,23 @@ padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                           ],
                         ),
                       ),
+                      if (widget.stockLoaded) Builder(builder: (_) {
+                        final bom = (widget.data['bill_of_materials'] as List?) ?? [];
+                        if (bom.isEmpty) return const SizedBox.shrink();
+                        final max = _maxForCard(widget.data, widget.stockMap);
+                        final inStock = max > 0;
+                        final color = inStock ? const Color(0xFF4ADE80) : const Color(0xFFF87171);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 3),
+                          child: Row(children: [
+                            Container(width: 6, height: 6,
+                              decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                            const SizedBox(width: 4),
+                            Text(inStock ? 'In stock' : 'Out of stock',
+                              style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w600)),
+                          ]),
+                        );
+                      }),
 const SizedBox(height: 4),
                       SizedBox(
                         width: double.infinity,
@@ -1063,4 +1098,47 @@ padding: const EdgeInsets.symmetric(vertical: 6),
     ),
     child: const Icon(Icons.image_outlined, color: Colors.white24, size: 32),
   );
+}
+
+// Returns the max orderable quantity for a product card (best-case across all variants).
+// Infinity = no BOM / always available. 0 = nothing in stock.
+double _maxForCard(Map<String, dynamic> data, Map<String, double> stockMap) {
+  final bom = (data['bill_of_materials'] as List?) ?? [];
+  if (bom.isEmpty) return double.infinity;
+
+  double itemMin(List items) {
+    double? m;
+    for (final e in items) {
+      final matId = (e['material_id'] as String?) ?? '';
+      if (matId.isEmpty) continue;
+      final qpu = (e['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+      if (qpu <= 0) continue;
+      final v = (stockMap[matId] ?? 0.0) / qpu;
+      if (m == null || v < m) m = v;
+    }
+    return m ?? double.infinity;
+  }
+
+  final shared = bom.where((e) {
+    final opt = (e['for_material_option'] as String?)?.trim() ?? '';
+    return opt.isEmpty;
+  }).toList();
+  final sharedMin = itemMin(shared);
+
+  final matOpts = (data['material_options'] as List?) ?? [];
+  if (matOpts.isEmpty) return sharedMin;
+
+  // For each variant, compute combined available qty; return best across variants.
+  double best = 0;
+  for (final v in matOpts) {
+    final vStr = v.toString().trim();
+    final varItems = bom.where((e) {
+      final opt = (e['for_material_option'] as String?)?.trim() ?? '';
+      return opt.isNotEmpty && opt == vStr;
+    }).toList();
+    final varMin = itemMin(varItems);
+    final combined = sharedMin < varMin ? sharedMin : varMin;
+    if (combined > best) best = combined;
+  }
+  return best;
 }

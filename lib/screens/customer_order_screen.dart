@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../services/design_file_picker.dart';
@@ -43,6 +44,11 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
 
   // Selected add-on services (by name)
   final Set<String> _selectedServices = {};
+
+  // Stock availability
+  Map<String, double> _stockMap = {};
+  bool _availabilityLoaded = false;
+  double? _maxOrderable;
 
   // ── Product accessors ────────────────────────────────────────────────────────
 
@@ -235,6 +241,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
         _sizePreset = '4×4 in';
       }
     }
+    _loadAvailability();
   }
 
   @override
@@ -243,6 +250,66 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     _heightCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
+  }
+
+  // ── Availability ─────────────────────────────────────────────────────────────
+
+  static String _fmtStock(double v) {
+    if (v == v.truncateToDouble()) return v.toInt().toString();
+    return v.abs() < 1 ? v.toStringAsFixed(3) : v.toStringAsFixed(2);
+  }
+
+  Future<void> _loadAvailability() async {
+    final bom = (widget.product['bill_of_materials'] as List?) ?? [];
+    if (bom.isEmpty) {
+      if (mounted) setState(() => _availabilityLoaded = true);
+      return;
+    }
+    final matIds = bom
+        .map((e) => (e['material_id'] as String?) ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final stockMap = <String, double>{};
+    try {
+      for (final matId in matIds) {
+        final doc = await FirebaseFirestore.instance
+            .collection('RawMaterials')
+            .doc(matId)
+            .get();
+        if (doc.exists) {
+          stockMap[matId] = (doc.data()?['current_stock'] as num?)?.toDouble() ?? 0.0;
+        }
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _stockMap = stockMap;
+      _availabilityLoaded = true;
+      _maxOrderable = _computeMax();
+    });
+  }
+
+  double? _computeMax() {
+    final bom = (widget.product['bill_of_materials'] as List?) ?? [];
+    if (bom.isEmpty) return null;
+    String resolved = _material?.trim() ?? '';
+    if (resolved.isEmpty) {
+      final opts = (widget.product['material_options'] as List?) ?? [];
+      if (opts.isNotEmpty) resolved = opts.first.toString().trim();
+    }
+    final applyFilter = resolved.isNotEmpty;
+    double? max;
+    for (final item in bom) {
+      final opt = (item['for_material_option'] as String?)?.trim() ?? '';
+      if (applyFilter && opt.isNotEmpty && opt != resolved) continue;
+      final matId = (item['material_id'] as String?) ?? '';
+      if (matId.isEmpty) continue;
+      final qpu = (item['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+      if (qpu <= 0) continue;
+      final fromThis = (_stockMap[matId] ?? 0.0) / qpu;
+      if (max == null || fromThis < max) max = fromThis;
+    }
+    return max;
   }
 
   // ── File picking ─────────────────────────────────────────────────────────────
@@ -313,6 +380,20 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
         backgroundColor: Colors.orange,
       ));
       return;
+    }
+    if (_maxOrderable != null) {
+      final effQty = _needsSizeInput
+          ? _widthFt * _heightFt * _quantity
+          : _quantity.toDouble();
+      if (effQty > _maxOrderable!) {
+        final unit = _needsSizeInput ? 'sq ft' : 'pcs';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Insufficient stock. Only ${_fmtStock(_maxOrderable!)} $unit available.'),
+          backgroundColor: Colors.red.shade700,
+        ));
+        return;
+      }
     }
 
     setState(() => _addingToCart = true);
@@ -758,10 +839,60 @@ decoration: AppTheme.backgroundDecoration(context),
             spacing: 8,
             runSpacing: 6,
             children: _materialList
-                .map((m) => _chip(
-                m, _material == m, () => setState(() => _material = m)))
+                .map((m) => _chip(m, _material == m, () => setState(() {
+                  _material = m;
+                  if (_availabilityLoaded) _maxOrderable = _computeMax();
+                })))
                 .toList(),
           ),
+          const SizedBox(height: 16),
+        ],
+
+        // ── Stock availability ───────────────────────────────────────────
+        if (_availabilityLoaded && _maxOrderable != null) ...[
+          Builder(builder: (_) {
+            final isArea = _needsSizeInput;
+            final effQty = isArea
+                ? (_widthFt * _heightFt * _quantity)
+                : _quantity.toDouble();
+            final enough = effQty <= _maxOrderable!;
+            final color = enough
+                ? const Color(0xFF4ADE80)
+                : const Color(0xFFF87171);
+            final unitLabel = isArea ? 'sq ft' : 'pcs';
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: enough
+                    ? const Color(0xFF4ADE80).withValues(alpha: 0.08)
+                    : const Color(0xFFF87171).withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: enough
+                        ? const Color(0xFF4ADE80).withValues(alpha: 0.35)
+                        : const Color(0xFFF87171).withValues(alpha: 0.35)),
+              ),
+              child: Row(children: [
+                Icon(
+                  enough
+                      ? Icons.inventory_2_outlined
+                      : Icons.warning_amber_outlined,
+                  color: color,
+                  size: 14,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  enough
+                      ? 'Available: ${_fmtStock(_maxOrderable!)} $unitLabel'
+                      : 'Insufficient — only ${_fmtStock(_maxOrderable!)} $unitLabel available',
+                  style: TextStyle(
+                      color: color,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600),
+                ),
+              ]),
+            );
+          }),
           const SizedBox(height: 16),
         ],
 
