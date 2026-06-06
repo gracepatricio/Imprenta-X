@@ -801,7 +801,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
               widget.fromPayment
                   ? 'Payment Confirmed ✓'
                   : 'Official Sales Invoice',
-              style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+              style: const TextStyle(color: Color(0xFF334155), fontSize: 11),
             ),
           ],
         ),
@@ -919,7 +919,7 @@ class _InvoiceView extends StatelessWidget {
                                 const Text(
                                   _bizTagline,
                                   style: TextStyle(
-                                    color: Color(0xFF94A3B8),
+                                    color: Color(0xFF475569),
                                     fontSize: 11,
                                   ),
                                 ),
@@ -932,7 +932,7 @@ class _InvoiceView extends StatelessWidget {
                               const Text(
                                 'OFFICIAL INVOICE',
                                 style: TextStyle(
-                                  color: Color(0xFF94A3B8),
+                                  color: Color(0xFF475569),
                                   fontSize: 9,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 1.5,
@@ -1000,13 +1000,13 @@ class _InvoiceView extends StatelessWidget {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.location_on_outlined, size: 13, color: Color(0xFF94A3B8)),
+                          const Icon(Icons.location_on_outlined, size: 13, color: Color(0xFF475569)),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               '$_bizAddr1, $_bizAddr2',
                               style: const TextStyle(
-                                color: Color(0xFF64748B),
+                                color: Color(0xFF334155),
                                 fontSize: 11,
                               ),
                             ),
@@ -1015,14 +1015,14 @@ class _InvoiceView extends StatelessWidget {
                           const Text(
                             'TIN: ',
                             style: TextStyle(
-                              color: Color(0xFF94A3B8),
+                              color: Color(0xFF475569),
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           const Text(
                             _bizTin,
-                            style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                            style: TextStyle(color: Color(0xFF334155), fontSize: 11),
                           ),
                         ],
                       ),
@@ -1122,7 +1122,7 @@ class _InvoiceView extends StatelessWidget {
                               const Text(
                                 'BILL TO',
                                 style: TextStyle(
-                                  color: Color(0xFF94A3B8),
+                                  color: Color(0xFF475569),
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 1,
@@ -1140,7 +1140,7 @@ class _InvoiceView extends StatelessWidget {
                               Text(
                                 inv['customer_email']?.toString() ?? '—',
                                 style: const TextStyle(
-                                  color: Color(0xFF64748B),
+                                  color: Color(0xFF334155),
                                   fontSize: 11,
                                 ),
                               ),
@@ -1156,7 +1156,7 @@ class _InvoiceView extends StatelessWidget {
                               const Text(
                                 'ISSUED BY',
                                 style: TextStyle(
-                                  color: Color(0xFF94A3B8),
+                                  color: Color(0xFF475569),
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 1,
@@ -1173,7 +1173,7 @@ class _InvoiceView extends StatelessWidget {
                               ),
                               const Text(
                                 'TIN: $_bizTin',
-                                style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                                style: TextStyle(color: Color(0xFF334155), fontSize: 11),
                               ),
                             ],
                           ),
@@ -1289,7 +1289,7 @@ class _InvoiceView extends StatelessWidget {
                                           if (mat != null) mat,
                                         ].join(' · '),
                                         style: const TextStyle(
-                                          color: Color(0xFF64748B),
+                                          color: Color(0xFF334155),
                                           fontSize: 11,
                                         ),
                                       ),
@@ -1297,7 +1297,7 @@ class _InvoiceView extends StatelessWidget {
                                       Text(
                                         'Note: $notes',
                                         style: const TextStyle(
-                                          color: Color(0xFF94A3B8),
+                                          color: Color(0xFF475569),
                                           fontSize: 11,
                                         ),
                                       ),
@@ -1308,7 +1308,7 @@ class _InvoiceView extends StatelessWidget {
                               Text(
                                 '×$qty',
                                 style: const TextStyle(
-                                  color: Color(0xFF64748B),
+                                  color: Color(0xFF334155),
                                   fontSize: 12,
                                 ),
                               ),
@@ -1327,7 +1327,7 @@ class _InvoiceView extends StatelessWidget {
                                   Text(
                                     '@ ₱${unit.toStringAsFixed(2)}',
                                     style: const TextStyle(
-                                      color: Color(0xFF94A3B8),
+                                      color: Color(0xFF475569),
                                       fontSize: 10,
                                     ),
                                   ),
@@ -1532,7 +1532,7 @@ class _InvoiceView extends StatelessWidget {
                                 child: Text(
                                   t,
                                   style: const TextStyle(
-                                    color: Color(0xFF64748B),
+                                    color: Color(0xFF334155),
                                     fontSize: 11,
                                     height: 1.4,
                                   ),
@@ -1568,13 +1568,13 @@ class _InvoiceView extends StatelessWidget {
                       const SizedBox(height: 4),
                       const Text(
                         '$_bizAddr1, $_bizAddr2',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                        style: TextStyle(color: Color(0xFF475569), fontSize: 10),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'This is an official electronic invoice issued by Imprenta Inc.',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                        style: TextStyle(color: Color(0xFF475569), fontSize: 10),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -1651,7 +1651,7 @@ class _InvDetail extends StatelessWidget {
       Text(
         label,
         style: const TextStyle(
-          color: Color(0xFF94A3B8),
+          color: Color(0xFF475569),
           fontSize: 9,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.8,
@@ -1747,7 +1747,7 @@ class _MetaCard extends StatelessWidget {
               Text(
                 label,
                 style: const TextStyle(
-                  color: Color(0xFF94A3B8),
+                  color: Color(0xFF475569),
                   fontSize: 9,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.8,

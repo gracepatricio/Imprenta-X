@@ -2336,19 +2336,49 @@ class _ForecastContentState extends State<_ForecastContent> {
         }
       }
 
-      final orderSnap = await db
-          .collection('Orders')
-          .where('status', isEqualTo: 'completed')
-          .get();
+      // Fetch completed orders, sales records and inventory logs in parallel
+      final fetchResults = await Future.wait([
+        db.collection('Orders').where('status', isEqualTo: 'completed').get(),
+        db.collection('Sales_Records').get(),
+        db.collection('InventoryLogs').get(),
+      ]);
+      final orderSnap    = fetchResults[0];
+      final salesRecSnap = fetchResults[1];
+      final logSnap      = fetchResults[2];
+
       final c1 = <String, double>{};
       final c2 = <String, double>{};
       final c3 = <String, double>{};
+
+      // From completed Orders (uses created_at)
       accum(orderSnap.docs, p1Start, nowTs, c1);
       accum(orderSnap.docs, p2Start, p1Start, c2);
       accum(orderSnap.docs, p3Start, p2Start, c3);
 
+      // From Sales_Records (uses sale_date + product_name → BOM)
+      for (final period in [
+        (p1Start, nowTs,   c1),
+        (p2Start, p1Start, c2),
+        (p3Start, p2Start, c3),
+      ]) {
+        for (final doc in salesRecSnap.docs) {
+          final ts = doc.data()['sale_date'] as Timestamp?;
+          if (ts == null) continue;
+          if (ts.compareTo(period.$1) < 0) continue;
+          if (ts.compareTo(period.$2) >= 0) continue;
+          final productName = doc.data()['product_name']?.toString() ?? '';
+          final qty = (doc.data()['quantity'] as num?)?.toDouble() ?? 1.0;
+          if (productName.isEmpty || qty <= 0) continue;
+          final bom = bomByName[productName] ?? [];
+          for (final b in bom) {
+            final mid = b['material_id']?.toString() ?? '';
+            final qpu = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+            if (mid.isNotEmpty) period.$3[mid] = (period.$3[mid] ?? 0) + qty * qpu;
+          }
+        }
+      }
+
       final repMap = <String, double>{};
-      final logSnap = await db.collection('InventoryLogs').get();
       for (final d in logSnap.docs) {
         final ts = d.data()['timestamp'] as Timestamp?;
         if (ts != null && ts.compareTo(p3Start) < 0) continue;
@@ -2359,20 +2389,37 @@ class _ForecastContentState extends State<_ForecastContent> {
 
       final items = <_FItem>[];
       for (final e in mats.entries) {
-        final mid = e.key;
+        final mid  = e.key;
         final data = e.value;
         final name = data['material_name']?.toString() ?? mid;
-        final unit = data['unit_description']?.toString() ?? '';
-        final stk = (data['current_stock'] as num?)?.toDouble() ?? 0;
-        final rst = (data['restock_level'] as num?)?.toDouble() ?? 0;
-        final v1 = c1[mid] ?? 0.0;
-        final v2 = c2[mid] ?? 0.0;
-        final v3 = c3[mid] ?? 0.0;
+        final su       = data['stocking_unit']?.toString() ?? '';
+        final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
+        final unitDesc = data['unit_description']?.toString() ?? '';
+        final unit = unitDesc.isNotEmpty ? unitDesc : (su.isNotEmpty ? su : '');
+
+        final rawStk = (data['current_stock'] as num?)?.toDouble() ?? 0;
+        final rawRst = (data['restock_level'] as num?)?.toDouble() ?? 0;
+
+        // Convert base units (sqft) → stocking units for display
+        final isNewStyle = unitSqft > 0.001 && su.isNotEmpty;
+        final stk = isNewStyle ? rawStk / unitSqft : rawStk;
+        final rst = isNewStyle ? rawRst / unitSqft : rawRst;
+
+        final rawV1 = c1[mid] ?? 0.0;
+        final rawV2 = c2[mid] ?? 0.0;
+        final rawV3 = c3[mid] ?? 0.0;
+        final v1 = isNewStyle ? rawV1 / unitSqft : rawV1;
+        final v2 = isNewStyle ? rawV2 / unitSqft : rawV2;
+        final v3 = isNewStyle ? rawV3 / unitSqft : rawV3;
+
         final r1 = v1 / _perDays;
         final r2 = v2 / _perDays;
         final r3 = v3 / _perDays;
         final total = v1 + v2 + v3;
-        final rep = repMap[mid] ?? 0.0;
+
+        final rawRep = repMap[mid] ?? 0.0;
+        final rep = isNewStyle ? rawRep / unitSqft : rawRep;
+
         final daily = total > 0
             ? total / _winDays
             : (rep > 0 ? rep / _winDays : 0.0);
@@ -2763,16 +2810,21 @@ class _ForecastContentState extends State<_ForecastContent> {
                       ),
                     ),
                   )
-                : Scrollbar(
-                    thumbVisibility: true,
-                    trackVisibility: true,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(14),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, i) => _FCard(item: filtered[i]),
-                    ),
-                  ),
+                : Builder(builder: (ctx) {
+                    final scrollCtrl = ScrollController();
+                    return Scrollbar(
+                      controller: scrollCtrl,
+                      thumbVisibility: true,
+                      trackVisibility: true,
+                      child: ListView.separated(
+                        controller: scrollCtrl,
+                        padding: const EdgeInsets.all(14),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) => _FCard(item: filtered[i]),
+                      ),
+                    );
+                  }),
           ),
         ],
       );

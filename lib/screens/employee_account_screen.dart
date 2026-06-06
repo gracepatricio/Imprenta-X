@@ -769,7 +769,10 @@ class _EmployeeDashboardContent extends StatelessWidget {
                     (data['current_stock'] as num?)?.toDouble() ?? 0;
                 final restock =
                     (data['restock_level'] as num?)?.toDouble() ?? 0;
-                return current <= restock;
+                if (current <= 0) return true;
+                if (current <= restock * 0.5) return true;
+                if (current <= restock) return true;
+                return false;
               }).toList();
 
               return Column(
@@ -846,18 +849,29 @@ class _EmployeeDashboardContent extends StatelessWidget {
                     ...lowMats.map((doc) {
                       final d = doc.data() as Map<String, dynamic>;
                       final name = d['material_name']?.toString() ?? doc.id;
-                      final unit = d['unit_description']?.toString() ?? '';
-                      final current =
-                          (d['current_stock'] as num?)?.toDouble() ?? 0;
-                      final restock =
-                          (d['restock_level'] as num?)?.toDouble() ?? 0;
-                      final isCritical = current <= restock * 0.5;
-                      final statusColor = isCritical
-                          ? _G.accentRose
-                          : _G.accentAmber;
-                      final statusLabel = isCritical ? 'Critical' : 'Low Stock';
-                      final pct = restock > 0
-                          ? (current / restock).clamp(0.0, 1.0)
+                      final su       = d['stocking_unit']?.toString() ?? '';
+                      final unitSqft = (d['unit_size_sqft'] as num?)?.toDouble() ?? 0;
+                      final unitDesc = d['unit_description']?.toString() ?? '';
+                      final unit = unitDesc.isNotEmpty ? unitDesc : (su.isNotEmpty ? su.toLowerCase() : '');
+
+                      final rawStock   = (d['current_stock'] as num?)?.toDouble() ?? 0;
+                      final rawRestock = (d['restock_level'] as num?)?.toDouble() ?? 0;
+                      final isNewStyle = unitSqft > 0.001 && su.isNotEmpty;
+                      final current = isNewStyle ? rawStock   / unitSqft : rawStock;
+                      final restock = isNewStyle ? rawRestock / unitSqft : rawRestock;
+
+                      String statusLabel;
+                      Color statusColor;
+                      if (rawStock <= 0) {
+                        statusLabel = 'Out of Stock'; statusColor = _G.accentRose;
+                      } else if (rawStock <= rawRestock * 0.5) {
+                        statusLabel = 'Critical'; statusColor = _G.accentRose;
+                      } else {
+                        statusLabel = 'Low Stock'; statusColor = _G.accentAmber;
+                      }
+                      final isCritical = statusColor == _G.accentRose;
+                      final pct = rawRestock > 0
+                          ? (rawStock / rawRestock).clamp(0.0, 1.0)
                           : 0.0;
 
                       return Container(
@@ -929,7 +943,7 @@ class _EmployeeDashboardContent extends StatelessWidget {
                             Row(
                               children: [
                                 Text(
-                                  '${current % 1 == 0 ? current.toInt() : current} / ${restock % 1 == 0 ? restock.toInt() : restock}${unit.isNotEmpty ? ' $unit' : ''}',
+                                  '${current == current.roundToDouble() ? current.toInt() : current.toStringAsFixed(2)} / ${restock == restock.roundToDouble() ? restock.toInt() : restock.toStringAsFixed(2)}${unit.isNotEmpty ? ' $unit' : ''}',
                                   style: TextStyle(
                                     color: statusColor,
                                     fontSize: 11,

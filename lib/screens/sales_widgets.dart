@@ -1036,37 +1036,56 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
   DateTimeRange? _selectedRange;
   String _search = '';
 
-  QuerySnapshot? _snapshot;
   List<_GroupedRecord> _allGroups = [];
   bool _groupsLoading = false;
-  StreamSubscription<QuerySnapshot>? _sub;
+  // True when no date filter is active and we're showing a limited window
+  bool _isLimited = false;
   final _searchCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _sub = FirebaseFirestore.instance
-        .collection('Sales_Records')
-        .orderBy('sale_date', descending: true)
-        .snapshots()
-        .listen((snap) async {
-      if (!mounted) return;
-      setState(() {
-        _snapshot = snap;
-        _groupsLoading = true;
-      });
+    _loadRecords();
+  }
+
+  Future<void> _loadRecords() async {
+    if (!mounted) return;
+    setState(() => _groupsLoading = true);
+    try {
+      Query<Map<String, dynamic>> q = FirebaseFirestore.instance
+          .collection('Sales_Records')
+          .orderBy('sale_date', descending: true);
+
+      if (_selectedRange != null) {
+        // Server-side date filter: query only the selected window
+        q = q
+            .where('sale_date',
+                isGreaterThanOrEqualTo:
+                    Timestamp.fromDate(_selectedRange!.start))
+            .where('sale_date',
+                isLessThanOrEqualTo: Timestamp.fromDate(
+                    _selectedRange!.end.add(const Duration(days: 1))));
+        _isLimited = false;
+      } else {
+        // No filter: limit to 500 most recent records for fast load
+        q = q.limit(500);
+        _isLimited = true;
+      }
+
+      final snap = await q.get();
       final groups = await _groupRecordsAsync(snap.docs);
       if (mounted)
         setState(() {
           _allGroups = groups;
           _groupsLoading = false;
         });
-    });
+    } catch (_) {
+      if (mounted) setState(() => _groupsLoading = false);
+    }
   }
 
   @override
   void dispose() {
-    _sub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -1152,7 +1171,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
 
   @override
   Widget build(BuildContext context) {
-    if (_snapshot == null || _groupsLoading) {
+    if (_groupsLoading) {
       return Center(
         child: CircularProgressIndicator(
           color: _T.textPrimary.withValues(alpha: 0.4),
@@ -1160,14 +1179,9 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
       );
     }
 
+    // All records already scoped to server-side query (date range or limit 500)
     final allGroups = _allGroups;
-
-    // All records filtered by date — used for total revenue (includes imported Excel records)
-    var allDateFiltered = allGroups.where((g) {
-      final ts = g.latestDate;
-      if (ts == null) return _selectedRange == null;
-      return _isWithinDateRange(ts.toDate().toLocal(), _selectedRange);
-    }).toList();
+    final allDateFiltered = allGroups.toList();
 
     // System orders only (no imported) — used for list, search, Records chip, To Collect
     var filtered = allDateFiltered.where((g) => !g.isImported).toList();
@@ -1210,6 +1224,16 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
+                if (_isLimited) ...[
+                  _SummaryChip(
+                    label: '500 most recent',
+                    value: 'Pick a date range for full history',
+                    fg: const Color(0xFF64748B),
+                    bg: const Color(0xFFF1F5F9),
+                    border: const Color(0xFFCBD5E1),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 _SummaryChip(
                   label: _selectedRange == null ? 'Total' : 'Date Total',
                   value: '₱${totalRevenue.toStringAsFixed(2)}',
@@ -1240,7 +1264,10 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
           _UnifiedFilterBar(
             selectedRange: _selectedRange,
             activeType: _typeFilter,
-            onDateChanged: (range) => setState(() => _selectedRange = range),
+            onDateChanged: (range) {
+              setState(() => _selectedRange = range);
+              _loadRecords();
+            },
             onTypeChanged: (t) => setState(() => _typeFilter = t),
           ),
           const SizedBox(height: 8),
