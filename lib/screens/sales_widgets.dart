@@ -438,7 +438,11 @@ class _SalesDatePickerDialogState extends State<_SalesDatePickerDialog> {
         const SizedBox(width: 8),
         FilledButton(
           onPressed: () {
-            widget.onApply(_start, _end);
+            // Parse any pending text edits before applying
+            var s = _parse(_startCtrl.text) ?? _start;
+            var e = _parse(_endCtrl.text) ?? _end;
+            if (e.isBefore(s)) e = s;
+            widget.onApply(s, e);
             Navigator.of(context).pop();
           },
           style: FilledButton.styleFrom(
@@ -1045,6 +1049,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
   @override
   void initState() {
     super.initState();
+    _selectedRange = _pLast31();
     _loadRecords();
   }
 
@@ -1108,6 +1113,8 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
         return 'Balance';
       case 'full':
         return 'Upfront Payment';
+      case 'refund':
+        return 'Refund';
       default:
         return (t != null && t.isNotEmpty) ? t : '—';
     }
@@ -1121,6 +1128,8 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
         return const Color(0xFFB45309);
       case 'full':
         return const Color(0xFF6D28D9);
+      case 'refund':
+        return const Color(0xFFDC2626);
       default:
         return _T.textMuted;
     }
@@ -1134,6 +1143,8 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
         return const Color(0xFFFFFBEB);
       case 'full':
         return const Color(0xFFF5F3FF);
+      case 'refund':
+        return const Color(0xFFFEF2F2);
       default:
         return _T.headerBg;
     }
@@ -1147,6 +1158,8 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
         return const Color(0xFFFDE68A);
       case 'full':
         return const Color(0xFFDDD6FE);
+      case 'refund':
+        return const Color(0xFFFECACA);
       default:
         return _T.divider;
     }
@@ -1514,7 +1527,15 @@ class _SalesRecordCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    // Total paid (cumulative across all payments for this order)
+                    const Text(
+                      'Amount Paid',
+                      style: TextStyle(
+                        color: _T.textMuted,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
                     Text(
                       '₱${totalPaid.toStringAsFixed(2)}',
                       style: const TextStyle(
@@ -1664,6 +1685,7 @@ class _UnifiedFilterBar extends StatelessWidget {
     ('downpayment', 'Downpayment', Color(0xFF1D4ED8)),
     ('balance', 'Balance', Color(0xFFB45309)),
     ('full', 'Upfront', Color(0xFF6D28D9)),
+    ('refund', 'Refund', Color(0xFFDC2626)),
   ];
 
   @override
@@ -1708,12 +1730,6 @@ class _UnifiedFilterBar extends StatelessWidget {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      _PresetChip(
-                        label: 'All time',
-                        active: selectedRange == null,
-                        onTap: () => onDateChanged(null),
-                      ),
-                      const SizedBox(width: 6),
                       _PresetChip(
                         label: 'Last 31 days',
                         active: _rangesMatch(selectedRange, _pLast31()),

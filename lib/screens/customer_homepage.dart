@@ -96,20 +96,30 @@ class _CustomerHomepageState extends State<CustomerHomepage> {
         final items = ['Home', 'About', 'Products', cartLabel, 'Account'];
         final activeItem = _active == 'Cart' ? cartLabel : _active;
 
-        return Scaffold(
-          body: Container(
+        return ScrollbarTheme(
+          data: ScrollbarThemeData(
+            thumbColor: WidgetStateProperty.all(
+                Colors.white.withValues(alpha: 0.50)),
+            trackColor: WidgetStateProperty.all(
+                Colors.white.withValues(alpha: 0.10)),
+            trackBorderColor: WidgetStateProperty.all(
+                Colors.white.withValues(alpha: 0.06)),
+          ),
+          child: Scaffold(
+            body: Container(
 decoration: AppTheme.backgroundDecoration(context),
-            child: Column(
-              children: [
-                AppNavBar(
-                  items:      items,
-                  activeItem: activeItem,
-                  onTap: (item) => setState(() {
-                    _active = item.startsWith('Cart') ? 'Cart' : item;
-                  }),
-                ),
-                Expanded(child: _screen(cartCount)),
-              ],
+              child: Column(
+                children: [
+                  AppNavBar(
+                    items:      items,
+                    activeItem: activeItem,
+                    onTap: (item) => setState(() {
+                      _active = item.startsWith('Cart') ? 'Cart' : item;
+                    }),
+                  ),
+                  Expanded(child: _screen(cartCount)),
+                ],
+              ),
             ),
           ),
         );

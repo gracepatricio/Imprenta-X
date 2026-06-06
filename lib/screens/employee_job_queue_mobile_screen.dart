@@ -182,9 +182,18 @@ class _MobileQueueList extends StatelessWidget {
   Stream<List<QueryDocumentSnapshot>> _stream() {
     final q = FirebaseFirestore.instance
         .collection('Orders')
-        .where('status', isEqualTo: status)
-        .orderBy('created_at', descending: true);
-    return q.snapshots().map((s) => s.docs);
+        .where('status', isEqualTo: status);
+    return q.snapshots().map((s) {
+      final docs = [...s.docs]..sort((a, b) {
+        final ta = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+        final tb = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+        if (ta == null && tb == null) return 0;
+        if (ta == null) return 1;
+        if (tb == null) return -1;
+        return tb.compareTo(ta);
+      });
+      return docs;
+    });
   }
 
   @override
@@ -195,6 +204,20 @@ class _MobileQueueList extends StatelessWidget {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(
               child: CircularProgressIndicator(color: AppTheme.gold));
+        }
+        if (snap.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Error loading orders: ${snap.error}',
+                style: TextStyle(
+                    color: Colors.redAccent.withValues(alpha: 0.8),
+                    fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
         }
         final docs = snap.data ?? [];
         if (docs.isEmpty) {
@@ -400,7 +423,7 @@ class _MobileOrderCard extends StatelessWidget {
     final status = data['status']?.toString() ?? 'pending';
     final products =
         (data['products'] as List<dynamic>?)?.cast<Map>() ?? [];
-    final total = (data['total_amount'] as num?)?.toDouble() ?? 0.0;
+    final total = (data['total_price'] as num?)?.toDouble() ?? 0.0;
     final turnaround = data['turnaround_days'] as int?;
     final date = _fmtDate(data['created_at']);
     final color = _statusColor(status);
@@ -636,7 +659,7 @@ class _MobileDeadlineBanner extends StatefulWidget {
 }
 
 class _MobileDeadlineBannerState extends State<_MobileDeadlineBanner> {
-  bool _expanded = true;
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {

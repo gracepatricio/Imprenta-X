@@ -60,30 +60,33 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
         final h = isWide ? 24.0 : 16.0;
         final cols = isWide ? (constraints.maxWidth >= 900 ? 4 : 3) : 2;
 
-        return Scrollbar(
-          controller: _scrollCtrl,
-          thumbVisibility: true,
-          trackVisibility: true,
-          thickness: 6,
-          radius: const Radius.circular(3),
-          child: StreamBuilder<QuerySnapshot>(
-            stream: _buildQuery(),
-            builder: (context, snapshot) {
-              List<QueryDocumentSnapshot> products = [];
-              bool isLoading =
-                  snapshot.connectionState == ConnectionState.waiting;
+        // StreamBuilder is the outer widget so Scrollbar can directly wrap
+        // CustomScrollView — the same pattern admin/employee screens use.
+        return StreamBuilder<QuerySnapshot>(
+          stream: _buildQuery(),
+          builder: (context, snapshot) {
+            List<QueryDocumentSnapshot> products = [];
+            final isLoading =
+                snapshot.connectionState == ConnectionState.waiting;
 
-              if (!isLoading && snapshot.hasData) {
-                products = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map;
-                  if (data['is_available'] == false) return false;
-                  if (_searchQuery.isEmpty) return true;
-                  final name = data['product_name']?.toString().toLowerCase() ?? '';
-                  return name.contains(_searchQuery.toLowerCase());
-                }).toList();
-              }
+            if (!isLoading && snapshot.hasData) {
+              products = snapshot.data!.docs.where((doc) {
+                final data = doc.data() as Map;
+                if (data['is_available'] == false) return false;
+                if (_searchQuery.isEmpty) return true;
+                final name =
+                    data['product_name']?.toString().toLowerCase() ?? '';
+                return name.contains(_searchQuery.toLowerCase());
+              }).toList();
+            }
 
-              return CustomScrollView(
+            return Scrollbar(
+              controller: _scrollCtrl,
+              thumbVisibility: true,
+              trackVisibility: true,
+              thickness: 6,
+              radius: const Radius.circular(3),
+              child: CustomScrollView(
                 controller: _scrollCtrl,
                 slivers: [
                   // ── Page header banner ──────────────────────────────
@@ -98,7 +101,8 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
                         children: [
                           _SearchBar(
                             controller: _searchCtrl,
-                            onChanged: (v) => setState(() => _searchQuery = v),
+                            onChanged: (v) =>
+                                setState(() => _searchQuery = v),
                           ),
                           const SizedBox(height: 16),
                           _CategoryGrid(
@@ -116,14 +120,16 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
                   if (isLoading)
                     const SliverFillRemaining(
                       child: Center(
-                        child: CircularProgressIndicator(color: AppTheme.gold),
+                        child: CircularProgressIndicator(
+                            color: AppTheme.gold),
                       ),
                     )
                   // ── Empty state ─────────────────────────────────────
                   else if (products.isEmpty)
                     SliverFillRemaining(
                       child: _EmptyState(
-                        query: _searchQuery.isNotEmpty ? _searchQuery : null,
+                        query:
+                            _searchQuery.isNotEmpty ? _searchQuery : null,
                         category: _selectedCategory,
                       ),
                     )
@@ -135,34 +141,32 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(20),
                           child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                            filter:
+                                ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                             child: Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                // Off-white frosted glass surface
-                                color: const Color.fromARGB(
-                                  255,
-                                  12,
-                                  9,
-                                  31,
-                                ).withValues(alpha: 0.40),
+                                color: const Color.fromARGB(255, 12, 9, 31)
+                                    .withValues(alpha: 0.40),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.30),
+                                  color:
+                                      Colors.white.withValues(alpha: 0.30),
                                   width: 1.2,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.18),
+                                    color: Colors.black
+                                        .withValues(alpha: 0.18),
                                     blurRadius: 32,
                                     offset: const Offset(0, 6),
                                   ),
                                 ],
                               ),
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                 children: [
-                                  // ── Section label inside the container ──
                                   _SectionLabel(
                                     category: _selectedCategory,
                                     count: products.length,
@@ -176,14 +180,15 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
                                         const NeverScrollableScrollPhysics(),
                                     gridDelegate:
                                         SliverGridDelegateWithFixedCrossAxisCount(
-                                          crossAxisCount: cols,
-                                          mainAxisSpacing: 14,
-                                          crossAxisSpacing: 14,
-childAspectRatio: 0.60,
-                                        ),
+                                      crossAxisCount: cols,
+                                      mainAxisSpacing: 14,
+                                      crossAxisSpacing: 14,
+                                      childAspectRatio: 0.60,
+                                    ),
                                     itemCount: products.length,
                                     itemBuilder: (_, i) => _ProductCard(
-                                      data: products[i].data() as Map<String, dynamic>,
+                                      data: products[i].data()
+                                          as Map<String, dynamic>,
                                       docId: products[i].id,
                                       stockMap: _stockMap,
                                       stockLoaded: _stockLoaded,
@@ -197,9 +202,9 @@ childAspectRatio: 0.60,
                       ),
                     ),
                 ],
-              );
-            },
-          ),
+              ),
+            );
+          },
         );
       },
     );

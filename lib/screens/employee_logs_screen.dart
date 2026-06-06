@@ -250,10 +250,10 @@ class _TabPill extends StatelessWidget {
       decoration: isActive
           ? _Glass.solidPill(_navyBlue, glow: true)
           : BoxDecoration(
-              color: _Glass.surfaceThin,
-              borderRadius: BorderRadius.circular(99),
-              border: Border.all(color: _Glass.borderMid, width: 0.9),
-            ),
+        color: _Glass.surfaceThin,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: _Glass.borderMid, width: 0.9),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -368,9 +368,9 @@ class _SalesPillTab extends StatelessWidget {
         decoration: isActive
             ? _Glass.solidPill(_navyBlue)
             : const BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.all(Radius.circular(99)),
-              ),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.all(Radius.circular(99)),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -450,20 +450,20 @@ class _PillSegmentControl<T> extends StatelessWidget {
                 ),
                 decoration: isActive
                     ? BoxDecoration(
-                        color: item.accent,
-                        borderRadius: BorderRadius.circular(99),
-                        boxShadow: [
-                          BoxShadow(
-                            color: item.accent.withValues(alpha: 0.30),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      )
+                  color: item.accent,
+                  borderRadius: BorderRadius.circular(99),
+                  boxShadow: [
+                    BoxShadow(
+                      color: item.accent.withValues(alpha: 0.30),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                )
                     : const BoxDecoration(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.all(Radius.circular(99)),
-                      ),
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.all(Radius.circular(99)),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -591,23 +591,23 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
 
   static const _statusTabs = [
     (
-      _QueueSubTab.pending,
-      'Pending',
-      Icons.hourglass_empty_rounded,
-      Color(0xFFD97706),
+    _QueueSubTab.pending,
+    'Pending',
+    Icons.hourglass_empty_rounded,
+    Color(0xFFD97706),
     ),
     (_QueueSubTab.active, 'Active', Icons.bolt_rounded, Color(0xFF2563EB)),
     (
-      _QueueSubTab.ready,
-      'Ready',
-      Icons.check_circle_outline,
-      Color(0xFF16A34A),
+    _QueueSubTab.ready,
+    'Ready',
+    Icons.check_circle_outline,
+    Color(0xFF16A34A),
     ),
     (
-      _QueueSubTab.cancelled,
-      'Cancelled',
-      Icons.cancel_outlined,
-      Color(0xFFDC2626),
+    _QueueSubTab.cancelled,
+    'Cancelled',
+    Icons.cancel_outlined,
+    Color(0xFFDC2626),
     ),
   ];
 
@@ -640,12 +640,12 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
                       items: _statusTabs
                           .map(
                             (t) => _PillSegmentItem(
-                              value: t.$1,
-                              label: t.$2,
-                              icon: t.$3,
-                              accent: t.$4,
-                            ),
-                          )
+                          value: t.$1,
+                          label: t.$2,
+                          icon: t.$3,
+                          accent: t.$4,
+                        ),
+                      )
                           .toList(),
                       onChanged: (v) => setState(() => _sub = v),
                     ),
@@ -713,8 +713,8 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
             Expanded(
               child: isHistory
                   ? _EmployeeOrderHistory(
-                      onBack: () => setState(() => _sub = _QueueSubTab.pending),
-                    )
+                onBack: () => setState(() => _sub = _QueueSubTab.pending),
+              )
                   : _buildQueueContent(),
             ),
           ],
@@ -864,9 +864,9 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
       final docs = [...snap.docs]
         ..sort((a, b) {
           final ta =
-              (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           final tb =
-              (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           if (ta == null && tb == null) return 0;
           if (ta == null) return 1;
           if (tb == null) return -1;
@@ -985,13 +985,13 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                   decoration: active
                       ? _Glass.solidPill(_navyBlue, glow: true)
                       : BoxDecoration(
-                          color: _Glass.surfaceThin,
-                          borderRadius: BorderRadius.circular(99),
-                          border: Border.all(
-                            color: _Glass.borderMid,
-                            width: 0.9,
-                          ),
-                        ),
+                    color: _Glass.surfaceThin,
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(
+                      color: _Glass.borderMid,
+                      width: 0.9,
+                    ),
+                  ),
                   child: Text(
                     opt.$2,
                     style: TextStyle(
@@ -1028,32 +1028,32 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
               ),
               suffixIcon: _search.isNotEmpty
                   ? GestureDetector(
-                      onTap: () {
-                        _searchCtrl.clear();
-                        setState(() {
-                          _search = '';
-                          _resolvedCustomerName = null;
-                          _isResolvingId = false;
-                        });
-                      },
-                      child: _isResolvingId
-                          ? const Padding(
-                              padding: EdgeInsets.all(10),
-                              child: SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: _Glass.textSecondary,
-                                ),
-                              ),
-                            )
-                          : const Icon(
-                              Icons.clear,
-                              color: _Glass.textMuted,
-                              size: 18,
-                            ),
-                    )
+                onTap: () {
+                  _searchCtrl.clear();
+                  setState(() {
+                    _search = '';
+                    _resolvedCustomerName = null;
+                    _isResolvingId = false;
+                  });
+                },
+                child: _isResolvingId
+                    ? const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _Glass.textSecondary,
+                    ),
+                  ),
+                )
+                    : const Icon(
+                  Icons.clear,
+                  color: _Glass.textMuted,
+                  size: 18,
+                ),
+              )
                   : null,
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
@@ -1152,11 +1152,11 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                   final paid = (data['amount_paid'] as num?)?.toDouble() ?? 0;
                   final remaining =
                       (data['remaining_balance'] as num?)?.toDouble() ??
-                      (total - paid);
+                          (total - paid);
                   final products =
                       (data['products'] as List?)
                           ?.cast<Map<String, dynamic>>() ??
-                      [];
+                          [];
                   final dateStr = _fmtDate(data['created_at']);
                   final invoiceId = data['invoice_id']?.toString();
                   final statusColor = _statusColor(status);
@@ -1204,7 +1204,7 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                             dateStr: dateStr,
                             invoiceId: invoiceId,
                             cancelReason:
-                                data['cancel_reason']?.toString() ?? '',
+                            data['cancel_reason']?.toString() ?? '',
                             notes: data['notes']?.toString() ?? '',
                           ),
                         ),
@@ -1341,12 +1341,19 @@ class _OrderHistoryCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.notes_outlined, size: 12, color: _Glass.textMuted),
+                const Icon(
+                  Icons.notes_outlined,
+                  size: 12,
+                  color: _Glass.textMuted,
+                ),
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
                     'Special Instructions: ${notes.isNotEmpty ? notes : 'None'}',
-                    style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                    style: const TextStyle(
+                      color: _Glass.textMuted,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
               ],
@@ -1547,9 +1554,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
   }
 
   Future<void> _loadProducts() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('Products')
-        .get();
+    final snap = await FirebaseFirestore.instance.collection('Products').get();
     if (mounted) {
       setState(() {
         _products = snap.docs;
@@ -1574,12 +1579,12 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
     final products = _items
         .map(
           (item) => {
-            'category': item.productData['category']?.toString() ?? '',
-            'qty': item.qty,
-            if (item.widthFt != null) 'width_ft': item.widthFt,
-            if (item.heightFt != null) 'height_ft': item.heightFt,
-          },
-        )
+        'category': item.productData['category']?.toString() ?? '',
+        'qty': item.qty,
+        if (item.widthFt != null) 'width_ft': item.widthFt,
+        if (item.heightFt != null) 'height_ft': item.heightFt,
+      },
+    )
         .toList();
     return TurnaroundService.computeOrderDays(products);
   }
@@ -1625,26 +1630,26 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
       final products = _items
           .map(
             (item) => {
-              'product_id':
-                  item.productData['product_id']?.toString() ??
-                  item.productDocId,
-              'name': item.productData['product_name']?.toString() ?? '—',
-              'category': item.productData['category']?.toString() ?? '',
-              'qty': item.qty,
-              'unit_price':
-                  (item.productData['price'] as num?)?.toDouble() ?? 0,
-              'pricing_unit':
-                  item.productData['pricing_unit']?.toString() ?? '',
-              'price': item.subtotal,
-              'notes': item.notes,
-              if (item.widthFt != null) 'width_ft': item.widthFt,
-              if (item.heightFt != null) 'height_ft': item.heightFt,
-              if (item.material != null) 'material': item.material,
-              if (item.widthFt != null && item.heightFt != null)
-                'size_label': '${item.widthFt}ft × ${item.heightFt}ft',
-              'walk_in': true,
-            },
-          )
+          'product_id':
+          item.productData['product_id']?.toString() ??
+              item.productDocId,
+          'name': item.productData['product_name']?.toString() ?? '—',
+          'category': item.productData['category']?.toString() ?? '',
+          'qty': item.qty,
+          'unit_price':
+          (item.productData['price'] as num?)?.toDouble() ?? 0,
+          'pricing_unit':
+          item.productData['pricing_unit']?.toString() ?? '',
+          'price': item.subtotal,
+          'notes': item.notes,
+          if (item.widthFt != null) 'width_ft': item.widthFt,
+          if (item.heightFt != null) 'height_ft': item.heightFt,
+          if (item.material != null) 'material': item.material,
+          if (item.widthFt != null && item.heightFt != null)
+            'size_label': '${item.widthFt}ft × ${item.heightFt}ft',
+          'walk_in': true,
+        },
+      )
           .toList();
 
       final orderRef = db.collection('Orders').doc(orderId);
@@ -1940,11 +1945,11 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           item.productData['product_name']
-                                                  ?.toString() ??
+                                              ?.toString() ??
                                               '—',
                                           style: const TextStyle(
                                             color: _Glass.textPrimary,
@@ -2131,21 +2136,21 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                           child: Center(
                             child: _submitting
                                 ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white70,
-                                    ),
-                                  )
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white70,
+                              ),
+                            )
                                 : const Text(
-                                    'Create Job Order',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                    ),
-                                  ),
+                              'Create Job Order',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -2170,10 +2175,10 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
         decoration: active
             ? _Glass.solidPill(_navyBlue)
             : BoxDecoration(
-                color: _Glass.surfaceThin,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _Glass.borderMid, width: 0.9),
-              ),
+          color: _Glass.surfaceThin,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _Glass.borderMid, width: 0.9),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2517,14 +2522,14 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                     _catChip(
                       'All',
                       _category == null,
-                      () => setState(() => _category = null),
+                          () => setState(() => _category = null),
                     ),
                     ..._categories.map(
-                      (c) => _catChip(
+                          (c) => _catChip(
                         c,
                         _category == c,
-                        () => setState(
-                          () => _category = _category == c ? null : c,
+                            () => setState(
+                              () => _category = _category == c ? null : c,
                         ),
                       ),
                     ),
@@ -2537,149 +2542,149 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
               Expanded(
                 child: filtered.isEmpty
                     ? const Center(
-                        child: Text(
-                          'No products found.',
-                          style: TextStyle(
-                            color: _Glass.textMuted,
-                            fontSize: 13,
-                          ),
-                        ),
-                      )
+                  child: Text(
+                    'No products found.',
+                    style: TextStyle(
+                      color: _Glass.textMuted,
+                      fontSize: 13,
+                    ),
+                  ),
+                )
                     : ListView.builder(
-                        itemCount: filtered.length,
-                        itemBuilder: (_, i) {
-                          final doc = filtered[i];
-                          final data = doc.data() as Map<String, dynamic>;
-                          final name = data['product_name']?.toString() ?? '—';
-                          final price =
-                              (data['price'] as num?)?.toDouble() ?? 0;
-                          final unit = data['pricing_unit']?.toString() ?? '';
-                          final imageUrl = data['image_url']?.toString() ?? '';
-                          final cat = data['category']?.toString() ?? '';
-                          final desc = data['description']?.toString() ?? '';
-                          final isSelected = _selected?.id == doc.id;
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) {
+                    final doc = filtered[i];
+                    final data = doc.data() as Map<String, dynamic>;
+                    final name = data['product_name']?.toString() ?? '—';
+                    final price =
+                        (data['price'] as num?)?.toDouble() ?? 0;
+                    final unit = data['pricing_unit']?.toString() ?? '';
+                    final imageUrl = data['image_url']?.toString() ?? '';
+                    final cat = data['category']?.toString() ?? '';
+                    final desc = data['description']?.toString() ?? '';
+                    final isSelected = _selected?.id == doc.id;
 
-                          return GestureDetector(
-                            onTap: () => setState(() {
-                              _selected = doc;
-                              final minQty =
-                                  (data['min_quantity'] as num?)?.toInt() ?? 1;
-                              _qty = minQty;
-                              _qtyCtrl.text = '$_qty';
-                              _sizePreset = '2×3 ft';
-                              _widthFt = 2;
-                              _heightFt = 3;
-                              _widthCtrl.text = '2';
-                              _heightCtrl.text = '3';
-                              final mats =
-                                  _materialMap[data['category']?.toString() ??
-                                      ''] ??
-                                  [];
-                              _material = mats.isNotEmpty ? mats.first : null;
-                            }),
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              decoration: isSelected
-                                  ? _Glass.glass(
-                                      radius: 12,
-                                      tintBorder: _navyBlue.withValues(
-                                        alpha: 0.45,
-                                      ),
-                                    )
-                                  : _Glass.glass(radius: 12),
-                              child: Row(
+                    return GestureDetector(
+                      onTap: () => setState(() {
+                        _selected = doc;
+                        final minQty =
+                            (data['min_quantity'] as num?)?.toInt() ?? 1;
+                        _qty = minQty;
+                        _qtyCtrl.text = '$_qty';
+                        _sizePreset = '2×3 ft';
+                        _widthFt = 2;
+                        _heightFt = 3;
+                        _widthCtrl.text = '2';
+                        _heightCtrl.text = '3';
+                        final mats =
+                            _materialMap[data['category']?.toString() ??
+                                ''] ??
+                                [];
+                        _material = mats.isNotEmpty ? mats.first : null;
+                      }),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: isSelected
+                            ? _Glass.glass(
+                          radius: 12,
+                          tintBorder: _navyBlue.withValues(
+                            alpha: 0.45,
+                          ),
+                        )
+                            : _Glass.glass(radius: 12),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: const BorderRadius.horizontal(
+                                left: Radius.circular(12),
+                              ),
+                              child: SizedBox(
+                                width: 64,
+                                height: 64,
+                                child: imageUrl.isNotEmpty
+                                    ? Image.network(
+                                  imageUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      _imgPlaceholder(),
+                                )
+                                    : _imgPlaceholder(),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                CrossAxisAlignment.start,
                                 children: [
-                                  ClipRRect(
-                                    borderRadius: const BorderRadius.horizontal(
-                                      left: Radius.circular(12),
-                                    ),
-                                    child: SizedBox(
-                                      width: 64,
-                                      height: 64,
-                                      child: imageUrl.isNotEmpty
-                                          ? Image.network(
-                                              imageUrl,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) =>
-                                                  _imgPlaceholder(),
-                                            )
-                                          : _imgPlaceholder(),
+                                  Text(
+                                    name,
+                                    style: TextStyle(
+                                      color: _Glass.textPrimary,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w800
+                                          : FontWeight.w600,
+                                      fontSize: 13,
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          name,
-                                          style: TextStyle(
-                                            color: _Glass.textPrimary,
-                                            fontWeight: isSelected
-                                                ? FontWeight.w800
-                                                : FontWeight.w600,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        if (cat.isNotEmpty)
-                                          Text(
-                                            cat,
-                                            style: const TextStyle(
-                                              color: _Glass.textMuted,
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                        if (desc.isNotEmpty)
-                                          Text(
-                                            desc,
-                                            style: const TextStyle(
-                                              color: _Glass.textMuted,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                      ],
+                                  if (cat.isNotEmpty)
+                                    Text(
+                                      cat,
+                                      style: const TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 10,
+                                      ),
                                     ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 12),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          '₱${price.toStringAsFixed(2)}',
-                                          style: TextStyle(
-                                            color: isSelected
-                                                ? _navyBlue
-                                                : _Glass.textPrimary,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        if (unit.isNotEmpty)
-                                          Text(
-                                            '/ $unit',
-                                            style: const TextStyle(
-                                              color: _Glass.textMuted,
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                        if (isSelected)
-                                          Icon(
-                                            Icons.check_circle_rounded,
-                                            color: _navyBlue,
-                                            size: 16,
-                                          ),
-                                      ],
+                                  if (desc.isNotEmpty)
+                                    Text(
+                                      desc,
+                                      style: const TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 11,
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),
-                          );
-                        },
+                            Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: Column(
+                                crossAxisAlignment:
+                                CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '₱${price.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? _navyBlue
+                                          : _Glass.textPrimary,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  if (unit.isNotEmpty)
+                                    Text(
+                                      '/ $unit',
+                                      style: const TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  if (isSelected)
+                                    Icon(
+                                      Icons.check_circle_rounded,
+                                      color: _navyBlue,
+                                      size: 16,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                    );
+                  },
+                ),
               ),
 
               if (_selected != null) ...[
@@ -2696,18 +2701,18 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                     children: _sizePresets
                         .map(
                           (p) => _selChip(p, _sizePreset == p, () {
-                            final dims = _presetDims[p];
-                            setState(() {
-                              _sizePreset = p;
-                              if (dims != null) {
-                                _widthFt = dims.$1;
-                                _heightFt = dims.$2;
-                                _widthCtrl.text = dims.$1.toString();
-                                _heightCtrl.text = dims.$2.toString();
-                              }
-                            });
-                          }),
-                        )
+                        final dims = _presetDims[p];
+                        setState(() {
+                          _sizePreset = p;
+                          if (dims != null) {
+                            _widthFt = dims.$1;
+                            _heightFt = dims.$2;
+                            _widthCtrl.text = dims.$1.toString();
+                            _heightCtrl.text = dims.$2.toString();
+                          }
+                        });
+                      }),
+                    )
                         .toList(),
                   ),
                   const SizedBox(height: 10),
@@ -2759,11 +2764,11 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                     children: _materialList
                         .map(
                           (m) => _selChip(
-                            m,
-                            _material == m,
+                        m,
+                        _material == m,
                             () => setState(() => _material = m),
-                          ),
-                        )
+                      ),
+                    )
                         .toList(),
                   ),
                   const SizedBox(height: 14),
@@ -2781,11 +2786,11 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                     const Spacer(),
                     _qtyBtn(
                       Icons.remove_rounded,
-                      () => setState(() {
+                          () => setState(() {
                         final minQty =
                             ((_selected!.data() as Map)['min_quantity'] as num?)
                                 ?.toInt() ??
-                            1;
+                                1;
                         if (_qty > minQty) {
                           _qty--;
                           _qtyCtrl.text = '$_qty';
@@ -2840,7 +2845,7 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                     const SizedBox(width: 8),
                     _qtyBtn(
                       Icons.add_rounded,
-                      () => setState(() {
+                          () => setState(() {
                         _qty++;
                         _qtyCtrl.text = '$_qty';
                       }),
@@ -2871,30 +2876,30 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                   onTap: _selected == null
                       ? null
                       : () {
-                          if (_materialList.isNotEmpty && _material == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Please select a material / finish.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-                          widget.onAdd(
-                            _WalkInItem(
-                              productDocId: _selected!.id,
-                              productData:
-                                  _selected!.data() as Map<String, dynamic>,
-                              qty: _qty,
-                              notes: _notesCtrl.text.trim(),
-                              widthFt: _needsSize ? _widthFt : null,
-                              heightFt: _needsSize ? _heightFt : null,
-                              material: _material,
-                            ),
-                          );
-                          Navigator.pop(context);
-                        },
+                    if (_materialList.isNotEmpty && _material == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Please select a material / finish.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                    widget.onAdd(
+                      _WalkInItem(
+                        productDocId: _selected!.id,
+                        productData:
+                        _selected!.data() as Map<String, dynamic>,
+                        qty: _qty,
+                        notes: _notesCtrl.text.trim(),
+                        widthFt: _needsSize ? _widthFt : null,
+                        heightFt: _needsSize ? _heightFt : null,
+                        material: _material,
+                      ),
+                    );
+                    Navigator.pop(context);
+                  },
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: _selected == null
@@ -2934,10 +2939,10 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
           decoration: active
               ? _Glass.solidPill(_navyBlue)
               : BoxDecoration(
-                  color: _Glass.surfaceThin,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _Glass.borderMid, width: 0.9),
-                ),
+            color: _Glass.surfaceThin,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _Glass.borderMid, width: 0.9),
+          ),
           child: Text(
             label,
             style: TextStyle(
@@ -2984,10 +2989,10 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
           decoration: active
               ? _Glass.solidPill(_navyBlue)
               : BoxDecoration(
-                  color: _Glass.surfaceThin,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _Glass.borderMid, width: 0.9),
-                ),
+            color: _Glass.surfaceThin,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _Glass.borderMid, width: 0.9),
+          ),
           child: Text(
             label,
             style: TextStyle(
@@ -3000,10 +3005,10 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
       );
 
   Widget _dimField(
-    String label,
-    TextEditingController ctrl,
-    ValueChanged<String> onChanged,
-  ) => Container(
+      String label,
+      TextEditingController ctrl,
+      ValueChanged<String> onChanged,
+      ) => Container(
     decoration: BoxDecoration(
       color: _Glass.surfaceThin,
       borderRadius: BorderRadius.circular(10),
@@ -3030,15 +3035,28 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
 // =============================================================================
 // _QueueList (structure unchanged)
 // =============================================================================
-class _QueueList extends StatelessWidget {
+class _QueueList extends StatefulWidget {
   final String jobStatus;
   const _QueueList({required this.jobStatus});
+
+  @override
+  State<_QueueList> createState() => _QueueListState();
+}
+
+class _QueueListState extends State<_QueueList> {
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final query = FirebaseFirestore.instance
         .collection('Order_Queue')
-        .where('job_status', isEqualTo: jobStatus);
+        .where('job_status', isEqualTo: widget.jobStatus);
 
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
@@ -3067,19 +3085,19 @@ class _QueueList extends StatelessWidget {
         final docs = [...(snap.data?.docs ?? [])]
           ..sort((a, b) {
             final ta =
-                (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
             final tb =
-                (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
-            return ta.compareTo(tb); // FIFO: oldest first
+            return ta.compareTo(tb);
           });
 
         if (docs.isEmpty) {
-          final icon = jobStatus == 'pending'
+          final icon = widget.jobStatus == 'pending'
               ? Icons.queue_outlined
-              : jobStatus == 'cancelled'
+              : widget.jobStatus == 'cancelled'
               ? Icons.cancel_outlined
               : Icons.precision_manufacturing_outlined;
           return Center(
@@ -3094,9 +3112,9 @@ class _QueueList extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  jobStatus == 'pending'
+                  widget.jobStatus == 'pending'
                       ? 'No pending jobs'
-                      : jobStatus == 'cancelled'
+                      : widget.jobStatus == 'cancelled'
                       ? 'No cancelled jobs'
                       : 'No active jobs',
                   style: const TextStyle(
@@ -3111,16 +3129,22 @@ class _QueueList extends StatelessWidget {
         }
 
         return Scrollbar(
+          controller: _scrollCtrl,
           thumbVisibility: true,
           trackVisibility: true,
           child: ListView.separated(
+            controller: _scrollCtrl,
             padding: const EdgeInsets.only(bottom: 16),
             itemCount: docs.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final doc = docs[i];
               final data = doc.data() as Map<String, dynamic>;
-              return _QueueCard(queueDocId: doc.id, data: data, position: i + 1);
+              return _QueueCard(
+                queueDocId: doc.id,
+                data: data,
+                position: i + 1,
+              );
             },
           ),
         );
@@ -3132,8 +3156,21 @@ class _QueueList extends StatelessWidget {
 // =============================================================================
 // _ReadyForPickupList (structure unchanged)
 // =============================================================================
-class _ReadyForPickupList extends StatelessWidget {
+class _ReadyForPickupList extends StatefulWidget {
   const _ReadyForPickupList();
+
+  @override
+  State<_ReadyForPickupList> createState() => _ReadyForPickupListState();
+}
+
+class _ReadyForPickupListState extends State<_ReadyForPickupList> {
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3164,13 +3201,13 @@ class _ReadyForPickupList extends StatelessWidget {
         final docs = [...(snap.data?.docs ?? [])]
           ..sort((a, b) {
             final ta =
-                (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
             final tb =
-                (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+            (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
-            return ta.compareTo(tb); // FIFO: oldest first
+            return ta.compareTo(tb);
           });
 
         if (docs.isEmpty) {
@@ -3203,50 +3240,52 @@ class _ReadyForPickupList extends StatelessWidget {
         }
 
         return Scrollbar(
+          controller: _scrollCtrl,
           thumbVisibility: true,
           trackVisibility: true,
           child: ListView.builder(
-          padding: const EdgeInsets.only(bottom: 16),
-          itemCount: docs.length,
-          itemBuilder: (_, i) {
-            final doc = docs[i];
-            final data = doc.data() as Map<String, dynamic>;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: _Glass.accentAmber.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: _Glass.accentAmber.withValues(alpha: 0.35),
+            controller: _scrollCtrl,
+            padding: const EdgeInsets.only(bottom: 16),
+            itemCount: docs.length,
+            itemBuilder: (_, i) {
+              final doc = docs[i];
+              final data = doc.data() as Map<String, dynamic>;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: _Glass.accentAmber.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: _Glass.accentAmber.withValues(alpha: 0.35),
+                        ),
                       ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${i + 1}',
-                        style: const TextStyle(
-                          color: _Glass.accentAmber,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                      child: Center(
+                        child: Text(
+                          '${i + 1}',
+                          style: const TextStyle(
+                            color: _Glass.accentAmber,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _ReadyOrderCard(orderId: doc.id, data: data),
-                  ),
-                ],
-              ),
-            );
-          },
-          ),  // ListView.builder
-        );    // Scrollbar
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ReadyOrderCard(orderId: doc.id, data: data),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
       },
     );
   }
@@ -3409,8 +3448,8 @@ class _ReadyOrderCard extends StatelessWidget {
         (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final productSummary = products.isNotEmpty
         ? products
-              .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
-              .join(', ')
+        .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
+        .join(', ')
         : '—';
     final total = (data['total_price'] as num?)?.toDouble() ?? 0;
 
@@ -3609,67 +3648,67 @@ class _ReadyOrderCard extends StatelessWidget {
                 Expanded(
                   child: !fullyPaid
                       ? Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 7,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _Glass.accentAmber.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: _Glass.accentAmber.withValues(alpha: 0.25),
-                              width: 0.8,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.info_outline,
-                                color: _Glass.accentAmber,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  '₱${remaining.toStringAsFixed(2)} balance due — via POS or app payment',
-                                  style: const TextStyle(
-                                    color: _Glass.accentAmber,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : GestureDetector(
-                          onTap: () => _markCompleted(context),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: _Glass.solidPill(
-                              _Glass.accentEmerald,
-                              glow: true,
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.task_alt_rounded,
-                                  size: 15,
-                                  color: Colors.white,
-                                ),
-                                SizedBox(width: 6),
-                                Text(
-                                  'Mark as Completed',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _Glass.accentAmber.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _Glass.accentAmber.withValues(alpha: 0.25),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.info_outline,
+                          color: _Glass.accentAmber,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '₱${remaining.toStringAsFixed(2)} balance due — via POS or app payment',
+                            style: const TextStyle(
+                              color: _Glass.accentAmber,
+                              fontSize: 11,
                             ),
                           ),
                         ),
+                      ],
+                    ),
+                  )
+                      : GestureDetector(
+                    onTap: () => _markCompleted(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: _Glass.solidPill(
+                        _Glass.accentEmerald,
+                        glow: true,
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.task_alt_rounded,
+                            size: 15,
+                            color: Colors.white,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Mark as Completed',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
@@ -3708,6 +3747,280 @@ class _ReadyOrderCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// =============================================================================
+// _RefundPickupSection — handles refund pickup flow for cancelled orders
+// =============================================================================
+class _RefundPickupSection extends StatelessWidget {
+  final String queueDocId;
+  final String orderId;
+  final Map<String, dynamic> data;
+
+  const _RefundPickupSection({
+    required this.queueDocId,
+    required this.orderId,
+    required this.data,
+  });
+
+  Future<void> _confirmRefundPickup(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: _Glass.surface,
+        elevation: 24,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: _Glass.borderMid, width: 1),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Confirm Refund Pickup?',
+                style: TextStyle(
+                  color: _Glass.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Mark order $orderId refund as picked up by the customer? '
+                    'This will deduct the paid amount from sales records.',
+                style: const TextStyle(
+                  color: _Glass.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
+                      decoration: _Glass.glass(radius: 99),
+                      child: const Text(
+                        'No',
+                        style: TextStyle(
+                          color: _Glass.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
+                      decoration: _Glass.solidPill(
+                        _Glass.accentEmerald,
+                        glow: true,
+                      ),
+                      child: const Text(
+                        'Confirm Pickup',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final db = FirebaseFirestore.instance;
+    final amountPaid =
+        (data['total_price'] as num?)?.toDouble() ?? 0; // fallback
+    // Try to get actual amount_paid from Orders doc
+    double actualPaid = 0;
+    try {
+      final orderSnap = await db.collection('Orders').doc(orderId).get();
+      actualPaid = (orderSnap.data()?['amount_paid'] as num?)?.toDouble() ?? 0;
+    } catch (_) {}
+
+    final batch = db.batch();
+
+    // Mark refund as picked up on both Order_Queue and Orders
+    batch.update(db.collection('Order_Queue').doc(queueDocId), {
+      'refund_picked_up': true,
+      'refund_picked_up_at': FieldValue.serverTimestamp(),
+    });
+    batch.update(db.collection('Orders').doc(orderId), {
+      'refund_picked_up': true,
+      'refund_picked_up_at': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+
+    // Deduct from Sales_Records: add a negative/refund entry
+    if (actualPaid > 0.01) {
+      await db.collection('Sales_Records').add({
+        'order_id': orderId,
+        'customer_name': data['customer_name']?.toString() ?? '—',
+        'customer_id': data['customer_id']?.toString() ?? '',
+        'payment_type': 'refund',
+        'payment_method': 'refund',
+        'sale_amount': -actualPaid, // negative to deduct
+        'order_total': (data['total_price'] as num?)?.toDouble() ?? 0,
+        'walk_in': data['walk_in'] ?? false,
+        'refund': true,
+        'cancel_reason': data['cancel_reason']?.toString() ?? '',
+        'sale_date': FieldValue.serverTimestamp(),
+      });
+    }
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Refund pickup confirmed for $orderId'
+                '${actualPaid > 0.01 ? ' — ₱${actualPaid.toStringAsFixed(2)} deducted from sales' : ''}',
+          ),
+          backgroundColor: _Glass.accentEmerald,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final refundPickedUp = data['refund_picked_up'] == true;
+    final amountPaid =
+        (data['amount_paid'] as num?)?.toDouble() ??
+            (data['total_price'] as num?)?.toDouble() ??
+            0;
+
+    if (refundPickedUp) {
+      // Already picked up — show confirmation badge
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: _Glass.accentEmerald.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _Glass.accentEmerald.withValues(alpha: 0.30),
+            width: 0.9,
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.check_circle_rounded,
+              size: 14,
+              color: _Glass.accentEmerald,
+            ),
+            const SizedBox(width: 6),
+            const Expanded(
+              child: Text(
+                'Refund picked up by customer',
+                style: TextStyle(
+                  color: _Glass.accentEmerald,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Not yet picked up — show "Refund to be picked up" banner + button
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Refund pending banner
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: _Glass.accentAmber.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _Glass.accentAmber.withValues(alpha: 0.30),
+              width: 0.9,
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.monetization_on_outlined,
+                size: 14,
+                color: _Glass.accentAmber,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  amountPaid > 0.01
+                      ? 'Refund to be picked up — ₱${amountPaid.toStringAsFixed(2)}'
+                      : 'Refund to be picked up',
+                  style: const TextStyle(
+                    color: _Glass.accentAmber,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Confirm Refund Pickup button
+        GestureDetector(
+          onTap: () => _confirmRefundPickup(context),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: _Glass.solidPill(_Glass.accentEmerald, glow: true),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.assignment_turned_in_outlined,
+                  size: 15,
+                  color: Colors.white,
+                ),
+                SizedBox(width: 6),
+                Text(
+                  'Confirm Refund Pickup',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -3846,21 +4159,21 @@ class _QueueCard extends StatelessWidget {
                       items: reasons
                           .map(
                             (r) => DropdownMenuItem(
-                              value: r,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                child: Text(
-                                  r,
-                                  style: const TextStyle(
-                                    color: _Glass.textPrimary,
-                                    fontSize: 13,
-                                  ),
-                                ),
+                          value: r,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                            ),
+                            child: Text(
+                              r,
+                              style: const TextStyle(
+                                color: _Glass.textPrimary,
+                                fontSize: 13,
                               ),
                             ),
-                          )
+                          ),
+                        ),
+                      )
                           .toList(),
                       onChanged: (val) {
                         if (val == null) return;
@@ -4010,7 +4323,7 @@ class _QueueCard extends StatelessWidget {
         'sender_uid': 'system',
         'sender_role': 'system',
         'text':
-            'Your order $orderId has been cancelled.\nReason: $finalReason\nPlease contact us for assistance.',
+        'Your order $orderId has been cancelled.\nReason: $finalReason\nPlease contact us for assistance.',
         'timestamp': FieldValue.serverTimestamp(),
       });
       await threadRef.set({
@@ -4122,8 +4435,7 @@ class _QueueCard extends StatelessWidget {
     final db = FirebaseFirestore.instance;
 
     // Guard: prevent double-deduction if already deducted
-    final alreadyDeducted =
-        data['bom_deducted'] == true;
+    final alreadyDeducted = data['bom_deducted'] == true;
 
     final batch = db.batch();
     batch.update(db.collection('Order_Queue').doc(queueDocId), {
@@ -4151,7 +4463,7 @@ class _QueueCard extends StatelessWidget {
 
         final products = List<Map<String, dynamic>>.from(
           ((data['products'] as List?) ?? []).map(
-            (e) => Map<String, dynamic>.from(e as Map),
+                (e) => Map<String, dynamic>.from(e as Map),
           ),
         );
 
@@ -4186,10 +4498,9 @@ class _QueueCard extends StatelessWidget {
         // Mark order as deducted so re-running Start Job won't double-deduct.
         // Only stamp the flag when something was actually deducted.
         if (deductionErrors.isEmpty && allDeductionLines.isNotEmpty) {
-          await db
-              .collection('Orders')
-              .doc(orderId)
-              .update({'bom_deducted': true});
+          await db.collection('Orders').doc(orderId).update({
+            'bom_deducted': true,
+          });
         }
       }
     }
@@ -4203,7 +4514,7 @@ class _QueueCard extends StatelessWidget {
         'sender_uid': 'system',
         'sender_role': 'system',
         'text':
-            'Your order $orderId is now in production!'
+        'Your order $orderId is now in production!'
             '${turnaround != null ? ' Estimated completion: ~$turnaround day${turnaround == 1 ? '' : 's'}.' : ''}',
         'timestamp': FieldValue.serverTimestamp(),
       });
@@ -4240,7 +4551,7 @@ class _QueueCard extends StatelessWidget {
                   ),
                 ),
                 ...allDeductionLines.map(
-                  (l) => Text(
+                      (l) => Text(
                     '  • $l',
                     style: const TextStyle(color: Colors.white),
                   ),
@@ -4415,8 +4726,8 @@ class _QueueCard extends StatelessWidget {
         (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final productSummary = products.isNotEmpty
         ? products
-              .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
-              .join(', ')
+        .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
+        .join(', ')
         : '—';
     final total = (data['total_price'] as num?)?.toDouble() ?? 0;
     final jobStatus = data['job_status']?.toString() ?? 'pending';
@@ -4516,8 +4827,8 @@ class _QueueCard extends StatelessWidget {
     final productSummary = products.isEmpty
         ? null
         : products
-              .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
-              .join(', ');
+        .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
+        .join(', ');
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -4636,12 +4947,19 @@ class _QueueCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.notes_outlined, size: 12, color: _Glass.textMuted),
+                    const Icon(
+                      Icons.notes_outlined,
+                      size: 12,
+                      color: _Glass.textMuted,
+                    ),
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         'Special Instructions: ${(data['notes'] as String?)?.isNotEmpty == true ? data['notes'] : 'None'}',
-                        style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                        style: const TextStyle(
+                          color: _Glass.textMuted,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ],
@@ -4701,6 +5019,15 @@ class _QueueCard extends StatelessWidget {
                             ],
                           ),
                         ),
+
+                      // ── Refund pickup section ──────────────────────────────────
+                      _RefundPickupSection(
+                        queueDocId: queueDocId,
+                        data: data,
+                        orderId: data['order_id']?.toString() ?? queueDocId,
+                      ),
+
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           const Icon(
@@ -4922,7 +5249,9 @@ class _QueueCard extends StatelessWidget {
                               color: _Glass.accentRose.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(99),
                               border: Border.all(
-                                color: _Glass.accentRose.withValues(alpha: 0.30),
+                                color: _Glass.accentRose.withValues(
+                                  alpha: 0.30,
+                                ),
                                 width: 0.8,
                               ),
                             ),
@@ -5026,7 +5355,7 @@ class _DueDateRow extends StatelessWidget {
     if (diff < 0) {
       color = _Glass.accentRose;
       label =
-          'Overdue by ${-diff} day${diff == -1 ? '' : 's'} — ${_fmt(dueDate)}';
+      'Overdue by ${-diff} day${diff == -1 ? '' : 's'} — ${_fmt(dueDate)}';
     } else if (diff == 0) {
       color = _Glass.accentRose;
       label = 'Target completion: TODAY';
@@ -5103,23 +5432,23 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
         if (!snap.hasData) return const SizedBox.shrink();
 
         final due =
-            snap.data!.docs.where((doc) {
-              final data = doc.data() as Map<String, dynamic>;
-              final ts = data['estimated_completion'] as Timestamp?;
-              if (ts == null) return false;
-              return ts.toDate().isBefore(threshold);
-            }).toList()..sort((a, b) {
-              final ta =
-                  ((a.data() as Map)['estimated_completion'] as Timestamp?)
-                      ?.toDate();
-              final tb =
-                  ((b.data() as Map)['estimated_completion'] as Timestamp?)
-                      ?.toDate();
-              if (ta == null && tb == null) return 0;
-              if (ta == null) return 1;
-              if (tb == null) return -1;
-              return ta.compareTo(tb);
-            });
+        snap.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final ts = data['estimated_completion'] as Timestamp?;
+          if (ts == null) return false;
+          return ts.toDate().isBefore(threshold);
+        }).toList()..sort((a, b) {
+          final ta =
+          ((a.data() as Map)['estimated_completion'] as Timestamp?)
+              ?.toDate();
+          final tb =
+          ((b.data() as Map)['estimated_completion'] as Timestamp?)
+              ?.toDate();
+          if (ta == null && tb == null) return 0;
+          if (ta == null) return 1;
+          if (tb == null) return -1;
+          return ta.compareTo(tb);
+        });
 
         if (due.isEmpty) return const SizedBox.shrink();
 
@@ -5209,10 +5538,10 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
                           );
                           final dueMid = dueDate != null
                               ? DateTime(
-                                  dueDate.year,
-                                  dueDate.month,
-                                  dueDate.day,
-                                )
+                            dueDate.year,
+                            dueDate.month,
+                            dueDate.day,
+                          )
                               : null;
                           final diff = dueMid?.difference(todayMid).inDays;
                           final rowColor = isOverdue
@@ -5319,3 +5648,5 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
     return '${m[d.month - 1]} ${d.day}';
   }
 }
+
+

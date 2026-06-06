@@ -894,6 +894,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                     const SizedBox(height: 12),
 
                     // Row 2: sub-tab pills (Inventory | Forecast)
+                    // Forecast is hidden on mobile (native + mobile browser).
                     Row(
                       children: [
                         _TabPill(
@@ -904,15 +905,17 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
                             () => _activeTab = _InventoryTab.inventory,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        _TabPill(
-                          label: 'Forecast',
-                          icon: Icons.trending_up_rounded,
-                          isActive: _activeTab == _InventoryTab.forecast,
-                          onTap: () => setState(
-                            () => _activeTab = _InventoryTab.forecast,
+                        if (!PlatformUtils.effectiveMobile) ...[
+                          const SizedBox(width: 8),
+                          _TabPill(
+                            label: 'Forecast',
+                            icon: Icons.trending_up_rounded,
+                            isActive: _activeTab == _InventoryTab.forecast,
+                            onTap: () => setState(
+                              () => _activeTab = _InventoryTab.forecast,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
 
@@ -1034,7 +1037,8 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
 
           // ── Body ────────────────────────────────────────────────────────
           Expanded(
-            child: _activeTab == _InventoryTab.forecast
+            child: _activeTab == _InventoryTab.forecast &&
+                    !PlatformUtils.effectiveMobile
                 ? const _EmbeddedForecast()
                 : _buildInventoryBody(),
           ),

@@ -6,6 +6,7 @@ import 'app_theme.dart';
 import 'sales_widgets.dart';
 import 'sales_import_widget.dart';
 import 'invoice_screen.dart';
+import 'design_file_viewer.dart';
 
 // =============================================================================
 // Design Tokens — Liquid Glass (matches Account screen)
@@ -760,9 +761,13 @@ class _QueueStatusList extends StatelessWidget {
                     statusLabel: _statusLabel(status),
                     statusColor: statusColor,
                     productSummary: productSummary,
+                    products: products,
                     dateStr: dateStr,
                     total: total,
+                    amountPaid: (data['amount_paid'] as num?)?.toDouble() ?? 0,
+                    notes: data['notes']?.toString() ?? '',
                     cancelReason: data['cancel_reason']?.toString() ?? '',
+                    turnaround: data['turnaround_days'] as int?,
                   );
                 },
               ),   // ListView.separated
@@ -784,9 +789,13 @@ class _JobCard extends StatelessWidget {
   final String statusLabel;
   final Color statusColor;
   final String? productSummary;
+  final List<Map<String, dynamic>> products;
   final String dateStr;
   final double total;
+  final double amountPaid;
+  final String notes;
   final String cancelReason;
+  final int? turnaround;
 
   const _JobCard({
     required this.index,
@@ -796,13 +805,18 @@ class _JobCard extends StatelessWidget {
     required this.statusLabel,
     required this.statusColor,
     this.productSummary,
+    this.products = const [],
     required this.dateStr,
     required this.total,
+    this.amountPaid = 0,
+    this.notes = '',
     this.cancelReason = '',
+    this.turnaround,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isCancelled = statusLabel == 'Cancelled';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -810,15 +824,15 @@ class _JobCard extends StatelessWidget {
           width: 28,
           height: 28,
           decoration: BoxDecoration(
-            color: _G.amber.withValues(alpha: 0.12),
+            color: _G.accentAmber.withValues(alpha: 0.12),
             shape: BoxShape.circle,
-            border: Border.all(color: _G.amber.withValues(alpha: 0.35)),
+            border: Border.all(color: _G.accentAmber.withValues(alpha: 0.35)),
           ),
           child: Center(
             child: Text(
               '$index',
               style: const TextStyle(
-                color: _G.amber,
+                color: _G.accentAmber,
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
               ),
@@ -833,7 +847,9 @@ class _JobCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header: order ID + customer + status badge
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Column(
@@ -859,7 +875,7 @@ class _JobCard extends StatelessWidget {
                           if (customerId.isNotEmpty) ...[
                             const SizedBox(height: 1),
                             Text(
-                              'ID: $customerId',
+                              'Customer ID: $customerId',
                               style: const TextStyle(
                                 color: _G.textMuted,
                                 fontSize: 11,
@@ -893,6 +909,8 @@ class _JobCard extends StatelessWidget {
                     ),
                   ],
                 ),
+
+                // Product summary + design files
                 if (productSummary != null) ...[
                   const SizedBox(height: 8),
                   Text(
@@ -904,13 +922,39 @@ class _JobCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  DesignFilesSection(products: products),
+                ],
+
+                // Special instructions
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.notes_outlined, size: 12, color: _G.textMuted),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        'Special Instructions: ${notes.isNotEmpty ? notes : 'None'}',
+                        style: const TextStyle(color: _G.textMuted, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+                Divider(height: 0.8, color: _G.borderDim),
+                const SizedBox(height: 10),
+
+                // Footer — cancelled vs pending/active
+                if (isCancelled) ...[
+                  // Cancel reason chip
                   if (cancelReason.isNotEmpty) ...[
-                    const SizedBox(height: 8),
                     Container(
                       width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
-                        vertical: 7,
+                        vertical: 8,
                       ),
                       decoration: BoxDecoration(
                         color: _G.accentRose.withValues(alpha: 0.06),
@@ -924,8 +968,8 @@ class _JobCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Icon(
-                            Icons.cancel_outlined,
-                            size: 12,
+                            Icons.info_outline,
+                            size: 13,
                             color: _G.accentRose,
                           ),
                           const SizedBox(width: 6),
@@ -934,7 +978,7 @@ class _JobCard extends StatelessWidget {
                               'Reason: $cancelReason',
                               style: const TextStyle(
                                 color: _G.accentRose,
-                                fontSize: 11,
+                                fontSize: 12,
                               ),
                             ),
                           ),
@@ -942,33 +986,102 @@ class _JobCard extends StatelessWidget {
                       ),
                     ),
                   ],
-                ],
-                const SizedBox(height: 10),
-                Divider(height: 0.8, color: _G.borderDim),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.calendar_today_outlined,
-                      size: 11,
-                      color: _G.textMuted,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      dateStr,
-                      style: const TextStyle(color: _G.textMuted, fontSize: 12),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '₱${total.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: _G.amber,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                  // Date + turnaround row
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_today_outlined, size: 11, color: _G.textMuted),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          dateStr,
+                          style: const TextStyle(color: _G.textMuted, fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      if (turnaround != null) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.schedule, size: 11, color: _G.textMuted),
+                        const SizedBox(width: 4),
+                        Text(
+                          '~$turnaround day${turnaround == 1 ? '' : 's'}',
+                          style: const TextStyle(color: _G.textMuted, fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  // Total + paid
+                  Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '₱${total.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: _G.accentAmber,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          if (amountPaid > 0)
+                            Text(
+                              'Paid: ₱${amountPaid.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: _G.accentEmerald,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  // Pending / active: date + turnaround + total + paid
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_today_outlined, size: 11, color: _G.textMuted),
+                      const SizedBox(width: 4),
+                      Text(
+                        dateStr,
+                        style: const TextStyle(color: _G.textMuted, fontSize: 12),
+                      ),
+                      if (turnaround != null) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.schedule, size: 11, color: _G.textMuted),
+                        const SizedBox(width: 4),
+                        Text(
+                          '~$turnaround day${turnaround == 1 ? '' : 's'}',
+                          style: const TextStyle(color: _G.textMuted, fontSize: 12),
+                        ),
+                      ],
+                      const Spacer(),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '₱${total.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: _G.accentAmber,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          if (amountPaid > 0)
+                            Text(
+                              'Paid: ₱${amountPaid.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: _G.accentEmerald,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -1420,6 +1533,7 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                           remaining: remaining,
                           invoiceId: invoiceId,
                           cancelReason: data['cancel_reason']?.toString() ?? '',
+                          notes: data['notes']?.toString() ?? '',
                         );
                       },
                     ),   // ListView.separated
@@ -1450,6 +1564,7 @@ class _OrderHistoryCard extends StatelessWidget {
   final double remaining;
   final String? invoiceId;
   final String cancelReason;
+  final String notes;
 
   const _OrderHistoryCard({
     required this.docId,
@@ -1465,6 +1580,7 @@ class _OrderHistoryCard extends StatelessWidget {
     required this.remaining,
     this.invoiceId,
     this.cancelReason = '',
+    this.notes = '',
   });
 
   @override
@@ -1553,7 +1669,24 @@ class _OrderHistoryCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
+            const SizedBox(height: 8),
+            DesignFilesSection(products: products),
           ],
+
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.notes_outlined, size: 12, color: _G.textMuted),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  'Special Instructions: ${notes.isNotEmpty ? notes : 'None'}',
+                  style: const TextStyle(color: _G.textMuted, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
 
           if (cancelReason.isNotEmpty && statusLabel == 'Cancelled') ...[
             const SizedBox(height: 8),
