@@ -1341,12 +1341,19 @@ class _OrderHistoryCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.notes_outlined, size: 12, color: _Glass.textMuted),
+                const Icon(
+                  Icons.notes_outlined,
+                  size: 12,
+                  color: _Glass.textMuted,
+                ),
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
                     'Special Instructions: ${notes.isNotEmpty ? notes : 'None'}',
-                    style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                    style: const TextStyle(
+                      color: _Glass.textMuted,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
               ],
@@ -1547,9 +1554,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
   }
 
   Future<void> _loadProducts() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('Products')
-        .get();
+    final snap = await FirebaseFirestore.instance.collection('Products').get();
     if (mounted) {
       setState(() {
         _products = snap.docs;
@@ -3030,15 +3035,28 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
 // =============================================================================
 // _QueueList (structure unchanged)
 // =============================================================================
-class _QueueList extends StatelessWidget {
+class _QueueList extends StatefulWidget {
   final String jobStatus;
   const _QueueList({required this.jobStatus});
+
+  @override
+  State<_QueueList> createState() => _QueueListState();
+}
+
+class _QueueListState extends State<_QueueList> {
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final query = FirebaseFirestore.instance
         .collection('Order_Queue')
-        .where('job_status', isEqualTo: jobStatus);
+        .where('job_status', isEqualTo: widget.jobStatus);
 
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
@@ -3073,13 +3091,13 @@ class _QueueList extends StatelessWidget {
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
-            return ta.compareTo(tb); // FIFO: oldest first
+            return ta.compareTo(tb);
           });
 
         if (docs.isEmpty) {
-          final icon = jobStatus == 'pending'
+          final icon = widget.jobStatus == 'pending'
               ? Icons.queue_outlined
-              : jobStatus == 'cancelled'
+              : widget.jobStatus == 'cancelled'
               ? Icons.cancel_outlined
               : Icons.precision_manufacturing_outlined;
           return Center(
@@ -3094,9 +3112,9 @@ class _QueueList extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  jobStatus == 'pending'
+                  widget.jobStatus == 'pending'
                       ? 'No pending jobs'
-                      : jobStatus == 'cancelled'
+                      : widget.jobStatus == 'cancelled'
                       ? 'No cancelled jobs'
                       : 'No active jobs',
                   style: const TextStyle(
@@ -3111,16 +3129,22 @@ class _QueueList extends StatelessWidget {
         }
 
         return Scrollbar(
+          controller: _scrollCtrl,
           thumbVisibility: true,
           trackVisibility: true,
           child: ListView.separated(
+            controller: _scrollCtrl,
             padding: const EdgeInsets.only(bottom: 16),
             itemCount: docs.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final doc = docs[i];
               final data = doc.data() as Map<String, dynamic>;
-              return _QueueCard(queueDocId: doc.id, data: data, position: i + 1);
+              return _QueueCard(
+                queueDocId: doc.id,
+                data: data,
+                position: i + 1,
+              );
             },
           ),
         );
@@ -3132,8 +3156,21 @@ class _QueueList extends StatelessWidget {
 // =============================================================================
 // _ReadyForPickupList (structure unchanged)
 // =============================================================================
-class _ReadyForPickupList extends StatelessWidget {
+class _ReadyForPickupList extends StatefulWidget {
   const _ReadyForPickupList();
+
+  @override
+  State<_ReadyForPickupList> createState() => _ReadyForPickupListState();
+}
+
+class _ReadyForPickupListState extends State<_ReadyForPickupList> {
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3170,7 +3207,7 @@ class _ReadyForPickupList extends StatelessWidget {
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
-            return ta.compareTo(tb); // FIFO: oldest first
+            return ta.compareTo(tb);
           });
 
         if (docs.isEmpty) {
@@ -3203,50 +3240,52 @@ class _ReadyForPickupList extends StatelessWidget {
         }
 
         return Scrollbar(
+          controller: _scrollCtrl,
           thumbVisibility: true,
           trackVisibility: true,
           child: ListView.builder(
-          padding: const EdgeInsets.only(bottom: 16),
-          itemCount: docs.length,
-          itemBuilder: (_, i) {
-            final doc = docs[i];
-            final data = doc.data() as Map<String, dynamic>;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: _Glass.accentAmber.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: _Glass.accentAmber.withValues(alpha: 0.35),
+            controller: _scrollCtrl,
+            padding: const EdgeInsets.only(bottom: 16),
+            itemCount: docs.length,
+            itemBuilder: (_, i) {
+              final doc = docs[i];
+              final data = doc.data() as Map<String, dynamic>;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: _Glass.accentAmber.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: _Glass.accentAmber.withValues(alpha: 0.35),
+                        ),
                       ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${i + 1}',
-                        style: const TextStyle(
-                          color: _Glass.accentAmber,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                      child: Center(
+                        child: Text(
+                          '${i + 1}',
+                          style: const TextStyle(
+                            color: _Glass.accentAmber,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _ReadyOrderCard(orderId: doc.id, data: data),
-                  ),
-                ],
-              ),
-            );
-          },
-          ),  // ListView.builder
-        );    // Scrollbar
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ReadyOrderCard(orderId: doc.id, data: data),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
       },
     );
   }
@@ -3713,6 +3752,280 @@ class _ReadyOrderCard extends StatelessWidget {
 }
 
 // =============================================================================
+// _RefundPickupSection — handles refund pickup flow for cancelled orders
+// =============================================================================
+class _RefundPickupSection extends StatelessWidget {
+  final String queueDocId;
+  final String orderId;
+  final Map<String, dynamic> data;
+
+  const _RefundPickupSection({
+    required this.queueDocId,
+    required this.orderId,
+    required this.data,
+  });
+
+  Future<void> _confirmRefundPickup(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: _Glass.surface,
+        elevation: 24,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: _Glass.borderMid, width: 1),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Confirm Refund Pickup?',
+                style: TextStyle(
+                  color: _Glass.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Mark order $orderId refund as picked up by the customer? '
+                'This will deduct the paid amount from sales records.',
+                style: const TextStyle(
+                  color: _Glass.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
+                      decoration: _Glass.glass(radius: 99),
+                      child: const Text(
+                        'No',
+                        style: TextStyle(
+                          color: _Glass.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
+                      decoration: _Glass.solidPill(
+                        _Glass.accentEmerald,
+                        glow: true,
+                      ),
+                      child: const Text(
+                        'Confirm Pickup',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final db = FirebaseFirestore.instance;
+    final amountPaid =
+        (data['total_price'] as num?)?.toDouble() ?? 0; // fallback
+    // Try to get actual amount_paid from Orders doc
+    double actualPaid = 0;
+    try {
+      final orderSnap = await db.collection('Orders').doc(orderId).get();
+      actualPaid = (orderSnap.data()?['amount_paid'] as num?)?.toDouble() ?? 0;
+    } catch (_) {}
+
+    final batch = db.batch();
+
+    // Mark refund as picked up on both Order_Queue and Orders
+    batch.update(db.collection('Order_Queue').doc(queueDocId), {
+      'refund_picked_up': true,
+      'refund_picked_up_at': FieldValue.serverTimestamp(),
+    });
+    batch.update(db.collection('Orders').doc(orderId), {
+      'refund_picked_up': true,
+      'refund_picked_up_at': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+
+    // Deduct from Sales_Records: add a negative/refund entry
+    if (actualPaid > 0.01) {
+      await db.collection('Sales_Records').add({
+        'order_id': orderId,
+        'customer_name': data['customer_name']?.toString() ?? '—',
+        'customer_id': data['customer_id']?.toString() ?? '',
+        'payment_type': 'refund',
+        'payment_method': 'refund',
+        'sale_amount': -actualPaid, // negative to deduct
+        'order_total': (data['total_price'] as num?)?.toDouble() ?? 0,
+        'walk_in': data['walk_in'] ?? false,
+        'refund': true,
+        'cancel_reason': data['cancel_reason']?.toString() ?? '',
+        'sale_date': FieldValue.serverTimestamp(),
+      });
+    }
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Refund pickup confirmed for $orderId'
+            '${actualPaid > 0.01 ? ' — ₱${actualPaid.toStringAsFixed(2)} deducted from sales' : ''}',
+          ),
+          backgroundColor: _Glass.accentEmerald,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final refundPickedUp = data['refund_picked_up'] == true;
+    final amountPaid =
+        (data['amount_paid'] as num?)?.toDouble() ??
+        (data['total_price'] as num?)?.toDouble() ??
+        0;
+
+    if (refundPickedUp) {
+      // Already picked up — show confirmation badge
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: _Glass.accentEmerald.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _Glass.accentEmerald.withValues(alpha: 0.30),
+            width: 0.9,
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.check_circle_rounded,
+              size: 14,
+              color: _Glass.accentEmerald,
+            ),
+            const SizedBox(width: 6),
+            const Expanded(
+              child: Text(
+                'Refund picked up by customer',
+                style: TextStyle(
+                  color: _Glass.accentEmerald,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Not yet picked up — show "Refund to be picked up" banner + button
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Refund pending banner
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: _Glass.accentAmber.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _Glass.accentAmber.withValues(alpha: 0.30),
+              width: 0.9,
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.monetization_on_outlined,
+                size: 14,
+                color: _Glass.accentAmber,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  amountPaid > 0.01
+                      ? 'Refund to be picked up — ₱${amountPaid.toStringAsFixed(2)}'
+                      : 'Refund to be picked up',
+                  style: const TextStyle(
+                    color: _Glass.accentAmber,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Confirm Refund Pickup button
+        GestureDetector(
+          onTap: () => _confirmRefundPickup(context),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: _Glass.solidPill(_Glass.accentEmerald, glow: true),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.assignment_turned_in_outlined,
+                  size: 15,
+                  color: Colors.white,
+                ),
+                SizedBox(width: 6),
+                Text(
+                  'Confirm Refund Pickup',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// =============================================================================
 // _QueueCard
 // =============================================================================
 class _QueueCard extends StatelessWidget {
@@ -4122,8 +4435,7 @@ class _QueueCard extends StatelessWidget {
     final db = FirebaseFirestore.instance;
 
     // Guard: prevent double-deduction if already deducted
-    final alreadyDeducted =
-        data['bom_deducted'] == true;
+    final alreadyDeducted = data['bom_deducted'] == true;
 
     final batch = db.batch();
     batch.update(db.collection('Order_Queue').doc(queueDocId), {
@@ -4186,10 +4498,9 @@ class _QueueCard extends StatelessWidget {
         // Mark order as deducted so re-running Start Job won't double-deduct.
         // Only stamp the flag when something was actually deducted.
         if (deductionErrors.isEmpty && allDeductionLines.isNotEmpty) {
-          await db
-              .collection('Orders')
-              .doc(orderId)
-              .update({'bom_deducted': true});
+          await db.collection('Orders').doc(orderId).update({
+            'bom_deducted': true,
+          });
         }
       }
     }
@@ -4636,12 +4947,19 @@ class _QueueCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.notes_outlined, size: 12, color: _Glass.textMuted),
+                    const Icon(
+                      Icons.notes_outlined,
+                      size: 12,
+                      color: _Glass.textMuted,
+                    ),
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         'Special Instructions: ${(data['notes'] as String?)?.isNotEmpty == true ? data['notes'] : 'None'}',
-                        style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                        style: const TextStyle(
+                          color: _Glass.textMuted,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ],
@@ -4701,6 +5019,15 @@ class _QueueCard extends StatelessWidget {
                             ],
                           ),
                         ),
+
+                      // ── Refund pickup section ──────────────────────────────────
+                      _RefundPickupSection(
+                        queueDocId: queueDocId,
+                        data: data,
+                        orderId: data['order_id']?.toString() ?? queueDocId,
+                      ),
+
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           const Icon(
@@ -4922,7 +5249,9 @@ class _QueueCard extends StatelessWidget {
                               color: _Glass.accentRose.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(99),
                               border: Border.all(
-                                color: _Glass.accentRose.withValues(alpha: 0.30),
+                                color: _Glass.accentRose.withValues(
+                                  alpha: 0.30,
+                                ),
                                 width: 0.8,
                               ),
                             ),
