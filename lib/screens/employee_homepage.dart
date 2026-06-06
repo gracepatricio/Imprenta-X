@@ -51,6 +51,7 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
       PlatformUtils.effectiveMobile ? _mobileItems : _webItems;
 
   late String _active;
+  int _initialJobTab = 0;
 
   StreamSubscription<DocumentSnapshot>? _deletionSub;
 
@@ -105,8 +106,10 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
           return const EmployeeInventoryScreen();
         case 'Account':
           return EmployeeAccountScreen(
-            // Mobile: "view logs" shortcut still goes to Job Queue tab.
-            onNavigateToLogs: (_) => setState(() => _active = 'Job Queue'),
+            onNavigateToLogs: (tab) => setState(() {
+              _active = 'Job Queue';
+              _initialJobTab = tab;
+            }),
           );
         case 'Job Queue':
           return const EmployeeMobileJobQueueScreen();
@@ -120,12 +123,15 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
       case 'Inventory':
         return const EmployeeInventoryScreen();
       case 'Job Queue':
-        return const EmployeeJobQueueScreen();
+        return EmployeeJobQueueScreen(initialTab: _initialJobTab);
       case 'Accounting':
         return const EmployeeLogsScreen();
       case 'Account':
         return EmployeeAccountScreen(
-          onNavigateToLogs: (_) => setState(() => _active = 'Job Queue'),
+          onNavigateToLogs: (tab) => setState(() {
+            _active = 'Job Queue';
+            _initialJobTab = tab;
+          }),
         );
       default:
         return const EmployeeHomeScreen();

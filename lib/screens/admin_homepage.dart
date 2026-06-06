@@ -29,6 +29,7 @@ class _AdminHomepageState extends State<AdminHomepage> {
   ];
 
   late String _active;
+  String? _initialJobStatus;
   StreamSubscription<DocumentSnapshot>? _deletionSub;
   String _adminName = '';
 
@@ -92,9 +93,9 @@ class _AdminHomepageState extends State<AdminHomepage> {
           child: AdminProductManagementScreen(),
         );
       case 'Logs & History':
-        return const Padding(
-          padding: EdgeInsets.fromLTRB(20, 16, 20, 20),
-          child: AdminLogsScreen(),
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: AdminLogsScreen(initialJobStatus: _initialJobStatus),
         );
       default:
         return Padding(
@@ -120,12 +121,18 @@ class _AdminHomepageState extends State<AdminHomepage> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => AdminAccountDashboard(
-                        onNavigateToTab: (tab) => setState(() => _active = tab),
+                        onNavigateToTab: (tab, [status]) => setState(() {
+                          _active = tab;
+                          _initialJobStatus = status;
+                        }),
                       ),
                     ),
                   );
                 } else {
-                  setState(() => _active = item);
+                  setState(() {
+                    _active = item;
+                    _initialJobStatus = null;
+                  });
                 }
               },
             ),

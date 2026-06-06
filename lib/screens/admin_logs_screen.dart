@@ -141,7 +141,8 @@ enum _LogsTab { jobQueue, salesRecord, employeeActivity, customerFeedback }
 // AdminLogsScreen — unified header + tabs
 // =============================================================================
 class AdminLogsScreen extends StatefulWidget {
-  const AdminLogsScreen({super.key});
+  final String? initialJobStatus;
+  const AdminLogsScreen({super.key, this.initialJobStatus});
 
   @override
   State<AdminLogsScreen> createState() => _AdminLogsScreenState();
@@ -349,7 +350,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
   Widget _buildContent() {
     switch (_activeTab) {
       case _LogsTab.jobQueue:
-        return const _JobQueueTab();
+        return _JobQueueTab(initialStatus: widget.initialJobStatus);
       case _LogsTab.salesRecord:
         return const _SalesRecordSubTab();
       case _LogsTab.employeeActivity:
@@ -366,14 +367,33 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
 enum _QueueSubTab { pending, active, ready, cancelled, history }
 
 class _JobQueueTab extends StatefulWidget {
-  const _JobQueueTab();
+  final String? initialStatus;
+  const _JobQueueTab({this.initialStatus});
 
   @override
   State<_JobQueueTab> createState() => _JobQueueTabState();
 }
 
 class _JobQueueTabState extends State<_JobQueueTab> {
-  _QueueSubTab _sub = _QueueSubTab.pending;
+  late _QueueSubTab _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    switch (widget.initialStatus) {
+      case 'active':
+        _sub = _QueueSubTab.active;
+        break;
+      case 'ready':
+        _sub = _QueueSubTab.ready;
+        break;
+      case 'cancelled':
+        _sub = _QueueSubTab.cancelled;
+        break;
+      default:
+        _sub = _QueueSubTab.pending;
+    }
+  }
 
   static const _statusTabs = [
     (

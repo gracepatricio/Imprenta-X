@@ -17,12 +17,11 @@ class DesignFileChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return GestureDetector(
       onTap: () => showDialog(
         context: context,
         builder: (_) => FileViewerDialog(name: name, url: url),
       ),
-      borderRadius: BorderRadius.circular(6),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(

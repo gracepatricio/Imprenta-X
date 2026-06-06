@@ -98,7 +98,7 @@ class _BlurCard extends StatelessWidget {
 
 // =============================================================================
 class AdminAccountDashboard extends StatefulWidget {
-  final void Function(String tab)? onNavigateToTab;
+  final void Function(String tab, [String? jobStatus])? onNavigateToTab;
   const AdminAccountDashboard({super.key, this.onNavigateToTab});
 
   @override
@@ -690,7 +690,7 @@ class _LogoutButton extends StatelessWidget {
 // Dashboard Content
 // =============================================================================
 class _AdminDashboardContent extends StatelessWidget {
-  final void Function(String)? onNavigateToTab;
+  final void Function(String, [String?])? onNavigateToTab;
   const _AdminDashboardContent({this.onNavigateToTab});
 
   static String _stockStatus(num current, num restock) {
@@ -718,8 +718,8 @@ class _AdminDashboardContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    void goToJobQueue() {
-      onNavigateToTab?.call('Logs & History');
+    void goToJobQueue(String status) {
+      onNavigateToTab?.call('Logs & History', status);
       Navigator.of(context).pop();
     }
 
@@ -770,7 +770,7 @@ class _AdminDashboardContent extends StatelessWidget {
                             icon: Icons.sync_rounded,
                             color: _G.accentRose,
                             compact: compact,
-                            onTap: goToJobQueue,
+                            onTap: () => goToJobQueue('pending'),
                           ),
                         ),
                         SizedBox(width: compact ? 6 : 10),
@@ -781,7 +781,7 @@ class _AdminDashboardContent extends StatelessWidget {
                             icon: Icons.precision_manufacturing_rounded,
                             color: _G.accentAmber,
                             compact: compact,
-                            onTap: goToJobQueue,
+                            onTap: () => goToJobQueue('active'),
                           ),
                         ),
                         SizedBox(width: compact ? 6 : 10),
@@ -792,7 +792,7 @@ class _AdminDashboardContent extends StatelessWidget {
                             icon: Icons.check_circle_rounded,
                             color: _G.accentEmerald,
                             compact: compact,
-                            onTap: goToJobQueue,
+                            onTap: () => goToJobQueue('ready'),
                           ),
                         ),
                       ],
