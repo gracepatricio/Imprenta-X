@@ -1,7 +1,9 @@
 import 'dart:ui';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:file_picker/file_picker.dart';
 import 'app_theme.dart';
 import 'sales_widgets.dart';
 import 'employee_pos_screen.dart';
@@ -123,7 +125,6 @@ class _EmployeeLogsScreenState extends State<EmployeeLogsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Unified header card (mirrors inventory header) ──────────────
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: BackdropFilter(
@@ -134,7 +135,6 @@ class _EmployeeLogsScreenState extends State<EmployeeLogsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Row 1: icon + title
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -179,12 +179,9 @@ class _EmployeeLogsScreenState extends State<EmployeeLogsScreen> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 14),
                     Divider(height: 1, color: _Glass.borderDim),
                     const SizedBox(height: 12),
-
-                    // Row 2: sub-tab pills (Sales | POS)
                     Row(
                       children: [
                         _TabPill(
@@ -207,10 +204,7 @@ class _EmployeeLogsScreenState extends State<EmployeeLogsScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: 10),
-
-          // ── Body ──────────────────────────────────────────────────────────
           Expanded(
             child: switch (_topTab) {
               0 => const _SalesSection(),
@@ -225,7 +219,7 @@ class _EmployeeLogsScreenState extends State<EmployeeLogsScreen> {
 }
 
 // =============================================================================
-// _TabPill — mirrors inventory _TabPill exactly
+// _TabPill
 // =============================================================================
 class _TabPill extends StatelessWidget {
   final String label;
@@ -278,7 +272,7 @@ class _TabPill extends StatelessWidget {
 }
 
 // =============================================================================
-// _SalesSection — Sales Record / Sales Report sub-tabs
+// _SalesSection
 // =============================================================================
 enum _SalesSubTab { record, report }
 
@@ -300,7 +294,6 @@ class _SalesSectionState extends State<_SalesSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Inner sub-tab bar ─────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Container(
@@ -331,7 +324,6 @@ class _SalesSectionState extends State<_SalesSection> {
             ),
           ),
           const SizedBox(height: 8),
-
           Expanded(
             child: _sub == _SalesSubTab.record
                 ? const SalesRecordTable()
@@ -343,7 +335,6 @@ class _SalesSectionState extends State<_SalesSection> {
   }
 }
 
-// ── Inner pill tab (Sales Record / Sales Report) ──────────────────────────────
 class _SalesPillTab extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -396,7 +387,7 @@ class _SalesPillTab extends StatelessWidget {
 }
 
 // =============================================================================
-// _PillSegmentItem / _PillSegmentControl — mirrors admin design
+// _PillSegmentControl
 // =============================================================================
 class _PillSegmentItem<T> {
   final T value;
@@ -495,7 +486,7 @@ class _PillSegmentControl<T> extends StatelessWidget {
 }
 
 // =============================================================================
-// EmployeeJobQueueScreen — public entry-point (unchanged structure)
+// EmployeeJobQueueScreen
 // =============================================================================
 class EmployeeJobQueueScreen extends StatelessWidget {
   final int initialTab;
@@ -508,7 +499,6 @@ class EmployeeJobQueueScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Header card ───────────────────────────────────────────────────
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: BackdropFilter(
@@ -562,9 +552,7 @@ class EmployeeJobQueueScreen extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(height: 10),
-
           Expanded(child: _JobQueueSection(initialTab: initialTab)),
         ],
       ),
@@ -573,9 +561,8 @@ class EmployeeJobQueueScreen extends StatelessWidget {
 }
 
 // =============================================================================
-// _JobQueueSection — 5 sub-tabs (structure unchanged)
+// _JobQueueSection
 // =============================================================================
-// _QueueSubTab enum for pill control
 enum _QueueSubTab { pending, active, ready, cancelled, history }
 
 class _JobQueueSection extends StatefulWidget {
@@ -630,7 +617,6 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Tab controls row ──────────────────────────────────────────────
             if (!isHistory)
               Row(
                 children: [
@@ -651,7 +637,6 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Order History violet button
                   GestureDetector(
                     onTap: () => setState(() => _sub = _QueueSubTab.history),
                     child: Container(
@@ -682,7 +667,6 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Add walk-in button
                   GestureDetector(
                     onTap: () => showDialog(
                       context: context,
@@ -702,14 +686,9 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
                   ),
                 ],
               ),
-
             if (!isHistory) const SizedBox(height: 10),
-
-            // ── Deadline banner (collapsed by default) ────────────────────────
             if (!isHistory) const _DeadlineAlertBanner(),
             if (!isHistory) const SizedBox(height: 6),
-
-            // ── Content ───────────────────────────────────────────────────────
             Expanded(
               child: isHistory
                   ? _EmployeeOrderHistory(
@@ -931,7 +910,6 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Back button (if onBack provided)
         if (widget.onBack != null) ...[
           GestureDetector(
             onTap: widget.onBack,
@@ -965,8 +943,6 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
           ),
           const SizedBox(height: 10),
         ],
-
-        // Status filter chips
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(vertical: 2),
@@ -1006,8 +982,6 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
           ),
         ),
         const SizedBox(height: 10),
-
-        // Search field
         Container(
           decoration: BoxDecoration(
             color: _Glass.surfaceThin,
@@ -1064,8 +1038,6 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
           ),
         ),
         const SizedBox(height: 12),
-
-        // List
         Expanded(
           child: StreamBuilder<List<QueryDocumentSnapshot>>(
             stream: _stream(),
@@ -1221,7 +1193,9 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
   }
 }
 
-// ── Order history card ────────────────────────────────────────────────────────
+// =============================================================================
+// _OrderHistoryCard
+// =============================================================================
 class _OrderHistoryCard extends StatelessWidget {
   final QueryDocumentSnapshot doc;
   final String orderId, customer, customerId, status, statusLabel, dateStr;
@@ -1277,12 +1251,48 @@ class _OrderHistoryCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        '$customer · $dateStr',
-                        style: const TextStyle(
-                          color: _Glass.textMuted,
-                          fontSize: 12,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '$customer · $dateStr',
+                              style: const TextStyle(
+                                color: _Glass.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          if ((doc.data() as Map<String, dynamic>)['walk_in'] ==
+                              true) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _Glass.accentAmber.withValues(
+                                  alpha: 0.12,
+                                ),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: _Glass.accentAmber.withValues(
+                                    alpha: 0.40,
+                                  ),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: const Text(
+                                'Walk-in',
+                                style: TextStyle(
+                                  color: _Glass.accentAmber,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       if (customerId.isNotEmpty) ...[
                         const SizedBox(height: 2),
@@ -1334,24 +1344,74 @@ class _OrderHistoryCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              DesignFilesSection(products: products),
+              Builder(
+                builder: (context) {
+                  final isWalkIn =
+                      (doc.data() as Map<String, dynamic>)['walk_in'] == true;
+                  if (isWalkIn) {
+                    final fileNames = products
+                        .map((p) => p['design_file_name']?.toString() ?? '')
+                        .where((n) => n.isNotEmpty)
+                        .toList();
+                    if (fileNames.isEmpty) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: fileNames
+                            .expand((n) => n.split(', '))
+                            .map(
+                              (name) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _Glass.accentBlue.withValues(
+                                    alpha: 0.10,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: _Glass.accentBlue.withValues(
+                                      alpha: 0.28,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.attach_file_rounded,
+                                      size: 11,
+                                      color: _Glass.accentBlue,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 140,
+                                      ),
+                                      child: Text(
+                                        name,
+                                        style: const TextStyle(
+                                          color: _Glass.accentBlue,
+                                          fontSize: 11,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    );
+                  }
+                  return DesignFilesSection(products: products);
+                },
+              ),
             ],
-            // Special instructions
-            const SizedBox(height: 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.notes_outlined, size: 12, color: _Glass.textMuted),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Text(
-                    'Special Instructions: ${notes.isNotEmpty ? notes : 'None'}',
-                    style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
-                  ),
-                ),
-              ],
-            ),
-            // Cancellation reason banner (cancelled orders only)
             if (cancelReason.isNotEmpty && status == 'cancelled') ...[
               const SizedBox(height: 6),
               Container(
@@ -1394,7 +1454,6 @@ class _OrderHistoryCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Chips on the left
                 Expanded(
                   child: Row(
                     children: [
@@ -1420,7 +1479,6 @@ class _OrderHistoryCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Invoice button — radius: 99 to match pending/active style
                 Builder(
                   builder: (ctx) => GestureDetector(
                     onTap: () async {
@@ -1483,7 +1541,9 @@ class _OrderHistoryCard extends StatelessWidget {
   }
 }
 
-// ── Info chip ─────────────────────────────────────────────────────────────────
+// =============================================================================
+// _InfoChip
+// =============================================================================
 class _InfoChip extends StatelessWidget {
   final String label, value;
   final Color color;
@@ -1518,7 +1578,87 @@ class _InfoChip extends StatelessWidget {
 }
 
 // =============================================================================
-// _AddWalkInJobDialog (structure unchanged, colours aligned)
+// _WalkInDesignFile — model for files in the walk-in dialog
+// =============================================================================
+class _WalkInDesignFile {
+  final String name;
+  final Uint8List? bytes;
+  _WalkInDesignFile({required this.name, this.bytes});
+}
+
+// =============================================================================
+// _WalkInItem model — aligned with CustomerOrderScreen CartItem logic
+// =============================================================================
+class _WalkInItem {
+  final String productDocId;
+  final Map<String, dynamic> productData;
+  int qty;
+  String notes;
+  double? widthFt;
+  double? heightFt;
+  String? material;
+  String? designFileUrl;
+  String? designFileName;
+  List<Map<String, dynamic>> selectedServices;
+
+  _WalkInItem({
+    required this.productDocId,
+    required this.productData,
+    required this.qty,
+    required this.notes,
+    this.widthFt,
+    this.heightFt,
+    this.material,
+    this.designFileUrl,
+    this.designFileName,
+    this.selectedServices = const [],
+  });
+
+  String get pricingUnit => productData['pricing_unit']?.toString() ?? '';
+
+  bool get needsSize => pricingUnit == 'per_sqft' || pricingUnit == 'per_sqin';
+
+  bool get isSqIn => pricingUnit == 'per_sqin';
+
+  int get pricingQty => (productData['pricing_qty'] as num?)?.toInt() ?? 100;
+
+  double get underMinSurcharge =>
+      (productData['under_min_surcharge'] as num?)?.toDouble() ?? 0;
+
+  int get minQty => (productData['min_quantity'] as num?)?.toInt() ?? 1;
+
+  double get unitPrice {
+    if (material != null) {
+      final vp = productData['variant_prices'] as Map?;
+      if (vp != null) {
+        final override = vp[material];
+        if (override != null) return (override as num).toDouble();
+      }
+    }
+    return (productData['price'] as num?)?.toDouble() ?? 0;
+  }
+
+  double _calcUnit(double price) {
+    if (pricingUnit == 'per_sqin') {
+      return price * (widthFt ?? 1) * (heightFt ?? 1) * 144 * qty;
+    }
+    if (needsSize) return price * (widthFt ?? 1) * (heightFt ?? 1) * qty;
+    return price * qty;
+  }
+
+  double get subtotal {
+    double total = _calcUnit(unitPrice);
+    for (final svc in selectedServices) {
+      final sp = (svc['price'] as num?)?.toDouble() ?? 0;
+      total += _calcUnit(sp);
+    }
+    if (underMinSurcharge > 0 && qty < minQty) total += underMinSurcharge;
+    return total;
+  }
+}
+
+// =============================================================================
+// _AddWalkInJobDialog — the outer form (customer info, product list, payment)
 // =============================================================================
 class _AddWalkInJobDialog extends StatefulWidget {
   const _AddWalkInJobDialog();
@@ -1547,9 +1687,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
   }
 
   Future<void> _loadProducts() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('Products')
-        .get();
+    final snap = await FirebaseFirestore.instance.collection('Products').get();
     if (mounted) {
       setState(() {
         _products = snap.docs;
@@ -1631,18 +1769,24 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
               'name': item.productData['product_name']?.toString() ?? '—',
               'category': item.productData['category']?.toString() ?? '',
               'qty': item.qty,
-              'unit_price':
-                  (item.productData['price'] as num?)?.toDouble() ?? 0,
-              'pricing_unit':
-                  item.productData['pricing_unit']?.toString() ?? '',
+              'unit_price': item.unitPrice,
+              'pricing_unit': item.pricingUnit,
               'price': item.subtotal,
               'notes': item.notes,
               if (item.widthFt != null) 'width_ft': item.widthFt,
               if (item.heightFt != null) 'height_ft': item.heightFt,
               if (item.material != null) 'material': item.material,
               if (item.widthFt != null && item.heightFt != null)
-                'size_label': '${item.widthFt}ft × ${item.heightFt}ft',
+                'size_label': item.isSqIn
+                    ? '${(item.widthFt! * 12).toStringAsFixed(0)}in × ${(item.heightFt! * 12).toStringAsFixed(0)}in'
+                    : '${item.widthFt}ft × ${item.heightFt}ft',
+              if (item.selectedServices.isNotEmpty)
+                'selected_services': item.selectedServices,
               'walk_in': true,
+              if (item.designFileUrl != null)
+                'design_file_url': item.designFileUrl,
+              if (item.designFileName != null)
+                'design_file_name': item.designFileName,
             },
           )
           .toList();
@@ -1685,6 +1829,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
         'products': products,
         'total_price': total,
         'walk_in': true,
+        'notes': _notesCtrl.text.trim(),
         'created_at': now,
       });
 
@@ -1739,12 +1884,26 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
     }
   }
 
-  void _showAddProductSheet() {
+  void _updateDefaultDownpayment() {
+    final min = (_total * 0.5);
+    final current = double.tryParse(_paidCtrl.text.trim()) ?? 0;
+    if (current < min) _paidCtrl.text = min.toStringAsFixed(2);
+  }
+
+  void _showAddProductDialog() {
     showDialog(
       context: context,
-      builder: (_) => _ProductPickerDialog(
+      barrierDismissible: false,
+      builder: (_) => _WalkInCustomizeDialog(
         products: _products,
-        onAdd: (item) => setState(() => _items.add(item)),
+        onAdd: (item) {
+          if (mounted) {
+            setState(() {
+              _items.add(item);
+              _updateDefaultDownpayment();
+            });
+          }
+        },
       ),
     );
   }
@@ -1756,403 +1915,454 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
       elevation: 32,
       shadowColor: Colors.black.withValues(alpha: 0.3),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         side: const BorderSide(color: _Glass.borderMid, width: 1),
       ),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Title bar
-                Row(
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: _navyBlue,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.add_box_outlined,
-                        color: Colors.white,
-                        size: 15,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'New Walk-In Job Order',
-                            style: TextStyle(
-                              color: _Glass.textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Walk-in customer · cash or GCash',
-                            style: TextStyle(
-                              color: _Glass.textMuted,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: _submitting ? null : () => Navigator.pop(context),
-                      child: Container(
-                        width: 32,
-                        height: 32,
+        constraints: BoxConstraints(
+          maxWidth: 600,
+          maxHeight: MediaQuery.of(context).size.height * 0.88,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Title bar ──────────────────────────────────────────
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
-                          color: _Glass.surfaceThin,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: _Glass.borderMid,
-                            width: 0.9,
-                          ),
+                          color: _navyBlue,
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(
-                          Icons.close_rounded,
-                          color: _Glass.textMuted,
-                          size: 15,
+                          Icons.add_box_outlined,
+                          color: Colors.white,
+                          size: 16,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const Divider(
-                  color: _Glass.borderMid,
-                  height: 24,
-                  thickness: 0.8,
-                ),
-
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _GlassFormField(
-                          controller: _nameCtrl,
-                          hint: 'Customer Name *',
-                          icon: Icons.person_outline,
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Required'
-                              : null,
-                        ),
-                        const SizedBox(height: 10),
-                        _GlassFormField(
-                          controller: _emailCtrl,
-                          hint: 'Customer Email (optional)',
-                          icon: Icons.email_outlined,
-                          keyboardType: TextInputType.emailAddress,
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Products header
-                        Row(
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Products',
+                            Text(
+                              'New Walk-In Job Order',
                               style: TextStyle(
                                 color: _Glass.textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
                               ),
                             ),
-                            const Spacer(),
-                            GestureDetector(
-                              onTap: _loadingProducts
-                                  ? null
-                                  : _showAddProductSheet,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 7,
-                                ),
-                                decoration: _Glass.solidPill(
-                                  _navyBlue,
-                                  glow: true,
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.add_rounded,
-                                      size: 13,
-                                      color: Colors.white,
-                                    ),
-                                    const SizedBox(width: 5),
-                                    Text(
-                                      _loadingProducts
-                                          ? 'Loading…'
-                                          : 'Add Product',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Walk-in customer · cash or GCash',
+                              style: TextStyle(
+                                color: _Glass.textMuted,
+                                fontSize: 12,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-
-                        if (_items.isEmpty)
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: _Glass.glass(radius: 10),
-                            child: const Center(
-                              child: Text(
-                                'No products added yet.',
-                                style: TextStyle(
-                                  color: _Glass.textMuted,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          )
-                        else
-                          ..._items.asMap().entries.map((e) {
-                            final i = e.key;
-                            final item = e.value;
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.all(12),
-                              decoration: _Glass.glass(radius: 12),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item.productData['product_name']
-                                                  ?.toString() ??
-                                              '—',
-                                          style: const TextStyle(
-                                            color: _Glass.textPrimary,
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        Text(
-                                          [
-                                            if (item.needsSize &&
-                                                item.widthFt != null &&
-                                                item.heightFt != null)
-                                              '${item.widthFt}ft × ${item.heightFt}ft',
-                                            if (item.material != null)
-                                              item.material!,
-                                            '₱${(item.productData['price'] as num?)?.toStringAsFixed(2) ?? '0'}'
-                                                ' × ${item.qty} = ₱${item.subtotal.toStringAsFixed(2)}',
-                                          ].join(' · '),
-                                          style: const TextStyle(
-                                            color: _Glass.textMuted,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        if (item.notes.isNotEmpty)
-                                          Text(
-                                            item.notes,
-                                            style: const TextStyle(
-                                              color: _Glass.textMuted,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () =>
-                                        setState(() => _items.removeAt(i)),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        color: _Glass.accentRose.withValues(
-                                          alpha: 0.08,
-                                        ),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.remove_circle_outline,
-                                        color: _Glass.accentRose,
-                                        size: 16,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-
-                        if (_items.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _navyBlue.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: _Glass.borderMid,
-                                width: 0.9,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Text(
-                                  'Est. ~$_turnaround day${_turnaround == 1 ? '' : 's'}',
-                                  style: const TextStyle(
-                                    color: _Glass.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  'Total: ₱${_total.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    color: _Glass.textPrimary,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 20),
-
-                        const Text(
-                          'Payment',
-                          style: TextStyle(
-                            color: _Glass.textPrimary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            _payMethodChip(
-                              'cash',
-                              'Cash',
-                              Icons.payments_outlined,
-                            ),
-                            const SizedBox(width: 8),
-                            _payMethodChip(
-                              'gcash',
-                              'GCash',
-                              Icons.phone_android_outlined,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        _GlassFormField(
-                          controller: _paidCtrl,
-                          hint: 'Amount Paid (₱) *',
-                          icon: Icons.monetization_on_outlined,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          validator: (v) {
-                            final n = double.tryParse(v?.trim() ?? '');
-                            if (n == null) return 'Enter a valid amount';
-                            if (n < 0) return 'Cannot be negative';
-                            if (_items.isNotEmpty && n > _total + 0.01) {
-                              return 'Cannot exceed total ₱${_total.toStringAsFixed(2)}';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 10),
-                        _GlassFormField(
-                          controller: _notesCtrl,
-                          hint: 'Order Notes (optional)',
-                          icon: Icons.notes_outlined,
-                          maxLines: 2,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Action bar
-                Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
+                      ),
+                      GestureDetector(
                         onTap: _submitting
                             ? null
                             : () => Navigator.pop(context),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: _Glass.glass(radius: 12),
-                          child: const Center(
-                            child: Text(
-                              'Cancel',
-                              style: TextStyle(
-                                color: _Glass.textSecondary,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: _Glass.surfaceThin,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _Glass.borderMid,
+                              width: 0.9,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            color: _Glass.textMuted,
+                            size: 15,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(
+                    color: _Glass.borderMid,
+                    height: 24,
+                    thickness: 0.8,
+                  ),
+
+                  // ── Scrollable body ────────────────────────────────────
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _GlassFormField(
+                            controller: _nameCtrl,
+                            hint: 'Customer Name *',
+                            icon: Icons.person_outline,
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Required'
+                                : null,
+                          ),
+                          const SizedBox(height: 10),
+                          _GlassFormField(
+                            controller: _emailCtrl,
+                            hint: 'Customer Email (optional)',
+                            icon: Icons.email_outlined,
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                          const SizedBox(height: 20),
+
+                          // ── Products header ──────────────────────────
+                          Row(
+                            children: [
+                              const Text(
+                                'Products',
+                                style: TextStyle(
+                                  color: _Glass.textPrimary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: _loadingProducts
+                                    ? null
+                                    : _showAddProductDialog,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 7,
+                                  ),
+                                  decoration: _Glass.solidPill(
+                                    _navyBlue,
+                                    glow: true,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.add_rounded,
+                                        size: 13,
+                                        color: Colors.white,
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        _loadingProducts
+                                            ? 'Loading…'
+                                            : 'Add Product',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+
+                          if (_items.isEmpty)
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: _Glass.glass(radius: 10),
+                              child: const Center(
+                                child: Text(
+                                  'No products added yet.',
+                                  style: TextStyle(
+                                    color: _Glass.textMuted,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            ..._items.asMap().entries.map((e) {
+                              final i = e.key;
+                              final item = e.value;
+                              final svcNames = item.selectedServices
+                                  .map((s) => s['name']?.toString() ?? '')
+                                  .where((n) => n.isNotEmpty)
+                                  .join(', ');
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(12),
+                                decoration: _Glass.glass(radius: 12),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item.productData['product_name']
+                                                    ?.toString() ??
+                                                '—',
+                                            style: const TextStyle(
+                                              color: _Glass.textPrimary,
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          Text(
+                                            [
+                                              if (item.needsSize &&
+                                                  item.widthFt != null &&
+                                                  item.heightFt != null)
+                                                item.isSqIn
+                                                    ? '${(item.widthFt! * 12).toStringAsFixed(0)}in × ${(item.heightFt! * 12).toStringAsFixed(0)}in'
+                                                    : '${item.widthFt}ft × ${item.heightFt}ft',
+                                              if (item.material != null)
+                                                item.material!,
+                                              '₱${item.unitPrice.toStringAsFixed(2)} × ${item.qty} = ₱${item.subtotal.toStringAsFixed(2)}',
+                                            ].join(' · '),
+                                            style: const TextStyle(
+                                              color: _Glass.textMuted,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                          if (svcNames.isNotEmpty)
+                                            Text(
+                                              'Add-ons: $svcNames',
+                                              style: const TextStyle(
+                                                color: _Glass.accentBlue,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          if (item.notes.isNotEmpty)
+                                            Text(
+                                              item.notes,
+                                              style: const TextStyle(
+                                                color: _Glass.textMuted,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          if (item.designFileName != null)
+                                            Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.attach_file_rounded,
+                                                  size: 11,
+                                                  color: _Glass.accentBlue,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    item.designFileName!,
+                                                    style: const TextStyle(
+                                                      color: _Glass.accentBlue,
+                                                      fontSize: 11,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () =>
+                                          setState(() => _items.removeAt(i)),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: _Glass.accentRose.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.remove_circle_outline,
+                                          color: _Glass.accentRose,
+                                          size: 16,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+
+                          if (_items.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _navyBlue.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: _Glass.borderMid,
+                                  width: 0.9,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    'Est. ~$_turnaround day${_turnaround == 1 ? '' : 's'}',
+                                    style: const TextStyle(
+                                      color: _Glass.textSecondary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    'Total: ₱${_total.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      color: _Glass.textPrimary,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+
+                          // ── Payment ──────────────────────────────────
+                          const Text(
+                            'Payment',
+                            style: TextStyle(
+                              color: _Glass.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              _payMethodChip(
+                                'cash',
+                                'Cash',
+                                Icons.payments_outlined,
+                              ),
+                              const SizedBox(width: 8),
+                              _payMethodChip(
+                                'gcash',
+                                'GCash',
+                                Icons.phone_android_outlined,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          _GlassFormField(
+                            controller: _paidCtrl,
+                            hint: 'Amount Paid (₱) * — min. 50% downpayment',
+                            icon: Icons.monetization_on_outlined,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            validator: (v) {
+                              final n = double.tryParse(v?.trim() ?? '');
+                              if (n == null) return 'Enter a valid amount';
+                              if (n < 0) return 'Cannot be negative';
+                              if (_items.isNotEmpty) {
+                                final minDown = _total * 0.5;
+                                if (n < minDown - 0.01) {
+                                  return 'Minimum 50% downpayment required: ₱${minDown.toStringAsFixed(2)}';
+                                }
+                                if (n > _total + 0.01) {
+                                  return 'Cannot exceed total ₱${_total.toStringAsFixed(2)}';
+                                }
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          _GlassFormField(
+                            controller: _notesCtrl,
+                            hint: 'Order Notes (optional)',
+                            icon: Icons.notes_outlined,
+                            maxLines: 2,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── Action buttons ─────────────────────────────────────
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _submitting
+                              ? null
+                              : () => Navigator.pop(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: _Glass.glass(radius: 12),
+                            child: const Center(
+                              child: Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: _Glass.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 2,
-                      child: GestureDetector(
-                        onTap: _submitting ? null : _submit,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: _Glass.solidPill(_navyBlue, glow: true),
-                          child: Center(
-                            child: _submitting
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white70,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: GestureDetector(
+                          onTap: _submitting ? null : _submit,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: _Glass.solidPill(_navyBlue, glow: true),
+                            child: Center(
+                              child: _submitting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white70,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Create Job Order',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      ),
                                     ),
-                                  )
-                                : const Text(
-                                    'Create Job Order',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                    ),
-                                  ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -2199,7 +2409,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
 }
 
 // =============================================================================
-// _GlassFormField — text field matching inventory _GlassField style
+// _GlassFormField
 // =============================================================================
 class _GlassFormField extends StatelessWidget {
   final TextEditingController controller;
@@ -2259,72 +2469,58 @@ class _GlassFormField extends StatelessWidget {
 }
 
 // =============================================================================
-// _WalkInItem model (unchanged)
+// _WalkInCustomizeDialog — large dialog, two-step: pick product → customize
+// Fully mirrors CustomerOrderScreen logic:
+//   • pricing_unit: per_sqft, per_sqin, per_qty, per_piece
+//   • material_options from product data (no hardcoded map)
+//   • variant_prices overrides
+//   • additional_services
+//   • stock availability via RawMaterials + bill_of_materials
+//   • under_min_surcharge
+//   • design file upload
 // =============================================================================
-class _WalkInItem {
-  final String productDocId;
-  final Map<String, dynamic> productData;
-  int qty;
-  String notes;
-  double? widthFt;
-  double? heightFt;
-  String? material;
-
-  _WalkInItem({
-    required this.productDocId,
-    required this.productData,
-    required this.qty,
-    required this.notes,
-    this.widthFt,
-    this.heightFt,
-    this.material,
-  });
-
-  double get unitPrice => (productData['price'] as num?)?.toDouble() ?? 0;
-
-  bool get needsSize {
-    final u = (productData['pricing_unit']?.toString() ?? '').toLowerCase();
-    return u.contains('sq') || u.contains('sqft') || u.contains('per ft');
-  }
-
-  double get subtotal {
-    if (needsSize && widthFt != null && heightFt != null) {
-      return unitPrice * widthFt! * heightFt! * qty;
-    }
-    return unitPrice * qty;
-  }
-}
-
-// =============================================================================
-// _ProductPickerDialog (structure unchanged, colours aligned)
-// =============================================================================
-class _ProductPickerDialog extends StatefulWidget {
+class _WalkInCustomizeDialog extends StatefulWidget {
   final List<QueryDocumentSnapshot> products;
   final ValueChanged<_WalkInItem> onAdd;
-  const _ProductPickerDialog({required this.products, required this.onAdd});
+
+  const _WalkInCustomizeDialog({required this.products, required this.onAdd});
 
   @override
-  State<_ProductPickerDialog> createState() => _ProductPickerDialogState();
+  State<_WalkInCustomizeDialog> createState() => _WalkInCustomizeDialogState();
 }
 
-class _ProductPickerDialogState extends State<_ProductPickerDialog> {
+class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
+  // Step 0 = product list, Step 1 = customize
+  int _step = 0;
   QueryDocumentSnapshot? _selected;
-  int _qty = 1;
-  String _notes = '';
+
+  // ── Filters ─────────────────────────────────────────────────────────────
   String _search = '';
   String? _category;
+  final _searchCtrl = TextEditingController();
 
+  // ── Customize state (mirrors CustomerOrderScreen) ────────────────────────
+  int _qty = 1;
   String _sizePreset = '2×3 ft';
   double _widthFt = 2;
   double _heightFt = 3;
+  String? _material;
+  final Set<String> _selectedServices = {};
   final _widthCtrl = TextEditingController(text: '2');
   final _heightCtrl = TextEditingController(text: '3');
-  String? _material;
-
-  final _qtyCtrl = TextEditingController(text: '1');
   final _notesCtrl = TextEditingController();
-  final _searchCtrl = TextEditingController();
+  final _qtyCtrl = TextEditingController(text: '1');
 
+  // Stock availability
+  Map<String, double> _stockMap = {};
+  bool _availabilityLoaded = false;
+  double? _maxOrderable;
+
+  // Design files
+  final List<_WalkInDesignFile> _files = [];
+  static const int _maxFileMB = 25;
+
+  // ── Size presets ─────────────────────────────────────────────────────────
   static const _sizePresets = [
     '2×3 ft',
     '3×4 ft',
@@ -2340,23 +2536,22 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
     '4×8 ft': (4.0, 8.0),
     '5×10 ft': (5.0, 10.0),
   };
-  static const _materialMap = {
-    'Large Format & Signage': [
-      'Standard Tarp',
-      'Premium Tarp',
-      'Mesh Tarp',
-      'Standard',
-      'Premium Backlit',
-    ],
-    'Stickers & Labels': ['Glossy Vinyl', 'Matte Vinyl', 'Clear Vinyl'],
-    'Photo & Card Prints': [
-      'Glossy',
-      'Matte',
-      'Satin',
-      'Kraft Paper',
-      'UV Coated',
-    ],
+  static const _sizePresetsIn = [
+    '4×4 in',
+    '4×6 in',
+    '6×8 in',
+    '8×10 in',
+    '10×12 in',
+    'Custom',
+  ];
+  static final _presetDimsIn = <String, (double, double)>{
+    '4×4 in': (4 / 12.0, 4 / 12.0),
+    '4×6 in': (4 / 12.0, 6 / 12.0),
+    '6×8 in': (6 / 12.0, 8 / 12.0),
+    '8×10 in': (8 / 12.0, 10 / 12.0),
+    '10×12 in': (10 / 12.0, 12 / 12.0),
   };
+
   static const _categories = [
     'Large Format & Signage',
     'Stickers & Labels',
@@ -2365,13 +2560,199 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
 
   @override
   void dispose() {
-    _qtyCtrl.dispose();
-    _notesCtrl.dispose();
     _searchCtrl.dispose();
     _widthCtrl.dispose();
     _heightCtrl.dispose();
+    _notesCtrl.dispose();
+    _qtyCtrl.dispose();
     super.dispose();
   }
+
+  // ── Product data accessors (mirrors CustomerOrderScreen) ─────────────────
+
+  Map<String, dynamic>? get _data => _selected?.data() as Map<String, dynamic>?;
+
+  String get _pricingUnit => _data?['pricing_unit']?.toString() ?? '';
+
+  bool get _needsSize =>
+      _pricingUnit == 'per_sqft' || _pricingUnit == 'per_sqin';
+
+  bool get _isSqIn => _pricingUnit == 'per_sqin';
+
+  int get _minQty => (_data?['min_quantity'] as num?)?.toInt() ?? 1;
+
+  int get _pricingQty => (_data?['pricing_qty'] as num?)?.toInt() ?? 100;
+
+  double get _underMinSurcharge =>
+      (_data?['under_min_surcharge'] as num?)?.toDouble() ?? 0;
+
+  bool get _hasSurcharge => _underMinSurcharge > 0 && _qty < _minQty;
+
+  List<String> get _materialList {
+    final raw = _data?['material_options'] as List?;
+    if (raw != null && raw.isNotEmpty) {
+      return raw.map((e) => e.toString()).toList();
+    }
+    return [];
+  }
+
+  List<Map<String, dynamic>> get _additionalServicesList {
+    final raw = _data?['additional_services'] as List?;
+    if (raw == null) return [];
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  double get _effectiveBasePrice {
+    if (_material != null) {
+      final vp = _data?['variant_prices'] as Map?;
+      if (vp != null) {
+        final override = vp[_material];
+        if (override != null) return (override as num).toDouble();
+      }
+    }
+    return (_data?['price'] as num?)?.toDouble() ?? 0;
+  }
+
+  double _calcUnit(double price) {
+    if (_pricingUnit == 'per_sqin') {
+      return price * _widthFt * _heightFt * 144 * _qty;
+    }
+    if (_needsSize) return price * _widthFt * _heightFt * _qty;
+    return price * _qty;
+  }
+
+  double get _lineSubtotal {
+    double total = _calcUnit(_effectiveBasePrice);
+    for (final svc in _additionalServicesList) {
+      final name = svc['name']?.toString() ?? '';
+      if (_selectedServices.contains(name)) {
+        final sp = (svc['price'] as num?)?.toDouble() ?? 0;
+        total += _calcUnit(sp);
+      }
+    }
+    if (_hasSurcharge) total += _underMinSurcharge;
+    return total;
+  }
+
+  bool get _sizeIsValid {
+    if (!_needsSize) return true;
+    final cat = (_data?['category']?.toString() ?? '').toLowerCase();
+    if (!cat.contains('large format')) return true;
+    return ((_widthFt >= 3 && _heightFt >= 2) ||
+        (_widthFt >= 2 && _heightFt >= 3));
+  }
+
+  static String _fmtStock(double v) {
+    if (v == v.truncateToDouble()) return v.toInt().toString();
+    return v.abs() < 1 ? v.toStringAsFixed(3) : v.toStringAsFixed(2);
+  }
+
+  // ── Stock availability ───────────────────────────────────────────────────
+
+  Future<void> _loadAvailability() async {
+    if (_data == null) return;
+    final bom = (_data!['bill_of_materials'] as List?) ?? [];
+    if (bom.isEmpty) {
+      if (mounted) setState(() => _availabilityLoaded = true);
+      return;
+    }
+    setState(() {
+      _availabilityLoaded = false;
+      _maxOrderable = null;
+    });
+    final matIds = bom
+        .map((e) => (e['material_id'] as String?) ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final stockMap = <String, double>{};
+    try {
+      for (final matId in matIds) {
+        final doc = await FirebaseFirestore.instance
+            .collection('RawMaterials')
+            .doc(matId)
+            .get();
+        if (doc.exists) {
+          stockMap[matId] =
+              (doc.data()?['current_stock'] as num?)?.toDouble() ?? 0.0;
+        }
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _stockMap = stockMap;
+      _availabilityLoaded = true;
+      _maxOrderable = _computeMax();
+    });
+  }
+
+  double? _computeMax() {
+    if (_data == null) return null;
+    final bom = (_data!['bill_of_materials'] as List?) ?? [];
+    if (bom.isEmpty) return null;
+    String resolved = _material?.trim() ?? '';
+    if (resolved.isEmpty) {
+      final opts = (_data!['material_options'] as List?) ?? [];
+      if (opts.isNotEmpty) resolved = opts.first.toString().trim();
+    }
+    final applyFilter = resolved.isNotEmpty;
+    double? max;
+    for (final item in bom) {
+      final opt = (item['for_material_option'] as String?)?.trim() ?? '';
+      if (applyFilter && opt.isNotEmpty && opt != resolved) continue;
+      final matId = (item['material_id'] as String?) ?? '';
+      if (matId.isEmpty) continue;
+      final qpu = (item['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+      if (qpu <= 0) continue;
+      final fromThis = (_stockMap[matId] ?? 0.0) / qpu;
+      if (max == null || fromThis < max) max = fromThis;
+    }
+    return max;
+  }
+
+  // ── File picking ─────────────────────────────────────────────────────────
+
+  Future<void> _pickFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'psd', 'ai'],
+        withData: true,
+      );
+      if (result == null || !mounted) return;
+      final rejected = <String>[];
+      setState(() {
+        for (final pf in result.files) {
+          if (pf.bytes == null) continue;
+          final mb = pf.bytes!.lengthInBytes / (1024 * 1024);
+          if (mb > _maxFileMB) {
+            rejected.add('${pf.name} (${mb.toStringAsFixed(1)} MB)');
+          } else {
+            _files.add(_WalkInDesignFile(name: pf.name, bytes: pf.bytes));
+          }
+        }
+      });
+      if (rejected.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Skipped (>${_maxFileMB}MB): ${rejected.join(', ')}'),
+            backgroundColor: Colors.orange.shade700,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('File picker error: $e'),
+            backgroundColor: _Glass.accentRose,
+          ),
+        );
+      }
+    }
+  }
+
+  // ── Product selection ────────────────────────────────────────────────────
 
   List<QueryDocumentSnapshot> get _filtered => widget.products.where((doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -2381,106 +2762,273 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
         (_category == null || cat == _category);
   }).toList();
 
-  bool get _needsSize {
-    final data = _selected?.data() as Map<String, dynamic>?;
-    final u = (data?['pricing_unit']?.toString() ?? '').toLowerCase();
-    return u.contains('sq') || u.contains('sqft') || u.contains('per ft');
+  void _selectProduct(QueryDocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final mats =
+        (data['material_options'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+    final pricingUnit = data['pricing_unit']?.toString() ?? '';
+    final isSqIn = pricingUnit == 'per_sqin';
+    final minQty = (data['min_quantity'] as num?)?.toInt() ?? 1;
+
+    setState(() {
+      _selected = doc;
+      _step = 1;
+      _qty = minQty;
+      _qtyCtrl.text = '$_qty';
+      _material = mats.isNotEmpty ? mats.first : null;
+      _selectedServices.clear();
+      _files.clear();
+      _notesCtrl.clear();
+      _availabilityLoaded = false;
+      _maxOrderable = null;
+      _stockMap = {};
+
+      // Size defaults
+      if (isSqIn) {
+        _widthFt = 4 / 12.0;
+        _heightFt = 4 / 12.0;
+        _widthCtrl.text = '4';
+        _heightCtrl.text = '4';
+        _sizePreset = '4×4 in';
+      } else {
+        _widthFt = 2;
+        _heightFt = 3;
+        _widthCtrl.text = '2';
+        _heightCtrl.text = '3';
+        _sizePreset = '2×3 ft';
+      }
+    });
+
+    _loadAvailability();
   }
 
-  List<String> get _materialList {
-    final data = _selected?.data() as Map<String, dynamic>?;
-    final cat = data?['category']?.toString() ?? '';
-    return _materialMap[cat] ?? [];
+  // ── Add to order ─────────────────────────────────────────────────────────
+
+  void _addToOrder() {
+    if (_needsSize && !_sizeIsValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Minimum tarpaulin size is 2×3 ft (or 3×2 ft).'),
+          backgroundColor: _Glass.accentRose,
+        ),
+      );
+      return;
+    }
+    if (_materialList.isNotEmpty && _material == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a variant.')));
+      return;
+    }
+    if (_files.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please upload at least one design file.'),
+        ),
+      );
+      return;
+    }
+    if (_maxOrderable != null) {
+      final effQty = _needsSize ? _widthFt * _heightFt * _qty : _qty.toDouble();
+      if (effQty > _maxOrderable!) {
+        final unit = _needsSize ? 'sq ft' : 'pcs';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Insufficient stock. Only ${_fmtStock(_maxOrderable!)} $unit available.',
+            ),
+            backgroundColor: _Glass.accentRose,
+          ),
+        );
+        return;
+      }
+    }
+
+    final selectedSvcList = _additionalServicesList
+        .where((s) => _selectedServices.contains(s['name']?.toString()))
+        .toList();
+
+    widget.onAdd(
+      _WalkInItem(
+        productDocId: _selected!.id,
+        productData: _selected!.data() as Map<String, dynamic>,
+        qty: _qty,
+        notes: _notesCtrl.text.trim(),
+        widthFt: _needsSize ? _widthFt : null,
+        heightFt: _needsSize ? _heightFt : null,
+        material: _material,
+        designFileUrl: null,
+        designFileName: _files.isNotEmpty
+            ? _files.map((f) => f.name).join(', ')
+            : null,
+        selectedServices: selectedSvcList,
+      ),
+    );
+    Navigator.pop(context);
   }
 
-  double get _unitPrice {
-    final data = _selected?.data() as Map<String, dynamic>?;
-    return (data?['price'] as num?)?.toDouble() ?? 0.0;
-  }
-
-  double get _lineSubtotal {
-    if (_needsSize) return _unitPrice * _widthFt * _heightFt * _qty;
-    return _unitPrice * _qty;
-  }
+  // ── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _filtered;
+    final screenSize = MediaQuery.of(context).size;
 
     return Dialog(
       backgroundColor: _Glass.surface,
-      elevation: 32,
-      shadowColor: Colors.black.withValues(alpha: 0.3),
+      elevation: 40,
+      shadowColor: Colors.black.withValues(alpha: 0.35),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         side: const BorderSide(color: _Glass.borderMid, width: 1),
       ),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 540, maxHeight: 680),
-        child: Padding(
-          padding: const EdgeInsets.all(22),
+        constraints: BoxConstraints(
+          maxWidth: 680,
+          maxHeight: screenSize.height * 0.90,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
-              Row(
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: _navyBlue,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.category_outlined,
-                      color: Colors.white,
-                      size: 15,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Select Product',
-                      style: TextStyle(
-                        color: _Glass.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      ),
+              // ── Top bar ───────────────────────────────────────────────
+              _buildDialogTopBar(),
+              // ── Content ───────────────────────────────────────────────
+              Flexible(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position:
+                          Tween<Offset>(
+                            begin: const Offset(0.04, 0),
+                            end: Offset.zero,
+                          ).animate(
+                            CurvedAnimation(
+                              parent: anim,
+                              curve: Curves.easeOut,
+                            ),
+                          ),
+                      child: child,
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: _Glass.surfaceThin,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: _Glass.borderMid, width: 0.9),
-                      ),
-                      child: const Icon(
-                        Icons.close_rounded,
-                        color: _Glass.textMuted,
-                        size: 15,
-                      ),
-                    ),
-                  ),
-                ],
+                  child: _step == 0
+                      ? _buildProductList()
+                      : _buildCustomiseForm(),
+                ),
               ),
-              const Divider(
-                color: _Glass.borderMid,
-                height: 20,
-                thickness: 0.8,
-              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-              // Search
+  // ── Dialog top bar ───────────────────────────────────────────────────────
+
+  Widget _buildDialogTopBar() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+      decoration: BoxDecoration(
+        color: _Glass.surface,
+        border: Border(bottom: BorderSide(color: _Glass.borderDim, width: 1)),
+      ),
+      child: Row(
+        children: [
+          // Back / close button
+          GestureDetector(
+            onTap: () {
+              if (_step == 1) {
+                setState(() => _step = 0);
+              } else {
+                Navigator.pop(context);
+              }
+            },
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: _Glass.surfaceThin,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _Glass.borderMid, width: 0.9),
+              ),
+              child: Icon(
+                _step == 1
+                    ? Icons.arrow_back_ios_new_rounded
+                    : Icons.close_rounded,
+                size: 14,
+                color: _Glass.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _step == 0
+                      ? 'Select Product'
+                      : (_data?['product_name']?.toString() ?? 'Customize'),
+                  style: const TextStyle(
+                    color: _Glass.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                Text(
+                  _step == 0
+                      ? 'Step 1 of 2 — choose a product'
+                      : 'Step 2 of 2 — set options & upload files',
+                  style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          // Step dots
+          Row(
+            children: List.generate(2, (i) {
+              final active = _step == i;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.only(left: 6),
+                width: active ? 20 : 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: active ? _navyBlue : _Glass.borderMid,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Step 0: Product list ─────────────────────────────────────────────────
+
+  Widget _buildProductList() {
+    final filtered = _filtered;
+    return Column(
+      key: const ValueKey('step0'),
+      children: [
+        // Search + filter
+        Container(
+          color: _Glass.surface,
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+          child: Column(
+            children: [
               Container(
                 decoration: BoxDecoration(
                   color: _Glass.surfaceThin,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: _Glass.borderMid, width: 0.8),
                 ),
                 child: TextField(
@@ -2501,18 +3049,15 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: 14,
-                      vertical: 10,
+                      vertical: 11,
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 10),
-
-              // Category chips
-              SizedBox(
-                height: 32,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
                   children: [
                     _catChip(
                       'All',
@@ -2531,423 +3076,868 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: _Glass.borderDim),
+        // Product list
+        Flexible(
+          child: filtered.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No products found.',
+                    style: TextStyle(color: _Glass.textMuted, fontSize: 13),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) {
+                    final doc = filtered[i];
+                    final data = doc.data() as Map<String, dynamic>;
+                    final name = data['product_name']?.toString() ?? '—';
+                    final price = (data['price'] as num?)?.toDouble() ?? 0;
+                    final unit = data['pricing_unit']?.toString() ?? '';
+                    final imageUrl = data['image_url']?.toString() ?? '';
+                    final cat = data['category']?.toString() ?? '';
+                    final desc = data['description']?.toString() ?? '';
+                    final pricingQty =
+                        (data['pricing_qty'] as num?)?.toInt() ?? 100;
 
-              // Product list
-              Expanded(
-                child: filtered.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No products found.',
-                          style: TextStyle(
-                            color: _Glass.textMuted,
-                            fontSize: 13,
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: filtered.length,
-                        itemBuilder: (_, i) {
-                          final doc = filtered[i];
-                          final data = doc.data() as Map<String, dynamic>;
-                          final name = data['product_name']?.toString() ?? '—';
-                          final price =
-                              (data['price'] as num?)?.toDouble() ?? 0;
-                          final unit = data['pricing_unit']?.toString() ?? '';
-                          final imageUrl = data['image_url']?.toString() ?? '';
-                          final cat = data['category']?.toString() ?? '';
-                          final desc = data['description']?.toString() ?? '';
-                          final isSelected = _selected?.id == doc.id;
+                    String unitLabel;
+                    switch (unit) {
+                      case 'per_sqft':
+                        unitLabel = '/ sq ft';
+                        break;
+                      case 'per_sqin':
+                        unitLabel = '/ sq in';
+                        break;
+                      case 'per_qty':
+                        unitLabel = '/ $pricingQty pcs';
+                        break;
+                      default:
+                        unitLabel = '/ piece';
+                    }
 
-                          return GestureDetector(
-                            onTap: () => setState(() {
-                              _selected = doc;
-                              final minQty =
-                                  (data['min_quantity'] as num?)?.toInt() ?? 1;
-                              _qty = minQty;
-                              _qtyCtrl.text = '$_qty';
-                              _sizePreset = '2×3 ft';
-                              _widthFt = 2;
-                              _heightFt = 3;
-                              _widthCtrl.text = '2';
-                              _heightCtrl.text = '3';
-                              final mats =
-                                  _materialMap[data['category']?.toString() ??
-                                      ''] ??
-                                  [];
-                              _material = mats.isNotEmpty ? mats.first : null;
-                            }),
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              decoration: isSelected
-                                  ? _Glass.glass(
-                                      radius: 12,
-                                      tintBorder: _navyBlue.withValues(
-                                        alpha: 0.45,
+                    return GestureDetector(
+                      onTap: () => _selectProduct(doc),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: _Glass.glass(radius: 14),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: const BorderRadius.horizontal(
+                                left: Radius.circular(14),
+                              ),
+                              child: SizedBox(
+                                width: 76,
+                                height: 76,
+                                child: imageUrl.isNotEmpty
+                                    ? Image.network(
+                                        imageUrl,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            _imgPlaceholder(),
+                                      )
+                                    : _imgPlaceholder(),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: const TextStyle(
+                                        color: _Glass.textPrimary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
                                       ),
-                                    )
-                                  : _Glass.glass(radius: 12),
-                              child: Row(
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: const BorderRadius.horizontal(
-                                      left: Radius.circular(12),
                                     ),
-                                    child: SizedBox(
-                                      width: 64,
-                                      height: 64,
-                                      child: imageUrl.isNotEmpty
-                                          ? Image.network(
-                                              imageUrl,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) =>
-                                                  _imgPlaceholder(),
-                                            )
-                                          : _imgPlaceholder(),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          name,
-                                          style: TextStyle(
-                                            color: _Glass.textPrimary,
-                                            fontWeight: isSelected
-                                                ? FontWeight.w800
-                                                : FontWeight.w600,
-                                            fontSize: 13,
+                                    if (cat.isNotEmpty) ...[
+                                      const SizedBox(height: 3),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 7,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _navyBlue.withValues(
+                                            alpha: 0.07,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
                                           ),
                                         ),
-                                        if (cat.isNotEmpty)
-                                          Text(
-                                            cat,
-                                            style: const TextStyle(
-                                              color: _Glass.textMuted,
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                        if (desc.isNotEmpty)
-                                          Text(
-                                            desc,
-                                            style: const TextStyle(
-                                              color: _Glass.textMuted,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 12),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          '₱${price.toStringAsFixed(2)}',
-                                          style: TextStyle(
-                                            color: isSelected
-                                                ? _navyBlue
-                                                : _Glass.textPrimary,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        if (unit.isNotEmpty)
-                                          Text(
-                                            '/ $unit',
-                                            style: const TextStyle(
-                                              color: _Glass.textMuted,
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                        if (isSelected)
-                                          Icon(
-                                            Icons.check_circle_rounded,
+                                        child: Text(
+                                          cat,
+                                          style: const TextStyle(
                                             color: _navyBlue,
-                                            size: 16,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
                                           ),
-                                      ],
+                                        ),
+                                      ),
+                                    ],
+                                    if (desc.isNotEmpty) ...[
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        desc,
+                                        style: const TextStyle(
+                                          color: _Glass.textMuted,
+                                          fontSize: 11,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(0, 0, 14, 0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '₱${price.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      color: _Glass.textPrimary,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    unitLabel,
+                                    style: const TextStyle(
+                                      color: _Glass.textMuted,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: _navyBlue.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Icon(
+                                      Icons.chevron_right_rounded,
+                                      size: 14,
+                                      color: _navyBlue,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          );
-                        },
+                          ],
+                        ),
                       ),
-              ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
 
-              if (_selected != null) ...[
-                const SizedBox(height: 12),
-                Divider(color: _Glass.borderDim, height: 1),
-                const SizedBox(height: 12),
+  // ── Step 1: Customize form ───────────────────────────────────────────────
 
+  Widget _buildCustomiseForm() {
+    final isArea = _needsSize;
+    final effQty = isArea ? _widthFt * _heightFt * _qty : _qty.toDouble();
+    final unitLabel = isArea ? 'sq ft' : 'pcs';
+    final hasStock = _availabilityLoaded && _maxOrderable != null;
+    final stockOk = !hasStock || effQty <= _maxOrderable!;
+
+    return Column(
+      key: const ValueKey('step1'),
+      children: [
+        // Scrollable content
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Product info header ────────────────────────────────
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if ((_data?['image_url']?.toString() ?? '').isNotEmpty) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: Image.network(
+                            _data!['image_url'],
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _imgPlaceholder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _data?['product_name']?.toString() ?? '—',
+                            style: const TextStyle(
+                              color: _Glass.textPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          if ((_data?['category']?.toString() ?? '').isNotEmpty)
+                            Container(
+                              margin: const EdgeInsets.only(top: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _navyBlue.withValues(alpha: 0.07),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                _data!['category'],
+                                style: const TextStyle(
+                                  color: _navyBlue,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _pricingUnit == 'per_qty'
+                                ? '₱${_effectiveBasePrice.toStringAsFixed(2)} per $_pricingQty pcs'
+                                : _pricingUnit == 'per_sqin'
+                                ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq in'
+                                : _pricingUnit == 'per_sqft'
+                                ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq ft'
+                                : '₱${_effectiveBasePrice.toStringAsFixed(2)} / piece',
+                            style: const TextStyle(
+                              color: _Glass.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Divider(height: 1, color: _Glass.borderDim),
+                const SizedBox(height: 16),
+
+                // ── Size inputs (per_sqft or per_sqin) ────────────────
                 if (_needsSize) ...[
-                  _label('Size (in feet)'),
+                  _sectionLabel(
+                    _isSqIn ? 'Size (in inches)' : 'Size (in feet)',
+                  ),
                   const SizedBox(height: 8),
                   Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: _sizePresets
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: (_isSqIn ? _sizePresetsIn : _sizePresets).map((
+                      p,
+                    ) {
+                      final dims = _isSqIn ? _presetDimsIn[p] : _presetDims[p];
+                      return _selChip(p, _sizePreset == p, () {
+                        setState(() {
+                          _sizePreset = p;
+                          if (dims != null) {
+                            _widthFt = dims.$1;
+                            _heightFt = dims.$2;
+                            _widthCtrl.text = _isSqIn
+                                ? (dims.$1 * 12).toStringAsFixed(0)
+                                : dims.$1.toString();
+                            _heightCtrl.text = _isSqIn
+                                ? (dims.$2 * 12).toStringAsFixed(0)
+                                : dims.$2.toString();
+                          }
+                        });
+                      });
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _dimField(
+                          _isSqIn ? 'Width (in)' : 'Width (ft)',
+                          _widthCtrl,
+                          (v) {
+                            final d = double.tryParse(v);
+                            if (d != null && d > 0) {
+                              setState(() {
+                                _widthFt = _isSqIn ? d / 12.0 : d;
+                                _sizePreset = 'Custom';
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          '×',
+                          style: TextStyle(
+                            color: _Glass.textMuted,
+                            fontSize: 20,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: _dimField(
+                          _isSqIn ? 'Height (in)' : 'Height (ft)',
+                          _heightCtrl,
+                          (v) {
+                            final d = double.tryParse(v);
+                            if (d != null && d > 0) {
+                              setState(() {
+                                _heightFt = _isSqIn ? d / 12.0 : d;
+                                _sizePreset = 'Custom';
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (!_isSqIn &&
+                      (_data?['category']?.toString() ?? '')
+                          .toLowerCase()
+                          .contains('large format') &&
+                      !_sizeIsValid) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: const [
+                        Icon(
+                          Icons.info_outline,
+                          color: _Glass.accentAmber,
+                          size: 13,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Minimum size is 2×3 ft',
+                          style: TextStyle(
+                            color: _Glass.accentAmber,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                ],
+
+                // ── Variant (from material_options field) ────
+                if (_materialList.isNotEmpty) ...[
+                  _sectionLabel('Variant'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _materialList
                         .map(
-                          (p) => _selChip(p, _sizePreset == p, () {
-                            final dims = _presetDims[p];
+                          (m) => _selChip(m, _material == m, () {
                             setState(() {
-                              _sizePreset = p;
-                              if (dims != null) {
-                                _widthFt = dims.$1;
-                                _heightFt = dims.$2;
-                                _widthCtrl.text = dims.$1.toString();
-                                _heightCtrl.text = dims.$2.toString();
+                              _material = m;
+                              if (_availabilityLoaded) {
+                                _maxOrderable = _computeMax();
                               }
                             });
                           }),
                         )
                         .toList(),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _dimField('Width', _widthCtrl, (v) {
-                          final d = double.tryParse(v);
-                          if (d != null && d > 0) {
-                            setState(() {
-                              _widthFt = d;
-                              _sizePreset = 'Custom';
-                            });
-                          }
-                        }),
+                  const SizedBox(height: 20),
+                ],
+
+                // ── Stock availability ─────────────────────────────────
+                if (_availabilityLoaded && _maxOrderable != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: stockOk
+                          ? _Glass.accentEmerald.withValues(alpha: 0.08)
+                          : _Glass.accentRose.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: stockOk
+                            ? _Glass.accentEmerald.withValues(alpha: 0.30)
+                            : _Glass.accentRose.withValues(alpha: 0.30),
+                        width: 0.9,
                       ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Text(
-                          '×',
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          stockOk
+                              ? Icons.inventory_2_outlined
+                              : Icons.warning_amber_outlined,
+                          color: stockOk
+                              ? _Glass.accentEmerald
+                              : _Glass.accentRose,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          stockOk
+                              ? 'Available: ${_fmtStock(_maxOrderable!)} $unitLabel'
+                              : 'Insufficient — only ${_fmtStock(_maxOrderable!)} $unitLabel available',
                           style: TextStyle(
-                            color: _Glass.textMuted,
-                            fontSize: 18,
+                            color: stockOk
+                                ? _Glass.accentEmerald
+                                : _Glass.accentRose,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // ── Quantity ───────────────────────────────────────────
+                _sectionLabel(
+                  _pricingUnit == 'per_qty'
+                      ? 'Quantity (units of $_pricingQty pcs)'
+                      : 'Quantity',
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: _Glass.glass(radius: 14),
+                  child: Row(
+                    children: [
+                      _qtyBtn(Icons.remove_rounded, () {
+                        final hardMin = _underMinSurcharge > 0 ? 1 : _minQty;
+                        if (_qty > hardMin) {
+                          setState(() {
+                            _qty--;
+                            _qtyCtrl.text = '$_qty';
+                          });
+                        }
+                      }),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 60,
+                        child: TextField(
+                          controller: _qtyCtrl,
+                          textAlign: TextAlign.center,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(
+                            color: _Glass.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          onChanged: (v) {
+                            final n = int.tryParse(v);
+                            if (n != null && n > 0) {
+                              setState(() => _qty = n);
+                            }
+                          },
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
                           ),
                         ),
                       ),
-                      Expanded(
-                        child: _dimField('Height', _heightCtrl, (v) {
-                          final d = double.tryParse(v);
-                          if (d != null && d > 0) {
-                            setState(() {
-                              _heightFt = d;
-                              _sizePreset = 'Custom';
-                            });
-                          }
-                        }),
+                      const SizedBox(width: 12),
+                      _qtyBtn(Icons.add_rounded, () {
+                        setState(() {
+                          _qty++;
+                          _qtyCtrl.text = '$_qty';
+                        });
+                      }),
+                      const Spacer(),
+                      if (_hasSurcharge) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _Glass.accentAmber.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(99),
+                            border: Border.all(
+                              color: _Glass.accentAmber.withValues(alpha: 0.40),
+                            ),
+                          ),
+                          child: Text(
+                            '+₱${_underMinSurcharge.toStringAsFixed(0)} surcharge',
+                            style: const TextStyle(
+                              color: _Glass.accentAmber,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(
+                        '₱${_lineSubtotal.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: _navyBlue,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _pricingUnit == 'per_qty'
+                      ? 'min. $_minQty unit = ${_minQty * _pricingQty} pcs'
+                      : 'min. $_minQty',
+                  style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                ),
+                const SizedBox(height: 20),
 
-                if (_materialList.isNotEmpty) ...[
-                  _label('Material / Finish'),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: _materialList
-                        .map(
-                          (m) => _selChip(
-                            m,
-                            _material == m,
-                            () => setState(() => _material = m),
-                          ),
-                        )
-                        .toList(),
+                // ── Add-on services ────────────────────────────────────
+                if (_additionalServicesList.isNotEmpty) ...[
+                  _sectionLabel('Add-on Services'),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Optional — select any extras you\'d like included.',
+                    style: TextStyle(color: _Glass.textMuted, fontSize: 11),
                   ),
-                  const SizedBox(height: 14),
-                ],
+                  const SizedBox(height: 8),
+                  ..._additionalServicesList.map((svc) {
+                    final name = svc['name']?.toString() ?? '';
+                    final price = (svc['price'] as num?)?.toDouble() ?? 0;
+                    final sel = _selectedServices.contains(name);
+                    final priceLabel = _pricingUnit == 'per_qty'
+                        ? '+₱${price.toStringAsFixed(0)} / $_pricingQty pcs'
+                        : _pricingUnit == 'per_sqin'
+                        ? '+₱${price.toStringAsFixed(2)} / sq in'
+                        : _pricingUnit == 'per_sqft'
+                        ? '+₱${price.toStringAsFixed(2)} / sq ft'
+                        : '+₱${price.toStringAsFixed(2)} / piece';
 
-                Row(
-                  children: [
-                    const Text(
-                      'Quantity',
-                      style: TextStyle(
-                        color: _Glass.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const Spacer(),
-                    _qtyBtn(
-                      Icons.remove_rounded,
-                      () => setState(() {
-                        final minQty =
-                            ((_selected!.data() as Map)['min_quantity'] as num?)
-                                ?.toInt() ??
-                            1;
-                        if (_qty > minQty) {
-                          _qty--;
-                          _qtyCtrl.text = '$_qty';
+                    return GestureDetector(
+                      onTap: () => setState(() {
+                        if (sel) {
+                          _selectedServices.remove(name);
+                        } else {
+                          _selectedServices.add(name);
                         }
                       }),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 56,
-                      child: TextField(
-                        controller: _qtyCtrl,
-                        textAlign: TextAlign.center,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(
-                          color: _Glass.textPrimary,
-                          fontSize: 13,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 11,
                         ),
-                        onChanged: (v) {
-                          final n = int.tryParse(v);
-                          if (n != null && n > 0) setState(() => _qty = n);
-                        },
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: _Glass.surfaceThin,
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 8,
+                        decoration: BoxDecoration(
+                          color: sel
+                              ? _navyBlue.withValues(alpha: 0.06)
+                              : _Glass.surfaceThin,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: sel
+                                ? _navyBlue.withValues(alpha: 0.45)
+                                : _Glass.borderMid,
+                            width: sel ? 1.3 : 0.9,
                           ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: _Glass.borderMid,
-                              width: 0.9,
+                        ),
+                        child: Row(
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: sel ? _navyBlue : Colors.transparent,
+                                border: Border.all(
+                                  color: sel ? _navyBlue : _Glass.textMuted,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: sel
+                                  ? const Icon(
+                                      Icons.check,
+                                      size: 12,
+                                      color: Colors.white,
+                                    )
+                                  : null,
                             ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: _Glass.borderMid,
-                              width: 0.9,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                name,
+                                style: TextStyle(
+                                  color: sel
+                                      ? _Glass.textPrimary
+                                      : _Glass.textSecondary,
+                                  fontSize: 13,
+                                  fontWeight: sel
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                ),
+                              ),
                             ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(
-                              color: _navyBlue.withValues(alpha: 0.5),
-                              width: 1.5,
+                            Text(
+                              priceLabel,
+                              style: TextStyle(
+                                color: sel ? _navyBlue : _Glass.textMuted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                ],
+
+                // ── Design files ───────────────────────────────────────
+                _sectionLabel('Design Files *'),
+                const SizedBox(height: 4),
+                const Text(
+                  'PDF, JPG, PNG, PSD, AI — max 25 MB per file',
+                  style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                ),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: _pickFiles,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: _files.isEmpty
+                          ? _Glass.surfaceThin
+                          : _Glass.accentBlue.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: _files.isEmpty
+                            ? _Glass.borderMid
+                            : _Glass.accentBlue.withValues(alpha: 0.35),
+                        width: _files.isEmpty ? 0.9 : 1.2,
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                    _qtyBtn(
-                      Icons.add_rounded,
-                      () => setState(() {
-                        _qty++;
-                        _qtyCtrl.text = '$_qty';
-                      }),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.cloud_upload_outlined,
+                          size: 32,
+                          color: _files.isEmpty
+                              ? _Glass.textMuted
+                              : _Glass.accentBlue,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _files.isEmpty
+                              ? 'Tap to upload design files'
+                              : 'Tap to add more files',
+                          style: TextStyle(
+                            color: _files.isEmpty
+                                ? _Glass.textMuted
+                                : _Glass.accentBlue,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        if (_files.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          ..._files.asMap().entries.map(
+                            (e) => Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _Glass.accentBlue.withValues(
+                                    alpha: 0.07,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: _Glass.accentBlue.withValues(
+                                      alpha: 0.20,
+                                    ),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.insert_drive_file_outlined,
+                                      size: 15,
+                                      color: _Glass.accentBlue,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        e.value.name,
+                                        style: const TextStyle(
+                                          color: _Glass.textPrimary,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () => setState(
+                                        () => _files.removeAt(e.key),
+                                      ),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: _Glass.accentRose.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.close_rounded,
+                                          size: 13,
+                                          color: _Glass.accentRose,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    const Spacer(),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // ── Notes ─────────────────────────────────────────────
+                _sectionLabel('Product Notes (optional)'),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: _Glass.surfaceThin,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _Glass.borderMid, width: 0.8),
+                  ),
+                  child: TextField(
+                    controller: _notesCtrl,
+                    maxLines: 3,
+                    style: const TextStyle(
+                      color: _Glass.textPrimary,
+                      fontSize: 13,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'Specifications, special instructions…',
+                      hintStyle: TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 13,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.all(14),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+        ),
+
+        // ── Bottom action bar ────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          decoration: BoxDecoration(
+            color: _Glass.surface,
+            border: Border(top: BorderSide(color: _Glass.borderDim, width: 1)),
+            boxShadow: const [_Glass.elevatedShadow],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Subtotal',
+                      style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                    ),
                     Text(
                       '₱${_lineSubtotal.toStringAsFixed(2)}',
                       style: const TextStyle(
-                        color: _Glass.textPrimary,
+                        color: _navyBlue,
+                        fontSize: 20,
                         fontWeight: FontWeight.w800,
-                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      '50% min: ₱${(_lineSubtotal * 0.5).toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: _Glass.textMuted,
+                        fontSize: 10,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                _GlassFormField(
-                  controller: _notesCtrl,
-                  hint: 'Product notes / specifications (optional)',
-                  maxLines: 2,
-                ),
-              ],
-
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: GestureDetector(
-                  onTap: _selected == null
-                      ? null
-                      : () {
-                          if (_materialList.isNotEmpty && _material == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Please select a material / finish.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-                          widget.onAdd(
-                            _WalkInItem(
-                              productDocId: _selected!.id,
-                              productData:
-                                  _selected!.data() as Map<String, dynamic>,
-                              qty: _qty,
-                              notes: _notesCtrl.text.trim(),
-                              widthFt: _needsSize ? _widthFt : null,
-                              heightFt: _needsSize ? _heightFt : null,
-                              material: _material,
-                            ),
-                          );
-                          Navigator.pop(context);
-                        },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: _selected == null
-                        ? _Glass.glass(radius: 12)
-                        : _Glass.solidPill(_navyBlue, glow: true),
-                    child: Center(
-                      child: Text(
-                        _selected == null
-                            ? 'Select a product first'
-                            : 'Add to Order',
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: _addToOrder,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 13,
+                  ),
+                  decoration: _Glass.solidPill(_navyBlue, glow: true),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.add_shopping_cart_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Add to Order',
                         style: TextStyle(
-                          color: _selected == null
-                              ? _Glass.textMuted
-                              : Colors.white,
+                          color: Colors.white,
                           fontWeight: FontWeight.w700,
-                          fontSize: 13,
+                          fontSize: 14,
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _catChip(String label, bool active, VoidCallback onTap) =>
-      GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          margin: const EdgeInsets.only(right: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          decoration: active
-              ? _Glass.solidPill(_navyBlue)
-              : BoxDecoration(
-                  color: _Glass.surfaceThin,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _Glass.borderMid, width: 0.9),
-                ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: active ? Colors.white : _Glass.textSecondary,
-              fontSize: 11,
-              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-            ),
-          ),
-        ),
-      );
+  // ── Shared widget helpers ────────────────────────────────────────────────
 
   Widget _imgPlaceholder() => Container(
     color: _Glass.surfaceThin,
@@ -2956,31 +3946,37 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
     ),
   );
 
-  Widget _qtyBtn(IconData icon, VoidCallback onTap) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      width: 30,
-      height: 30,
-      decoration: _Glass.glass(radius: 8),
-      child: Icon(icon, color: _Glass.textSecondary, size: 16),
-    ),
-  );
-
-  Widget _label(String text) => Text(
-    text,
-    style: const TextStyle(
-      color: _Glass.textPrimary,
-      fontSize: 13,
-      fontWeight: FontWeight.w700,
-    ),
-  );
+  Widget _catChip(String label, bool active, VoidCallback onTap) =>
+      GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: active
+              ? _Glass.solidPill(_navyBlue)
+              : BoxDecoration(
+                  color: _Glass.surfaceThin,
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(color: _Glass.borderMid, width: 0.9),
+                ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: active ? Colors.white : _Glass.textSecondary,
+              fontSize: 12,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      );
 
   Widget _selChip(String label, bool active, VoidCallback onTap) =>
       GestureDetector(
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: active
               ? _Glass.solidPill(_navyBlue)
               : BoxDecoration(
@@ -2999,6 +3995,25 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
         ),
       );
 
+  Widget _qtyBtn(IconData icon, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 34,
+      height: 34,
+      decoration: _Glass.glass(radius: 10),
+      child: Icon(icon, color: _Glass.textSecondary, size: 18),
+    ),
+  );
+
+  Widget _sectionLabel(String text) => Text(
+    text,
+    style: const TextStyle(
+      color: _Glass.textPrimary,
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+    ),
+  );
+
   Widget _dimField(
     String label,
     TextEditingController ctrl,
@@ -3015,7 +4030,7 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
       style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
       onChanged: onChanged,
       decoration: InputDecoration(
-        hintText: '$label (ft)',
+        hintText: label,
         hintStyle: const TextStyle(color: _Glass.textMuted, fontSize: 13),
         border: InputBorder.none,
         contentPadding: const EdgeInsets.symmetric(
@@ -3028,17 +4043,30 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
 }
 
 // =============================================================================
-// _QueueList (structure unchanged)
+// _QueueList
 // =============================================================================
-class _QueueList extends StatelessWidget {
+class _QueueList extends StatefulWidget {
   final String jobStatus;
   const _QueueList({required this.jobStatus});
+
+  @override
+  State<_QueueList> createState() => _QueueListState();
+}
+
+class _QueueListState extends State<_QueueList> {
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final query = FirebaseFirestore.instance
         .collection('Order_Queue')
-        .where('job_status', isEqualTo: jobStatus);
+        .where('job_status', isEqualTo: widget.jobStatus);
 
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
@@ -3073,13 +4101,13 @@ class _QueueList extends StatelessWidget {
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
-            return ta.compareTo(tb); // FIFO: oldest first
+            return ta.compareTo(tb);
           });
 
         if (docs.isEmpty) {
-          final icon = jobStatus == 'pending'
+          final icon = widget.jobStatus == 'pending'
               ? Icons.queue_outlined
-              : jobStatus == 'cancelled'
+              : widget.jobStatus == 'cancelled'
               ? Icons.cancel_outlined
               : Icons.precision_manufacturing_outlined;
           return Center(
@@ -3094,9 +4122,9 @@ class _QueueList extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  jobStatus == 'pending'
+                  widget.jobStatus == 'pending'
                       ? 'No pending jobs'
-                      : jobStatus == 'cancelled'
+                      : widget.jobStatus == 'cancelled'
                       ? 'No cancelled jobs'
                       : 'No active jobs',
                   style: const TextStyle(
@@ -3111,16 +4139,22 @@ class _QueueList extends StatelessWidget {
         }
 
         return Scrollbar(
+          controller: _scrollCtrl,
           thumbVisibility: true,
           trackVisibility: true,
           child: ListView.separated(
+            controller: _scrollCtrl,
             padding: const EdgeInsets.only(bottom: 16),
             itemCount: docs.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final doc = docs[i];
               final data = doc.data() as Map<String, dynamic>;
-              return _QueueCard(queueDocId: doc.id, data: data, position: i + 1);
+              return _QueueCard(
+                queueDocId: doc.id,
+                data: data,
+                position: i + 1,
+              );
             },
           ),
         );
@@ -3130,10 +4164,23 @@ class _QueueList extends StatelessWidget {
 }
 
 // =============================================================================
-// _ReadyForPickupList (structure unchanged)
+// _ReadyForPickupList
 // =============================================================================
-class _ReadyForPickupList extends StatelessWidget {
+class _ReadyForPickupList extends StatefulWidget {
   const _ReadyForPickupList();
+
+  @override
+  State<_ReadyForPickupList> createState() => _ReadyForPickupListState();
+}
+
+class _ReadyForPickupListState extends State<_ReadyForPickupList> {
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3170,7 +4217,7 @@ class _ReadyForPickupList extends StatelessWidget {
             if (ta == null && tb == null) return 0;
             if (ta == null) return 1;
             if (tb == null) return -1;
-            return ta.compareTo(tb); // FIFO: oldest first
+            return ta.compareTo(tb);
           });
 
         if (docs.isEmpty) {
@@ -3203,57 +4250,59 @@ class _ReadyForPickupList extends StatelessWidget {
         }
 
         return Scrollbar(
+          controller: _scrollCtrl,
           thumbVisibility: true,
           trackVisibility: true,
           child: ListView.builder(
-          padding: const EdgeInsets.only(bottom: 16),
-          itemCount: docs.length,
-          itemBuilder: (_, i) {
-            final doc = docs[i];
-            final data = doc.data() as Map<String, dynamic>;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: _Glass.accentAmber.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: _Glass.accentAmber.withValues(alpha: 0.35),
+            controller: _scrollCtrl,
+            padding: const EdgeInsets.only(bottom: 16),
+            itemCount: docs.length,
+            itemBuilder: (_, i) {
+              final doc = docs[i];
+              final data = doc.data() as Map<String, dynamic>;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: _Glass.accentAmber.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: _Glass.accentAmber.withValues(alpha: 0.35),
+                        ),
                       ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${i + 1}',
-                        style: const TextStyle(
-                          color: _Glass.accentAmber,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                      child: Center(
+                        child: Text(
+                          '${i + 1}',
+                          style: const TextStyle(
+                            color: _Glass.accentAmber,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _ReadyOrderCard(orderId: doc.id, data: data),
-                  ),
-                ],
-              ),
-            );
-          },
-          ),  // ListView.builder
-        );    // Scrollbar
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ReadyOrderCard(orderId: doc.id, data: data),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
       },
     );
   }
 }
 
 // =============================================================================
-// _ReadyOrderCard — invoice + message icons at bottom-right
+// _ReadyOrderCard
 // =============================================================================
 class _ReadyOrderCard extends StatelessWidget {
   final String orderId;
@@ -3508,12 +4557,47 @@ class _ReadyOrderCard extends StatelessWidget {
                           fontSize: 14,
                         ),
                       ),
-                      Text(
-                        '$customer · $dateStr',
-                        style: const TextStyle(
-                          color: _Glass.textMuted,
-                          fontSize: 12,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '$customer · $dateStr',
+                              style: const TextStyle(
+                                color: _Glass.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          if (data['walk_in'] == true) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _Glass.accentAmber.withValues(
+                                  alpha: 0.12,
+                                ),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: _Glass.accentAmber.withValues(
+                                    alpha: 0.40,
+                                  ),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: const Text(
+                                'Walk-in',
+                                style: TextStyle(
+                                  color: _Glass.accentAmber,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       if (customerId.isNotEmpty) ...[
                         const SizedBox(height: 2),
@@ -3565,7 +4649,71 @@ class _ReadyOrderCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-            DesignFilesSection(products: products),
+            Builder(
+              builder: (_) {
+                if (data['walk_in'] == true) {
+                  final fileNames = products
+                      .map((p) => p['design_file_name']?.toString() ?? '')
+                      .where((n) => n.isNotEmpty)
+                      .toList();
+                  if (fileNames.isEmpty) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: fileNames
+                          .expand((n) => n.split(', '))
+                          .map(
+                            (name) => Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _Glass.accentBlue.withValues(
+                                  alpha: 0.10,
+                                ),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: _Glass.accentBlue.withValues(
+                                    alpha: 0.28,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.attach_file_rounded,
+                                    size: 11,
+                                    color: _Glass.accentBlue,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 140,
+                                    ),
+                                    child: Text(
+                                      name,
+                                      style: const TextStyle(
+                                        color: _Glass.accentBlue,
+                                        fontSize: 11,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  );
+                }
+                return DesignFilesSection(products: products);
+              },
+            ),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -3602,8 +4750,6 @@ class _ReadyOrderCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-
-            // Action row: status/action on left, invoice + message on right
             Row(
               children: [
                 Expanded(
@@ -3713,7 +4859,7 @@ class _ReadyOrderCard extends StatelessWidget {
 }
 
 // =============================================================================
-// _RefundPickupSection — handles refund pickup flow for cancelled orders
+// _RefundPickupSection
 // =============================================================================
 class _RefundPickupSection extends StatelessWidget {
   final String queueDocId;
@@ -3753,7 +4899,7 @@ class _RefundPickupSection extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 'Mark order $orderId refund as picked up by the customer? '
-                    'This will deduct the paid amount from sales records.',
+                'This will deduct the paid amount from sales records.',
                 style: const TextStyle(
                   color: _Glass.textSecondary,
                   fontSize: 13,
@@ -3814,9 +4960,6 @@ class _RefundPickupSection extends StatelessWidget {
     if (confirmed != true) return;
 
     final db = FirebaseFirestore.instance;
-    final amountPaid =
-        (data['total_price'] as num?)?.toDouble() ?? 0; // fallback
-    // Try to get actual amount_paid from Orders doc
     double actualPaid = 0;
     try {
       final orderSnap = await db.collection('Orders').doc(orderId).get();
@@ -3824,8 +4967,6 @@ class _RefundPickupSection extends StatelessWidget {
     } catch (_) {}
 
     final batch = db.batch();
-
-    // Mark refund as picked up on both Order_Queue and Orders
     batch.update(db.collection('Order_Queue').doc(queueDocId), {
       'refund_picked_up': true,
       'refund_picked_up_at': FieldValue.serverTimestamp(),
@@ -3834,10 +4975,8 @@ class _RefundPickupSection extends StatelessWidget {
       'refund_picked_up': true,
       'refund_picked_up_at': FieldValue.serverTimestamp(),
     });
-
     await batch.commit();
 
-    // Deduct from Sales_Records: add a negative/refund entry
     if (actualPaid > 0.01) {
       await db.collection('Sales_Records').add({
         'order_id': orderId,
@@ -3845,7 +4984,7 @@ class _RefundPickupSection extends StatelessWidget {
         'customer_id': data['customer_id']?.toString() ?? '',
         'payment_type': 'refund',
         'payment_method': 'refund',
-        'sale_amount': -actualPaid, // negative to deduct
+        'sale_amount': -actualPaid,
         'order_total': (data['total_price'] as num?)?.toDouble() ?? 0,
         'walk_in': data['walk_in'] ?? false,
         'refund': true,
@@ -3859,7 +4998,7 @@ class _RefundPickupSection extends StatelessWidget {
         SnackBar(
           content: Text(
             'Refund pickup confirmed for $orderId'
-                '${actualPaid > 0.01 ? ' — ₱${actualPaid.toStringAsFixed(2)} deducted from sales' : ''}',
+            '${actualPaid > 0.01 ? ' — ₱${actualPaid.toStringAsFixed(2)} deducted from sales' : ''}',
           ),
           backgroundColor: _Glass.accentEmerald,
         ),
@@ -3872,11 +5011,10 @@ class _RefundPickupSection extends StatelessWidget {
     final refundPickedUp = data['refund_picked_up'] == true;
     final amountPaid =
         (data['amount_paid'] as num?)?.toDouble() ??
-            (data['total_price'] as num?)?.toDouble() ??
-            0;
+        (data['total_price'] as num?)?.toDouble() ??
+        0;
 
     if (refundPickedUp) {
-      // Already picked up — show confirmation badge
       return Container(
         width: double.infinity,
         margin: const EdgeInsets.only(bottom: 10),
@@ -3889,15 +5027,15 @@ class _RefundPickupSection extends StatelessWidget {
             width: 0.9,
           ),
         ),
-        child: Row(
+        child: const Row(
           children: [
-            const Icon(
+            Icon(
               Icons.check_circle_rounded,
               size: 14,
               color: _Glass.accentEmerald,
             ),
-            const SizedBox(width: 6),
-            const Expanded(
+            SizedBox(width: 6),
+            Expanded(
               child: Text(
                 'Refund picked up by customer',
                 style: TextStyle(
@@ -3912,11 +5050,9 @@ class _RefundPickupSection extends StatelessWidget {
       );
     }
 
-    // Not yet picked up — show "Refund to be picked up" banner + button
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Refund pending banner
         Container(
           width: double.infinity,
           margin: const EdgeInsets.only(bottom: 8),
@@ -3952,7 +5088,6 @@ class _RefundPickupSection extends StatelessWidget {
             ],
           ),
         ),
-        // Confirm Refund Pickup button
         GestureDetector(
           onTap: () => _confirmRefundPickup(context),
           child: Container(
@@ -4394,10 +5529,7 @@ class _QueueCard extends StatelessWidget {
     if (confirmed != true) return;
 
     final db = FirebaseFirestore.instance;
-
-    // Guard: prevent double-deduction if already deducted
-    final alreadyDeducted =
-        data['bom_deducted'] == true;
+    final alreadyDeducted = data['bom_deducted'] == true;
 
     final batch = db.batch();
     batch.update(db.collection('Order_Queue').doc(queueDocId), {
@@ -4457,13 +5589,10 @@ class _QueueCard extends StatelessWidget {
           }
         }
 
-        // Mark order as deducted so re-running Start Job won't double-deduct.
-        // Only stamp the flag when something was actually deducted.
         if (deductionErrors.isEmpty && allDeductionLines.isNotEmpty) {
-          await db
-              .collection('Orders')
-              .doc(orderId)
-              .update({'bom_deducted': true});
+          await db.collection('Orders').doc(orderId).update({
+            'bom_deducted': true,
+          });
         }
       }
     }
@@ -4506,9 +5635,9 @@ class _QueueCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Production started — inventory deducted:',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -4765,7 +5894,6 @@ class _QueueCard extends StatelessWidget {
         (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final dateStr = _fmtDate(data['created_at']);
 
-    // Estimated completion: stored directly (new orders) or computed as fallback
     final DateTime? estimatedCompletion = (() {
       final ts = data['estimated_completion'] as Timestamp?;
       if (ts != null) return ts.toDate().toLocal();
@@ -4796,7 +5924,6 @@ class _QueueCard extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Amber index bubble
         Container(
           width: 28,
           height: 28,
@@ -4819,7 +5946,6 @@ class _QueueCard extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        // Glass card
         Expanded(
           child: _BlurCard(
             radius: 14,
@@ -4827,7 +5953,6 @@ class _QueueCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top row: order ID + customer + status badge
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -4845,12 +5970,45 @@ class _QueueCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            customerName,
-                            style: const TextStyle(
-                              color: _Glass.textSecondary,
-                              fontSize: 12,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                customerName,
+                                style: const TextStyle(
+                                  color: _Glass.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              if (data['walk_in'] == true) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _Glass.accentAmber.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: _Glass.accentAmber.withValues(
+                                        alpha: 0.40,
+                                      ),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Walk-in',
+                                    style: TextStyle(
+                                      color: _Glass.accentAmber,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                           if (customerId.isNotEmpty) ...[
                             const SizedBox(height: 2),
@@ -4890,7 +6048,6 @@ class _QueueCard extends StatelessWidget {
                   ],
                 ),
 
-                // Product summary
                 if (productSummary != null) ...[
                   const SizedBox(height: 8),
                   Text(
@@ -4902,26 +6059,73 @@ class _QueueCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  DesignFilesSection(products: products),
+                  Builder(
+                    builder: (_) {
+                      if (data['walk_in'] == true) {
+                        final fileNames = products
+                            .map((p) => p['design_file_name']?.toString() ?? '')
+                            .where((n) => n.isNotEmpty)
+                            .toList();
+                        if (fileNames.isEmpty) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: fileNames
+                                .expand((n) => n.split(', '))
+                                .map(
+                                  (name) => Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _Glass.accentBlue.withValues(
+                                        alpha: 0.10,
+                                      ),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: _Glass.accentBlue.withValues(
+                                          alpha: 0.28,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.attach_file_rounded,
+                                          size: 11,
+                                          color: _Glass.accentBlue,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxWidth: 140,
+                                          ),
+                                          child: Text(
+                                            name,
+                                            style: const TextStyle(
+                                              color: _Glass.accentBlue,
+                                              fontSize: 11,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        );
+                      }
+                      return DesignFilesSection(products: products);
+                    },
+                  ),
                 ],
 
-                // Special instructions
-                const SizedBox(height: 6),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.notes_outlined, size: 12, color: _Glass.textMuted),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        'Special Instructions: ${(data['notes'] as String?)?.isNotEmpty == true ? data['notes'] : 'None'}',
-                        style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Due date row (pending/active only)
                 if (estimatedCompletion != null &&
                     jobStatus != 'cancelled') ...[
                   const SizedBox(height: 6),
@@ -4932,12 +6136,10 @@ class _QueueCard extends StatelessWidget {
                 Divider(height: 0.8, color: _Glass.borderDim),
                 const SizedBox(height: 10),
 
-                // Cancelled: reason + date + invoice. Pending/active: actions.
                 if (jobStatus == 'cancelled') ...[
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Cancel reason chip
                       if ((data['cancel_reason']?.toString() ?? '').isNotEmpty)
                         Container(
                           width: double.infinity,
@@ -5014,13 +6216,37 @@ class _QueueCard extends StatelessWidget {
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          Text(
-                            '₱${total.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              color: _Glass.accentAmber,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '₱${total.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  color: _Glass.accentAmber,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Builder(
+                                builder: (context) {
+                                  final paid =
+                                      (data['amount_paid'] as num?)
+                                          ?.toDouble() ??
+                                      0;
+                                  if (paid <= 0) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return Text(
+                                    'Paid: ₱${paid.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      color: _Glass.accentEmerald,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                           ),
                           const Spacer(),
                           Builder(
@@ -5084,10 +6310,15 @@ class _QueueCard extends StatelessWidget {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 10),
+                      _RefundPickupSection(
+                        queueDocId: queueDocId,
+                        data: data,
+                        orderId: data['order_id']?.toString() ?? queueDocId,
+                      ),
                     ],
                   ),
                 ] else ...[
-                  // Pending / Active: date + total row
                   Row(
                     children: [
                       const Icon(
@@ -5120,20 +6351,42 @@ class _QueueCard extends StatelessWidget {
                         ),
                       ],
                       const Spacer(),
-                      Text(
-                        '₱${total.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: _Glass.accentAmber,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('Orders')
+                            .doc(orderId)
+                            .get(),
+                        builder: (context, snap) {
+                          final docData =
+                              snap.data?.data() as Map<String, dynamic>?;
+                          final paid = docData?['amount_paid'] as num?;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '₱${total.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  color: _Glass.accentAmber,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              if (paid != null && paid > 0)
+                                Text(
+                                  'Paid: ₱${paid.toDouble().toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: _Glass.accentEmerald,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 12),
-
-                  // Action buttons for pending/active
                   Row(
                     children: [
                       if (jobStatus == 'pending')
@@ -5184,7 +6437,6 @@ class _QueueCard extends StatelessWidget {
                         ),
                       if (jobStatus != 'active') ...[
                         const SizedBox(width: 8),
-                        // Cancel button
                         GestureDetector(
                           onTap: () => _cancelOrder(context),
                           child: Container(
@@ -5196,7 +6448,9 @@ class _QueueCard extends StatelessWidget {
                               color: _Glass.accentRose.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(99),
                               border: Border.all(
-                                color: _Glass.accentRose.withValues(alpha: 0.30),
+                                color: _Glass.accentRose.withValues(
+                                  alpha: 0.30,
+                                ),
                                 width: 0.8,
                               ),
                             ),
@@ -5209,7 +6463,6 @@ class _QueueCard extends StatelessWidget {
                         ),
                       ],
                       const SizedBox(width: 8),
-                      // Invoice button
                       Builder(
                         builder: (ctx) => GestureDetector(
                           onTap: () async {
@@ -5252,7 +6505,6 @@ class _QueueCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // Message button
                       GestureDetector(
                         onTap: () => _openChat(context),
                         child: Container(
@@ -5281,7 +6533,7 @@ class _QueueCard extends StatelessWidget {
 }
 
 // =============================================================================
-// _DueDateRow — compact due-date chip shown on each queue card
+// _DueDateRow
 // =============================================================================
 class _DueDateRow extends StatelessWidget {
   final DateTime dueDate;
@@ -5352,7 +6604,7 @@ class _DueDateRow extends StatelessWidget {
 }
 
 // =============================================================================
-// _DeadlineAlertBanner — sticky alert at top of Job Queue for urgent orders
+// _DeadlineAlertBanner
 // =============================================================================
 class _DeadlineAlertBanner extends StatefulWidget {
   const _DeadlineAlertBanner();
@@ -5458,7 +6710,6 @@ class _DeadlineAlertBannerState extends State<_DeadlineAlertBanner> {
                     ),
                   ),
                 ),
-
                 if (_expanded)
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 240),

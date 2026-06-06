@@ -729,51 +729,130 @@ class _QueueStatusList extends StatelessWidget {
             ),
             Expanded(
               child: Scrollbar(
-              thumbVisibility: true,
-              trackVisibility: true,
-              child: ListView.separated(
-                itemCount: docs.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (_, i) {
-                  final data = docs[i].data() as Map<String, dynamic>;
-                  final orderId = data['order_id']?.toString() ?? '—';
-                  final customer = data['customer_name']?.toString() ?? '—';
-                  final customerId = data['customer_id']?.toString() ?? '';
-                  final status = data['job_status']?.toString() ?? jobStatus;
-                  final total = (data['total_price'] as num?)?.toDouble() ?? 0;
-                  final products =
-                      (data['products'] as List?)
-                          ?.cast<Map<String, dynamic>>() ??
-                      [];
-                  final dateStr = _fmtDate(data['created_at']);
-                  final statusColor = _statusColor(status);
-                  final productSummary = products.isEmpty
-                      ? null
-                      : products
-                            .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
-                            .join(', ');
+                thumbVisibility: true,
+                trackVisibility: true,
+                child: ListView.separated(
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) {
+                    final data = docs[i].data() as Map<String, dynamic>;
+                    final orderId = data['order_id']?.toString() ?? '—';
+                    final customer = data['customer_name']?.toString() ?? '—';
+                    final customerId = data['customer_id']?.toString() ?? '';
+                    final status = data['job_status']?.toString() ?? jobStatus;
+                    final total =
+                        (data['total_price'] as num?)?.toDouble() ?? 0;
+                    final products =
+                        (data['products'] as List?)
+                            ?.cast<Map<String, dynamic>>() ??
+                        [];
+                    final dateStr = _fmtDate(data['created_at']);
+                    final statusColor = _statusColor(status);
+                    final productSummary = products.isEmpty
+                        ? null
+                        : products
+                              .map(
+                                (p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}',
+                              )
+                              .join(', ');
 
-                  return _JobCard(
-                    index: i + 1,
-                    orderId: orderId,
-                    customer: customer,
-                    customerId: customerId,
-                    statusLabel: _statusLabel(status),
-                    statusColor: statusColor,
-                    productSummary: productSummary,
-                    products: products,
-                    dateStr: dateStr,
-                    total: total,
-                    amountPaid: (data['amount_paid'] as num?)?.toDouble() ?? 0,
-                    notes: data['notes']?.toString() ?? '',
-                    cancelReason: data['cancel_reason']?.toString() ?? '',
-                    turnaround: data['turnaround_days'] as int?,
-                  );
-                },
-              ),   // ListView.separated
-              ),   // Scrollbar
+                    // Use _JobCardWithPayment which fetches amount_paid and
+                    // notes from the Orders collection (not Order_Queue)
+                    return _JobCardWithPayment(
+                      index: i + 1,
+                      orderId: orderId,
+                      customer: customer,
+                      customerId: customerId,
+                      statusLabel: _statusLabel(status),
+                      statusColor: statusColor,
+                      productSummary: productSummary,
+                      products: products,
+                      dateStr: dateStr,
+                      total: total,
+                      queueNotes: data['notes']?.toString() ?? '',
+                      cancelReason: data['cancel_reason']?.toString() ?? '',
+                      turnaround: data['turnaround_days'] as int?,
+                    );
+                  },
+                ), // ListView.separated
+              ), // Scrollbar
             ),
           ],
+        );
+      },
+    );
+  }
+}
+
+// =============================================================================
+// _JobCardWithPayment — fetches amount_paid + notes from Orders collection
+// then delegates rendering to _JobCard.
+// =============================================================================
+class _JobCardWithPayment extends StatelessWidget {
+  final int index;
+  final String orderId;
+  final String customer;
+  final String customerId;
+  final String statusLabel;
+  final Color statusColor;
+  final String? productSummary;
+  final List<Map<String, dynamic>> products;
+  final String dateStr;
+  final double total;
+  final String queueNotes; // notes from Order_Queue (may be empty)
+  final String cancelReason;
+  final int? turnaround;
+
+  const _JobCardWithPayment({
+    required this.index,
+    required this.orderId,
+    required this.customer,
+    this.customerId = '',
+    required this.statusLabel,
+    required this.statusColor,
+    this.productSummary,
+    this.products = const [],
+    required this.dateStr,
+    required this.total,
+    this.queueNotes = '',
+    this.cancelReason = '',
+    this.turnaround,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('Orders')
+          .doc(orderId)
+          .get(),
+      builder: (context, snap) {
+        final orderData = snap.hasData
+            ? (snap.data!.data() as Map<String, dynamic>?) ?? {}
+            : <String, dynamic>{};
+
+        final amountPaid =
+            (orderData['amount_paid'] as num?)?.toDouble() ?? 0.0;
+
+        // Prefer notes from Orders doc; fall back to Order_Queue notes
+        final orderNotes = orderData['notes']?.toString() ?? '';
+        final resolvedNotes = orderNotes.isNotEmpty ? orderNotes : queueNotes;
+
+        return _JobCard(
+          index: index,
+          orderId: orderId,
+          customer: customer,
+          customerId: customerId,
+          statusLabel: statusLabel,
+          statusColor: statusColor,
+          productSummary: productSummary,
+          products: products,
+          dateStr: dateStr,
+          total: total,
+          amountPaid: amountPaid,
+          notes: resolvedNotes,
+          cancelReason: cancelReason,
+          turnaround: turnaround,
         );
       },
     );
@@ -930,12 +1009,19 @@ class _JobCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.notes_outlined, size: 12, color: _G.textMuted),
+                    const Icon(
+                      Icons.notes_outlined,
+                      size: 12,
+                      color: _G.textMuted,
+                    ),
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         'Special Instructions: ${notes.isNotEmpty ? notes : 'None'}',
-                        style: const TextStyle(color: _G.textMuted, fontSize: 11),
+                        style: const TextStyle(
+                          color: _G.textMuted,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ],
@@ -989,71 +1075,95 @@ class _JobCard extends StatelessWidget {
                   // Date + turnaround row
                   Row(
                     children: [
-                      const Icon(Icons.calendar_today_outlined, size: 11, color: _G.textMuted),
+                      const Icon(
+                        Icons.calendar_today_outlined,
+                        size: 11,
+                        color: _G.textMuted,
+                      ),
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
                           dateStr,
-                          style: const TextStyle(color: _G.textMuted, fontSize: 12),
+                          style: const TextStyle(
+                            color: _G.textMuted,
+                            fontSize: 12,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (turnaround != null) ...[
                         const SizedBox(width: 8),
-                        const Icon(Icons.schedule, size: 11, color: _G.textMuted),
+                        const Icon(
+                          Icons.schedule,
+                          size: 11,
+                          color: _G.textMuted,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '~$turnaround day${turnaround == 1 ? '' : 's'}',
-                          style: const TextStyle(color: _G.textMuted, fontSize: 12),
+                          style: const TextStyle(
+                            color: _G.textMuted,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ],
                   ),
                   const SizedBox(height: 10),
                   // Total + paid
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '₱${total.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              color: _G.accentAmber,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          if (amountPaid > 0)
-                            Text(
-                              'Paid: ₱${amountPaid.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: _G.accentEmerald,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                        ],
+                      Text(
+                        '₱${total.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: _G.accentAmber,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
+                      if (amountPaid > 0)
+                        Text(
+                          'Paid: ₱${amountPaid.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: _G.accentEmerald,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                     ],
                   ),
                 ] else ...[
                   // Pending / active: date + turnaround + total + paid
                   Row(
                     children: [
-                      const Icon(Icons.calendar_today_outlined, size: 11, color: _G.textMuted),
+                      const Icon(
+                        Icons.calendar_today_outlined,
+                        size: 11,
+                        color: _G.textMuted,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         dateStr,
-                        style: const TextStyle(color: _G.textMuted, fontSize: 12),
+                        style: const TextStyle(
+                          color: _G.textMuted,
+                          fontSize: 12,
+                        ),
                       ),
                       if (turnaround != null) ...[
                         const SizedBox(width: 8),
-                        const Icon(Icons.schedule, size: 11, color: _G.textMuted),
+                        const Icon(
+                          Icons.schedule,
+                          size: 11,
+                          color: _G.textMuted,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '~$turnaround day${turnaround == 1 ? '' : 's'}',
-                          style: const TextStyle(color: _G.textMuted, fontSize: 12),
+                          style: const TextStyle(
+                            color: _G.textMuted,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                       const Spacer(),
@@ -1489,55 +1599,57 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                   ),
                   Expanded(
                     child: Scrollbar(
-                    thumbVisibility: true,
-                    trackVisibility: true,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      itemCount: docs.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, i) {
-                        final doc = docs[i];
-                        final data = doc.data() as Map<String, dynamic>;
-                        final orderLabel =
-                            data['order_id']?.toString() ?? doc.id;
-                        final customer =
-                            data['customer_name']?.toString() ?? '—';
-                        final customerId =
-                            data['customer_id']?.toString() ?? '';
-                        final status = data['status']?.toString() ?? '';
-                        final total =
-                            (data['total_price'] as num?)?.toDouble() ?? 0;
-                        final paid =
-                            (data['amount_paid'] as num?)?.toDouble() ?? 0;
-                        final remaining =
-                            (data['remaining_balance'] as num?)?.toDouble() ??
-                            (total - paid);
-                        final products =
-                            (data['products'] as List?)
-                                ?.cast<Map<String, dynamic>>() ??
-                            [];
-                        final dateStr = _fmtDate(data['created_at']);
-                        final invoiceId = data['invoice_id']?.toString();
+                      thumbVisibility: true,
+                      trackVisibility: true,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        itemCount: docs.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          final doc = docs[i];
+                          final data = doc.data() as Map<String, dynamic>;
+                          final orderLabel =
+                              data['order_id']?.toString() ?? doc.id;
+                          final customer =
+                              data['customer_name']?.toString() ?? '—';
+                          final customerId =
+                              data['customer_id']?.toString() ?? '';
+                          final status = data['status']?.toString() ?? '';
+                          final total =
+                              (data['total_price'] as num?)?.toDouble() ?? 0;
+                          final paid =
+                              (data['amount_paid'] as num?)?.toDouble() ?? 0;
+                          final remaining =
+                              (data['remaining_balance'] as num?)?.toDouble() ??
+                              (total - paid);
+                          final products =
+                              (data['products'] as List?)
+                                  ?.cast<Map<String, dynamic>>() ??
+                              [];
+                          final dateStr = _fmtDate(data['created_at']);
+                          final invoiceId = data['invoice_id']?.toString();
 
-                        return _OrderHistoryCard(
-                          docId: doc.id,
-                          orderId: orderLabel,
-                          customer: customer,
-                          customerId: customerId,
-                          dateStr: dateStr,
-                          statusLabel: _statusLabel(status),
-                          statusColor: _statusColor(status),
-                          products: products,
-                          paid: paid,
-                          total: total,
-                          remaining: remaining,
-                          invoiceId: invoiceId,
-                          cancelReason: data['cancel_reason']?.toString() ?? '',
-                          notes: data['notes']?.toString() ?? '',
-                        );
-                      },
-                    ),   // ListView.separated
-                    ),   // Scrollbar
+                          // Orders collection already has amount_paid + notes
+                          return _OrderHistoryCard(
+                            docId: doc.id,
+                            orderId: orderLabel,
+                            customer: customer,
+                            customerId: customerId,
+                            dateStr: dateStr,
+                            statusLabel: _statusLabel(status),
+                            statusColor: _statusColor(status),
+                            products: products,
+                            paid: paid,
+                            total: total,
+                            remaining: remaining,
+                            invoiceId: invoiceId,
+                            cancelReason:
+                                data['cancel_reason']?.toString() ?? '',
+                            notes: data['notes']?.toString() ?? '',
+                          );
+                        },
+                      ), // ListView.separated
+                    ), // Scrollbar
                   ),
                 ],
               );
@@ -1592,7 +1704,7 @@ class _OrderHistoryCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min, // ← don't stretch taller than needed
+        mainAxisSize: MainAxisSize.min,
         children: [
           // ── Header row: order ID + status badge ──────────────────────────
           Row(
@@ -1673,6 +1785,7 @@ class _OrderHistoryCard extends StatelessWidget {
             DesignFilesSection(products: products),
           ],
 
+          // ── Special instructions ──────────────────────────────────────────
           const SizedBox(height: 6),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1728,11 +1841,8 @@ class _OrderHistoryCard extends StatelessWidget {
           const SizedBox(height: 10),
 
           // ── Payment chips ─────────────────────────────────────────────────
-          // Uses LayoutBuilder so chips reflow to 2-column on narrow screens.
           LayoutBuilder(
             builder: (_, constraints) {
-              // Threshold: if each of 3 chips can't fit comfortably (~90px
-              // each + gaps), reflow into a 2-col Wrap instead.
               final canFitThree = constraints.maxWidth >= 280;
 
               final totalChip = _PayChip(
@@ -1776,7 +1886,6 @@ class _OrderHistoryCard extends StatelessWidget {
                 );
               }
 
-              // Narrow fallback: total + paid side by side, balance full-width
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -1862,7 +1971,6 @@ class _OrderHistoryCard extends StatelessWidget {
 }
 
 // ── Payment chip ──────────────────────────────────────────────────────────────
-// Removed IntrinsicHeight wrapper — chip sizes itself from its own content.
 class _PayChip extends StatelessWidget {
   final String label;
   final String value;
@@ -1890,7 +1998,7 @@ class _PayChip extends StatelessWidget {
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min, // ← key: don't expand height
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           label.toUpperCase(),
@@ -2602,186 +2710,193 @@ class _CustomerFeedbackTab extends StatelessWidget {
               ),
               Expanded(
                 child: Scrollbar(
-                thumbVisibility: true,
-                trackVisibility: true,
-                child: ListView.builder(
-                  itemCount: docs.length,
-                  itemBuilder: (_, i) {
-                    final data = docs[i].data() as Map<String, dynamic>;
-                    final customer = data['customer_name']?.toString() ?? '—';
-                    final message = data['message']?.toString() ?? '';
-                    final rating = (data['rating'] as num?)?.toInt();
-                    final orderId = data['order_id']?.toString() ?? '';
-                    final productName = data['product_name']?.toString() ?? '';
-                    final ts = data['created_at'] as Timestamp?;
-                    final timeStr = ts != null
-                        ? DateFormat('MMM dd, yyyy hh:mm a').format(ts.toDate())
-                        : '—';
-                    final isRead = data['read'] == true;
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  child: ListView.builder(
+                    itemCount: docs.length,
+                    itemBuilder: (_, i) {
+                      final data = docs[i].data() as Map<String, dynamic>;
+                      final customer = data['customer_name']?.toString() ?? '—';
+                      final message = data['message']?.toString() ?? '';
+                      final rating = (data['rating'] as num?)?.toInt();
+                      final orderId = data['order_id']?.toString() ?? '';
+                      final productName =
+                          data['product_name']?.toString() ?? '';
+                      final ts = data['created_at'] as Timestamp?;
+                      final timeStr = ts != null
+                          ? DateFormat(
+                              'MMM dd, yyyy hh:mm a',
+                            ).format(ts.toDate())
+                          : '—';
+                      final isRead = data['read'] == true;
 
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: _BlurCard(
-                        radius: 14,
-                        padding: const EdgeInsets.all(14),
-                        tintBorder: isRead
-                            ? _G.borderMid
-                            : _G.accentAmber.withValues(alpha: 0.45),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: _G.navyBlue.withValues(alpha: 0.08),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: _BlurCard(
+                          radius: 14,
+                          padding: const EdgeInsets.all(14),
+                          tintBorder: isRead
+                              ? _G.borderMid
+                              : _G.accentAmber.withValues(alpha: 0.45),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
                                       color: _G.navyBlue.withValues(
-                                        alpha: 0.18,
+                                        alpha: 0.08,
                                       ),
-                                      width: 0.9,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: _G.navyBlue.withValues(
+                                          alpha: 0.18,
+                                        ),
+                                        width: 0.9,
+                                      ),
+                                    ),
+                                    child: const Icon(
+                                      Icons.person_rounded,
+                                      color: _G.navyBlue,
+                                      size: 17,
                                     ),
                                   ),
-                                  child: const Icon(
-                                    Icons.person_rounded,
-                                    color: _G.navyBlue,
-                                    size: 17,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        customer,
-                                        style: const TextStyle(
-                                          color: _G.textPrimary,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      if (orderId.isNotEmpty ||
-                                          productName.isNotEmpty)
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
                                         Text(
-                                          [
-                                            if (orderId.isNotEmpty) orderId,
-                                            if (productName.isNotEmpty)
-                                              productName,
-                                          ].join(' · '),
+                                          customer,
                                           style: const TextStyle(
-                                            color: _feedbackAmber,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
+                                            color: _G.textPrimary,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
                                           ),
                                         ),
-                                      _CustomerIdText(data: data),
-                                    ],
-                                  ),
-                                ),
-                                if (rating != null) ...[
-                                  Row(
-                                    children: List.generate(
-                                      5,
-                                      (s) => Icon(
-                                        s < rating
-                                            ? Icons.star_rounded
-                                            : Icons.star_outline_rounded,
-                                        color: _feedbackAmber,
-                                        size: 14,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-                                if (!isRead)
-                                  GestureDetector(
-                                    onTap: () => FirebaseFirestore.instance
-                                        .collection('OrderReviews')
-                                        .doc(docs[i].id)
-                                        .update({'read': true}),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _G.accentEmerald.withValues(
-                                          alpha: 0.10,
-                                        ),
-                                        borderRadius: BorderRadius.circular(99),
-                                        border: Border.all(
-                                          color: _G.accentEmerald.withValues(
-                                            alpha: 0.35,
-                                          ),
-                                          width: 0.8,
-                                        ),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.check_rounded,
-                                            color: _G.accentEmerald,
-                                            size: 12,
-                                          ),
-                                          SizedBox(width: 4),
+                                        if (orderId.isNotEmpty ||
+                                            productName.isNotEmpty)
                                           Text(
-                                            'Mark read',
-                                            style: TextStyle(
-                                              color: _G.accentEmerald,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
+                                            [
+                                              if (orderId.isNotEmpty) orderId,
+                                              if (productName.isNotEmpty)
+                                                productName,
+                                            ].join(' · '),
+                                            style: const TextStyle(
+                                              color: _feedbackAmber,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        _CustomerIdText(data: data),
+                                      ],
                                     ),
                                   ),
+                                  if (rating != null) ...[
+                                    Row(
+                                      children: List.generate(
+                                        5,
+                                        (s) => Icon(
+                                          s < rating
+                                              ? Icons.star_rounded
+                                              : Icons.star_outline_rounded,
+                                          color: _feedbackAmber,
+                                          size: 14,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  if (!isRead)
+                                    GestureDetector(
+                                      onTap: () => FirebaseFirestore.instance
+                                          .collection('OrderReviews')
+                                          .doc(docs[i].id)
+                                          .update({'read': true}),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _G.accentEmerald.withValues(
+                                            alpha: 0.10,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            99,
+                                          ),
+                                          border: Border.all(
+                                            color: _G.accentEmerald.withValues(
+                                              alpha: 0.35,
+                                            ),
+                                            width: 0.8,
+                                          ),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.check_rounded,
+                                              color: _G.accentEmerald,
+                                              size: 12,
+                                            ),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Mark read',
+                                              style: TextStyle(
+                                                color: _G.accentEmerald,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                timeStr,
+                                style: const TextStyle(
+                                  color: _G.textMuted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              if (message.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: _G.surfaceThin,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: _G.borderDim,
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    message,
+                                    style: const TextStyle(
+                                      color: _G.textSecondary,
+                                      fontSize: 13,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ),
                               ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              timeStr,
-                              style: const TextStyle(
-                                color: _G.textMuted,
-                                fontSize: 11,
-                              ),
-                            ),
-                            if (message.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: _G.surfaceThin,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: _G.borderDim,
-                                    width: 0.8,
-                                  ),
-                                ),
-                                child: Text(
-                                  message,
-                                  style: const TextStyle(
-                                    color: _G.textSecondary,
-                                    fontSize: 13,
-                                    height: 1.5,
-                                  ),
-                                ),
-                              ),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),   // ListView.builder
-                ),   // Scrollbar
+                      );
+                    },
+                  ), // ListView.builder
+                ), // Scrollbar
               ),
             ],
           );
