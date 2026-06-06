@@ -151,6 +151,15 @@ class AdminLogsScreen extends StatefulWidget {
 class _AdminLogsScreenState extends State<AdminLogsScreen> {
   _LogsTab _activeTab = _LogsTab.jobQueue;
 
+  @override
+  void didUpdateWidget(AdminLogsScreen old) {
+    super.didUpdateWidget(old);
+    if (old.initialJobStatus != widget.initialJobStatus &&
+        widget.initialJobStatus != null) {
+      setState(() => _activeTab = _LogsTab.jobQueue);
+    }
+  }
+
   static const _tabs = [
     (_LogsTab.jobQueue, 'Job Queue', Icons.queue_outlined),
     (_LogsTab.salesRecord, 'Sales Record', Icons.receipt_long_outlined),
@@ -377,21 +386,27 @@ class _JobQueueTab extends StatefulWidget {
 class _JobQueueTabState extends State<_JobQueueTab> {
   late _QueueSubTab _sub;
 
+  static _QueueSubTab _toSubTab(String? status) {
+    switch (status) {
+      case 'active':    return _QueueSubTab.active;
+      case 'ready':     return _QueueSubTab.ready;
+      case 'cancelled': return _QueueSubTab.cancelled;
+      default:          return _QueueSubTab.pending;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    switch (widget.initialStatus) {
-      case 'active':
-        _sub = _QueueSubTab.active;
-        break;
-      case 'ready':
-        _sub = _QueueSubTab.ready;
-        break;
-      case 'cancelled':
-        _sub = _QueueSubTab.cancelled;
-        break;
-      default:
-        _sub = _QueueSubTab.pending;
+    _sub = _toSubTab(widget.initialStatus);
+  }
+
+  @override
+  void didUpdateWidget(_JobQueueTab old) {
+    super.didUpdateWidget(old);
+    if (old.initialStatus != widget.initialStatus &&
+        widget.initialStatus != null) {
+      setState(() => _sub = _toSubTab(widget.initialStatus));
     }
   }
 

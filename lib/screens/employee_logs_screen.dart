@@ -1349,63 +1349,19 @@ class _OrderHistoryCard extends StatelessWidget {
                   final isWalkIn =
                       (doc.data() as Map<String, dynamic>)['walk_in'] == true;
                   if (isWalkIn) {
-                    final fileNames = products
-                        .map((p) => p['design_file_name']?.toString() ?? '')
-                        .where((n) => n.isNotEmpty)
+                    final chips = products
+                        .where((p) =>
+                            (p['design_file_name']?.toString() ?? '').isNotEmpty &&
+                            (p['design_file_url']?.toString() ?? '').isNotEmpty)
+                        .map((p) => DesignFileChip(
+                              name: p['design_file_name'] as String,
+                              url: p['design_file_url'] as String,
+                            ))
                         .toList();
-                    if (fileNames.isEmpty) return const SizedBox.shrink();
+                    if (chips.isEmpty) return const SizedBox.shrink();
                     return Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: fileNames
-                            .expand((n) => n.split(', '))
-                            .map(
-                              (name) => Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _Glass.accentBlue.withValues(
-                                    alpha: 0.10,
-                                  ),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: _Glass.accentBlue.withValues(
-                                      alpha: 0.28,
-                                    ),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.attach_file_rounded,
-                                      size: 11,
-                                      color: _Glass.accentBlue,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 140,
-                                      ),
-                                      child: Text(
-                                        name,
-                                        style: const TextStyle(
-                                          color: _Glass.accentBlue,
-                                          fontSize: 11,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
+                      child: Wrap(spacing: 6, runSpacing: 4, children: chips),
                     );
                   }
                   return DesignFilesSection(products: products);
@@ -4659,63 +4615,19 @@ class _ReadyOrderCard extends StatelessWidget {
             Builder(
               builder: (_) {
                 if (data['walk_in'] == true) {
-                  final fileNames = products
-                      .map((p) => p['design_file_name']?.toString() ?? '')
-                      .where((n) => n.isNotEmpty)
+                  final chips = products
+                      .where((p) =>
+                          (p['design_file_name']?.toString() ?? '').isNotEmpty &&
+                          (p['design_file_url']?.toString() ?? '').isNotEmpty)
+                      .map((p) => DesignFileChip(
+                            name: p['design_file_name'] as String,
+                            url: p['design_file_url'] as String,
+                          ))
                       .toList();
-                  if (fileNames.isEmpty) return const SizedBox.shrink();
+                  if (chips.isEmpty) return const SizedBox.shrink();
                   return Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: fileNames
-                          .expand((n) => n.split(', '))
-                          .map(
-                            (name) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _Glass.accentBlue.withValues(
-                                  alpha: 0.10,
-                                ),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: _Glass.accentBlue.withValues(
-                                    alpha: 0.28,
-                                  ),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.attach_file_rounded,
-                                    size: 11,
-                                    color: _Glass.accentBlue,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 140,
-                                    ),
-                                    child: Text(
-                                      name,
-                                      style: const TextStyle(
-                                        color: _Glass.accentBlue,
-                                        fontSize: 11,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
+                    child: Wrap(spacing: 6, runSpacing: 4, children: chips),
                   );
                 }
                 return DesignFilesSection(products: products);
@@ -6055,63 +5967,19 @@ class _QueueCard extends StatelessWidget {
                   Builder(
                     builder: (_) {
                       if (data['walk_in'] == true) {
-                        final fileNames = products
-                            .map((p) => p['design_file_name']?.toString() ?? '')
-                            .where((n) => n.isNotEmpty)
+                        final chips = products
+                            .where((p) =>
+                                (p['design_file_name']?.toString() ?? '').isNotEmpty &&
+                                (p['design_file_url']?.toString() ?? '').isNotEmpty)
+                            .map((p) => DesignFileChip(
+                                  name: p['design_file_name'] as String,
+                                  url: p['design_file_url'] as String,
+                                ))
                             .toList();
-                        if (fileNames.isEmpty) return const SizedBox.shrink();
+                        if (chips.isEmpty) return const SizedBox.shrink();
                         return Padding(
                           padding: const EdgeInsets.only(top: 6),
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            children: fileNames
-                                .expand((n) => n.split(', '))
-                                .map(
-                                  (name) => Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: _Glass.accentBlue.withValues(
-                                        alpha: 0.10,
-                                      ),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: _Glass.accentBlue.withValues(
-                                          alpha: 0.28,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.attach_file_rounded,
-                                          size: 11,
-                                          color: _Glass.accentBlue,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxWidth: 140,
-                                          ),
-                                          child: Text(
-                                            name,
-                                            style: const TextStyle(
-                                              color: _Glass.accentBlue,
-                                              fontSize: 11,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
+                          child: Wrap(spacing: 6, runSpacing: 4, children: chips),
                         );
                       }
                       return DesignFilesSection(products: products);
