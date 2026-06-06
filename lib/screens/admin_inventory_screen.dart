@@ -640,7 +640,13 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                       ),
                     );
                   }
-                  Widget buildTable() => ListView.builder(
+                  final tableScrollCtrl = ScrollController();
+                  Widget buildTable() => Scrollbar(
+                    controller: tableScrollCtrl,
+                    thumbVisibility: true,
+                    trackVisibility: true,
+                    child: ListView.builder(
+                    controller: tableScrollCtrl,
                     padding: EdgeInsets.zero,
                     itemCount: filtered.length + 1,
                     itemBuilder: (_, i) {
@@ -667,7 +673,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                         onDeleteTap: () => _confirmDelete(context, filtered[idx]),
                       );
                     },
-                  );
+                  ));  // closes Scrollbar child + Scrollbar
                   if (c.maxWidth < _kTableMinWidth) {
                     return SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -2757,11 +2763,15 @@ class _ForecastContentState extends State<_ForecastContent> {
                       ),
                     ),
                   )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(14),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (_, i) => _FCard(item: filtered[i]),
+                : Scrollbar(
+                    thumbVisibility: true,
+                    trackVisibility: true,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(14),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) => _FCard(item: filtered[i]),
+                    ),
                   ),
           ),
         ],

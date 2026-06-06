@@ -3111,15 +3111,19 @@ class _QueueList extends StatelessWidget {
           );
         }
 
-        return ListView.separated(
-          padding: const EdgeInsets.only(bottom: 16),
-          itemCount: docs.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (_, i) {
-            final doc = docs[i];
-            final data = doc.data() as Map<String, dynamic>;
-            return _QueueCard(queueDocId: doc.id, data: data, position: i + 1);
-          },
+        return Scrollbar(
+          thumbVisibility: true,
+          trackVisibility: true,
+          child: ListView.separated(
+            padding: const EdgeInsets.only(bottom: 16),
+            itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (_, i) {
+              final doc = docs[i];
+              final data = doc.data() as Map<String, dynamic>;
+              return _QueueCard(queueDocId: doc.id, data: data, position: i + 1);
+            },
+          ),
         );
       },
     );
@@ -3199,7 +3203,10 @@ class _ReadyForPickupList extends StatelessWidget {
           );
         }
 
-        return ListView.builder(
+        return Scrollbar(
+          thumbVisibility: true,
+          trackVisibility: true,
+          child: ListView.builder(
           padding: const EdgeInsets.only(bottom: 16),
           itemCount: docs.length,
           itemBuilder: (_, i) {
@@ -3239,7 +3246,8 @@ class _ReadyForPickupList extends StatelessWidget {
               ),
             );
           },
-        );
+          ),  // ListView.builder
+        );    // Scrollbar
       },
     );
   }

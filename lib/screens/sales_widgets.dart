@@ -879,14 +879,20 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
     refsByOrder.putIfAbsent(orderId, () => []).add(doc.reference);
   }
 
-  // Collect order IDs that are missing customer_id so we can batch-resolve them
+  // Collect order IDs that are missing customer_id so we can batch-resolve them.
+  // Skip fully-imported orders — they have no matching Firestore user docs.
   final missingCustIdOrders = <String>{};
   for (final orderId in byOrder.keys) {
     final records = byOrder[orderId]!;
     final hasCustId = records.any(
           (r) => (r['customer_id']?.toString() ?? '').isNotEmpty,
     );
-    if (!hasCustId) missingCustIdOrders.add(orderId);
+    if (!hasCustId) {
+      final allImported = records.every(
+        (r) => r['import_source'] == 'manual_xlsx_import',
+      );
+      if (!allImported) missingCustIdOrders.add(orderId);
+    }
   }
 
   // Resolve missing customer_ids:

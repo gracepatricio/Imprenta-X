@@ -41,13 +41,36 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   Future<void> _load() async {
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('Invoices')
-          .doc(widget.invoiceId)
-          .get();
+      final db = FirebaseFirestore.instance;
+      final doc = await db.collection('Invoices').doc(widget.invoiceId).get();
       if (!doc.exists) throw Exception('Invoice not found');
+      var data = doc.data()!;
+
+      // Resolve missing customer_id via order → user chain, then backfill
+      if ((data['customer_id']?.toString() ?? '').isEmpty) {
+        final orderId = data['order_id']?.toString() ?? '';
+        if (orderId.isNotEmpty) {
+          final orderDoc = await db.collection('Orders').doc(orderId).get();
+          final custUid = orderDoc.data()?['customer_uid']?.toString() ?? '';
+          if (custUid.isNotEmpty) {
+            final userDoc = await db.collection('User').doc(custUid).get();
+            final custId =
+                userDoc.data()?['customer_id']?.toString() ?? '';
+            if (custId.isNotEmpty) {
+              data = {...data, 'customer_id': custId};
+              // Backfill both docs so future lookups are instant
+              await Future.wait([
+                doc.reference.update({'customer_id': custId}),
+                if (orderDoc.exists)
+                  orderDoc.reference.update({'customer_id': custId}),
+              ]);
+            }
+          }
+        }
+      }
+
       setState(() {
-        _inv = doc.data();
+        _inv = data;
         _loading = false;
       });
     } catch (e) {

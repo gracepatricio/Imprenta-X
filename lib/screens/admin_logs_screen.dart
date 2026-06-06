@@ -727,6 +727,9 @@ class _QueueStatusList extends StatelessWidget {
               ),
             ),
             Expanded(
+              child: Scrollbar(
+              thumbVisibility: true,
+              trackVisibility: true,
               child: ListView.separated(
                 itemCount: docs.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -762,7 +765,8 @@ class _QueueStatusList extends StatelessWidget {
                     cancelReason: data['cancel_reason']?.toString() ?? '',
                   );
                 },
-              ),
+              ),   // ListView.separated
+              ),   // Scrollbar
             ),
           ],
         );
@@ -1371,6 +1375,9 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                     ),
                   ),
                   Expanded(
+                    child: Scrollbar(
+                    thumbVisibility: true,
+                    trackVisibility: true,
                     child: ListView.separated(
                       padding: const EdgeInsets.only(bottom: 16),
                       itemCount: docs.length,
@@ -1415,7 +1422,8 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                           cancelReason: data['cancel_reason']?.toString() ?? '',
                         );
                       },
-                    ),
+                    ),   // ListView.separated
+                    ),   // Scrollbar
                   ),
                 ],
               );
@@ -2335,12 +2343,16 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                   );
                 }
 
-                return ListView.builder(
-                  itemCount: filtered.length,
-                  itemBuilder: (_, i) {
-                    final data = filtered[i].data() as Map<String, dynamic>;
-                    return _LogRow(data: data, dateFmt: _dateFmt);
-                  },
+                return Scrollbar(
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  child: ListView.builder(
+                    itemCount: filtered.length,
+                    itemBuilder: (_, i) {
+                      final data = filtered[i].data() as Map<String, dynamic>;
+                      return _LogRow(data: data, dateFmt: _dateFmt);
+                    },
+                  ),
                 );
               },
             ),
@@ -2456,6 +2468,9 @@ class _CustomerFeedbackTab extends StatelessWidget {
                 ),
               ),
               Expanded(
+                child: Scrollbar(
+                thumbVisibility: true,
+                trackVisibility: true,
                 child: ListView.builder(
                   itemCount: docs.length,
                   itemBuilder: (_, i) {
@@ -2632,7 +2647,8 @@ class _CustomerFeedbackTab extends StatelessWidget {
                       ),
                     );
                   },
-                ),
+                ),   // ListView.builder
+                ),   // Scrollbar
               ),
             ],
           );

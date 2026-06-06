@@ -567,7 +567,9 @@ class _AdminAccountDashboardState extends State<AdminAccountDashboard> {
       case 'roles':
         return const ManageUsersScreen();
       default:
-        return const _AdminDashboardContent();
+        return _AdminDashboardContent(
+          onNavigateToTab: widget.onNavigateToTab,
+        );
     }
   }
 }
@@ -688,7 +690,8 @@ class _LogoutButton extends StatelessWidget {
 // Dashboard Content
 // =============================================================================
 class _AdminDashboardContent extends StatelessWidget {
-  const _AdminDashboardContent();
+  final void Function(String)? onNavigateToTab;
+  const _AdminDashboardContent({this.onNavigateToTab});
 
   static String _stockStatus(num current, num restock) {
     if (current <= 0) return 'Out of Stock';
@@ -710,9 +713,23 @@ class _AdminDashboardContent extends StatelessWidget {
     }
   }
 
+  String _fmtStock(double v) =>
+      v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    void goToJobQueue() {
+      onNavigateToTab?.call('Logs & History');
+      Navigator.of(context).pop();
+    }
+
+    final scrollCtrl = ScrollController();
+    return Scrollbar(
+      controller: scrollCtrl,
+      thumbVisibility: true,
+      trackVisibility: true,
+      child: SingleChildScrollView(
+      controller: scrollCtrl,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -753,6 +770,7 @@ class _AdminDashboardContent extends StatelessWidget {
                             icon: Icons.sync_rounded,
                             color: _G.accentRose,
                             compact: compact,
+                            onTap: goToJobQueue,
                           ),
                         ),
                         SizedBox(width: compact ? 6 : 10),
@@ -763,6 +781,7 @@ class _AdminDashboardContent extends StatelessWidget {
                             icon: Icons.precision_manufacturing_rounded,
                             color: _G.accentAmber,
                             compact: compact,
+                            onTap: goToJobQueue,
                           ),
                         ),
                         SizedBox(width: compact ? 6 : 10),
@@ -773,6 +792,7 @@ class _AdminDashboardContent extends StatelessWidget {
                             icon: Icons.check_circle_rounded,
                             color: _G.accentEmerald,
                             compact: compact,
+                            onTap: goToJobQueue,
                           ),
                         ),
                       ],
@@ -886,18 +906,27 @@ class _AdminDashboardContent extends StatelessWidget {
                       ),
                     )
                   else
-                    ...lowMats.take(6).map((doc) {
+                    ...lowMats.map((doc) {
                       final d = doc.data() as Map<String, dynamic>;
                       final name = d['material_name']?.toString() ?? doc.id;
-                      final unit = d['unit_description']?.toString() ?? '';
-                      final current =
-                          (d['current_stock'] as num?)?.toDouble() ?? 0;
-                      final restock =
-                          (d['restock_level'] as num?)?.toDouble() ?? 1;
-                      final st = _stockStatus(current, restock);
+                      final unitDesc = d['unit_description']?.toString() ?? '';
+                      final su = d['stocking_unit']?.toString() ?? '';
+                      final unitSqft = (d['unit_size_sqft'] as num?)?.toDouble() ?? 0;
+                      // Convert base-unit stock to stocking units for new-style materials
+                      final rawStock = (d['current_stock'] as num?)?.toDouble() ?? 0;
+                      final rawRestock = (d['restock_level'] as num?)?.toDouble() ?? 1;
+                      final current = (unitSqft > 0 && su.isNotEmpty)
+                          ? rawStock / unitSqft
+                          : rawStock;
+                      final restock = (unitSqft > 0 && su.isNotEmpty)
+                          ? rawRestock / unitSqft
+                          : rawRestock;
+                      // Display unit: prefer unit_description, else stocking_unit
+                      final unit = unitDesc.isNotEmpty ? unitDesc : (su.isNotEmpty ? su.toLowerCase() : '');
+                      final st = _stockStatus(rawStock, rawRestock);
                       final color = _stockColor(st);
-                      final pct = restock > 0
-                          ? (current / restock).clamp(0.0, 1.0)
+                      final pct = rawRestock > 0
+                          ? (rawStock / rawRestock).clamp(0.0, 1.0)
                           : 0.0;
 
                       return Container(
@@ -966,15 +995,18 @@ class _AdminDashboardContent extends StatelessWidget {
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                Text(
-                                  '${current % 1 == 0 ? current.toInt() : current} / ${restock % 1 == 0 ? restock.toInt() : restock}${unit.isNotEmpty ? ' $unit' : ''}',
-                                  style: TextStyle(
-                                    color: color,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                                Expanded(
+                                  child: Text(
+                                    '${_fmtStock(current)} / ${_fmtStock(restock)}${unit.isNotEmpty ? ' $unit' : ''}',
+                                    style: TextStyle(
+                                      color: color,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                const Spacer(),
+                                const SizedBox(width: 6),
                                 Text(
                                   'restock target',
                                   style: TextStyle(
@@ -1206,6 +1238,7 @@ class _AdminDashboardContent extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -1217,6 +1250,7 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final bool compact;
+  final VoidCallback? onTap;
 
   const _StatCard({
     required this.label,
@@ -1224,16 +1258,22 @@ class _StatCard extends StatelessWidget {
     required this.icon,
     required this.color,
     this.compact = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       padding: EdgeInsets.all(compact ? 12 : 16),
       decoration: BoxDecoration(
         color: _G.surfaceMid,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.20), width: 1.0),
+        border: Border.all(
+          color: onTap != null ? color.withValues(alpha: 0.35) : color.withValues(alpha: 0.20),
+          width: onTap != null ? 1.2 : 1.0,
+        ),
         boxShadow: const [_G.rowShadow],
       ),
       child: Column(
@@ -1267,8 +1307,26 @@ class _StatCard extends StatelessWidget {
               height: 1.3,
             ),
           ),
+          if (onTap != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'View',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: color, size: 12),
+              ],
+            ),
+          ],
         ],
       ),
+    ),
     );
   }
 }

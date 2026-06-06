@@ -283,21 +283,50 @@ class _EmployeeInventoryForecastScreenState
         }
       }
 
-      final orderSnap = await db
-          .collection('Orders')
-          .where('status', isEqualTo: 'completed')
-          .get();
+      // Fetch completed orders and historical sales records in parallel
+      final results = await Future.wait([
+        db.collection('Orders').where('status', isEqualTo: 'completed').get(),
+        db.collection('Sales_Records').get(),
+        db.collection('InventoryLogs').get(),
+      ]);
+      final orderSnap    = results[0];
+      final salesRecSnap = results[1];
+      final logSnap      = results[2];
 
       final consumedP1 = <String, double>{};
       final consumedP2 = <String, double>{};
       final consumedP3 = <String, double>{};
 
+      // From completed Orders (uses created_at)
       accumulateOrders(orderSnap.docs, p1Start, nowTs,   consumedP1);
       accumulateOrders(orderSnap.docs, p2Start, p1Start, consumedP2);
       accumulateOrders(orderSnap.docs, p3Start, p2Start, consumedP3);
 
+      // From Sales_Records — historical & imported data (uses sale_date + product_name → BOM)
+      for (final period in [
+        (p1Start, nowTs,   consumedP1),
+        (p2Start, p1Start, consumedP2),
+        (p3Start, p2Start, consumedP3),
+      ]) {
+        for (final doc in salesRecSnap.docs) {
+          final ts = doc.data()['sale_date'] as Timestamp?;
+          if (ts == null) continue;
+          if (ts.compareTo(period.$1) < 0) continue;
+          if (ts.compareTo(period.$2) >= 0) continue;
+          final productName = doc.data()['product_name']?.toString() ?? '';
+          final qty = (doc.data()['quantity'] as num?)?.toDouble() ?? 1.0;
+          if (productName.isEmpty || qty <= 0) continue;
+          final bom = bomByProductName[productName] ?? [];
+          for (final bomItem in bom) {
+            final matId = bomItem['material_id']?.toString() ?? '';
+            final qpu   = (bomItem['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+            if (matId.isEmpty) continue;
+            period.$3[matId] = (period.$3[matId] ?? 0) + qty * qpu;
+          }
+        }
+      }
+
       final replenishedPerMaterial = <String, double>{};
-      final logSnap = await db.collection('InventoryLogs').get();
       for (final d in logSnap.docs) {
         final ts = d.data()['timestamp'] as Timestamp?;
         if (ts != null && ts.compareTo(p3Start) < 0) continue;
@@ -310,26 +339,38 @@ class _EmployeeInventoryForecastScreenState
 
       final items = <_ForecastItem>[];
       for (final entry in materials.entries) {
-        final matId   = entry.key;
-        final data    = entry.value;
-        final name    = data['material_name']?.toString() ?? matId;
-        final unit    = data['unit_description']?.toString() ?? '';
-        final stock   = (data['current_stock'] as num?)?.toDouble() ?? 0;
-        final restock = (data['restock_level'] as num?)?.toDouble() ?? 0;
+        final matId    = entry.key;
+        final data     = entry.value;
+        final name     = data['material_name']?.toString() ?? matId;
+        final su       = data['stocking_unit']?.toString() ?? '';
+        final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
+        final unitDesc = data['unit_description']?.toString() ?? '';
+        // Display unit: prefer unit_description, else stocking_unit label
+        final unit = unitDesc.isNotEmpty ? unitDesc : (su.isNotEmpty ? su : '');
 
-        // ── Period consumption totals ──────────────────────────────────────
-        final c1 = consumedP1[matId] ?? 0.0; // last 30 d
-        final c2 = consumedP2[matId] ?? 0.0; // 30–60 d ago
-        final c3 = consumedP3[matId] ?? 0.0; // 60–90 d ago
+        final rawStock   = (data['current_stock'] as num?)?.toDouble() ?? 0;
+        final rawRestock = (data['restock_level'] as num?)?.toDouble() ?? 0;
 
-        // Average daily rates per period (these are X_t for DES)
-        final r1 = c1 / _periodDays; // X_3 — most recent (last 30 d)
-        final r2 = c2 / _periodDays; // X_2 — middle period
-        final r3 = c3 / _periodDays; // X_1 — oldest period
+        // Convert base-unit (sqft) values to stocking units for meaningful display.
+        // For old-style materials (no unitSqft), use raw values as-is.
+        final isNewStyle = unitSqft > 0.001 && su.isNotEmpty;
+        final stock   = isNewStyle ? rawStock   / unitSqft : rawStock;
+        final restock = isNewStyle ? rawRestock / unitSqft : rawRestock;
+
+        // ── Period consumption totals (convert to stocking units) ─────────
+        final rawC1 = consumedP1[matId] ?? 0.0;
+        final rawC2 = consumedP2[matId] ?? 0.0;
+        final rawC3 = consumedP3[matId] ?? 0.0;
+        final c1 = isNewStyle ? rawC1 / unitSqft : rawC1; // last 30 d
+        final c2 = isNewStyle ? rawC2 / unitSqft : rawC2; // 30–60 d ago
+        final c3 = isNewStyle ? rawC3 / unitSqft : rawC3; // 60–90 d ago
+
+        // Average daily rates per period in stocking units (X_t for DES)
+        final r1 = c1 / _periodDays;
+        final r2 = c2 / _periodDays;
+        final r3 = c3 / _periodDays;
 
         // ── Double Exponential Smoothing ───────────────────────────────────
-        // Series fed chronologically oldest → newest: [r3, r2, r1]
-        // DES needs at least 2 non-zero points to produce a meaningful model.
         final hasSufficientData = (r3 > 0.001 || r2 > 0.001 || r1 > 0.001);
         final desSeries = [r3, r2, r1];
         final des = hasSufficientData
@@ -337,15 +378,13 @@ class _EmployeeInventoryForecastScreenState
             : _DesResult(
             aLast: 0, bLast: 0, mape: null, forecasts: [], actuals: []);
 
-        // ── Daily rate for stockout / restock estimates ────────────────────
-        // Use the DES one-step-ahead forecast for next period as the forward
-        // rate; fall back to the raw 90-day average when DES has no data.
         final totalConsumed = c1 + c2 + c3;
-        final replenished   = replenishedPerMaterial[matId] ?? 0;
+        // Replenished also in stocking units
+        final rawReplenished = replenishedPerMaterial[matId] ?? 0;
+        final replenished = isNewStyle ? rawReplenished / unitSqft : rawReplenished;
 
         double dailyRate;
         if (hasSufficientData) {
-          // DES forecast 1 period ahead (= next 30 d), converted to daily
           final forecastNext30 = des.forecastAhead(1).clamp(0.0, double.infinity);
           dailyRate = forecastNext30 / _periodDays;
         } else {
@@ -354,6 +393,7 @@ class _EmployeeInventoryForecastScreenState
               : (replenished > 0 ? replenished / _windowDays : 0.0);
         }
 
+        // Days calculations: ratio of stock/rate is unit-invariant
         final daysUntilStockout = dailyRate > 0.001
             ? (stock / dailyRate)
             : double.infinity;
@@ -361,8 +401,6 @@ class _EmployeeInventoryForecastScreenState
             ? ((stock - restock) / dailyRate)
             : (stock <= restock ? 0.0 : double.infinity);
 
-        // ── 30-day recommended order quantity ─────────────────────────────
-        // Based on the DES forecast for the next period minus current stock.
         final forecastNext30 = hasSufficientData
             ? des.forecastAhead(1).clamp(0.0, double.infinity)
             : dailyRate * 30;
@@ -747,13 +785,17 @@ class _EmployeeInventoryForecastScreenState
                   onRefresh: _load,
                   color: _navyBlue,
                   backgroundColor: _Glass.surface,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(14),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) =>
-                    const SizedBox(height: 8),
-                    itemBuilder: (_, i) =>
-                        _ForecastCard(item: filtered[i]),
+                  child: Scrollbar(
+                    thumbVisibility: true,
+                    trackVisibility: true,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(14),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) =>
+                      const SizedBox(height: 8),
+                      itemBuilder: (_, i) =>
+                          _ForecastCard(item: filtered[i]),
+                    ),
                   ),
                 ),
               ),
