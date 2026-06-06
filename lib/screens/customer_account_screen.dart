@@ -9,6 +9,7 @@ import 'customer_orders_screen.dart';
 import 'invoice_screen.dart';
 import 'payment_webview_screen.dart';
 import '../services/paymongo_service.dart';
+import 'design_file_viewer.dart';
 
 // =============================================================================
 // Design Tokens — Dark Frosted Glass (mirrors admin + product section accents)
@@ -1091,9 +1092,16 @@ class _UnreadMessageCard extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: _G.accentViolet.withValues(alpha: 0.18),
-              border: Border.all(color: _G.accentViolet.withValues(alpha: 0.40), width: 0.9),
+              border: Border.all(
+                color: _G.accentViolet.withValues(alpha: 0.40),
+                width: 0.9,
+              ),
             ),
-            child: const Icon(Icons.local_print_shop_rounded, color: _G.accentViolet, size: 18),
+            child: const Icon(
+              Icons.local_print_shop_rounded,
+              color: _G.accentViolet,
+              size: 18,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1418,39 +1426,73 @@ class _OrderCard extends StatelessWidget {
                 ),
               );
             }),
+            DesignFilesSection(products: products),
             const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.notes_outlined, size: 12, color: _G.textMuted),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Text(
-                    'Special Instructions: ${(data['notes'] as String?)?.isNotEmpty == true ? data['notes'] : 'None'}',
-                    style: const TextStyle(color: _G.textMuted, fontSize: 11),
-                  ),
-                ),
-              ],
+            Builder(
+              builder: (context) {
+                // Try order-level notes first, then first product's notes
+                final orderNotes = data['notes']?.toString() ?? '';
+                final products = List<Map>.from(data['products'] ?? []);
+                final productNotes = products.isNotEmpty
+                    ? (products.first['notes']?.toString() ?? '')
+                    : '';
+                final displayNote = orderNotes.isNotEmpty
+                    ? orderNotes
+                    : productNotes.isNotEmpty
+                    ? productNotes
+                    : '';
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.notes_outlined, size: 12, color: _G.textMuted),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        displayNote.isNotEmpty
+                            ? 'Special Instructions: $displayNote'
+                            : 'Special Instructions: None',
+                        style: const TextStyle(
+                          color: _G.textMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
-            if (status == 'cancelled' && (data['cancel_reason']?.toString() ?? '').isNotEmpty) ...[
+            if (status == 'cancelled' &&
+                (data['cancel_reason']?.toString() ?? '').isNotEmpty) ...[
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEF4444).withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.22)),
+                  border: Border.all(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.22),
+                  ),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.cancel_outlined, size: 13, color: Color(0xFFEF4444)),
+                    const Icon(
+                      Icons.cancel_outlined,
+                      size: 13,
+                      color: Color(0xFFEF4444),
+                    ),
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         'Cancellation Reason: ${data['cancel_reason']}',
-                        style: const TextStyle(color: Color(0xFFEF4444), fontSize: 11),
+                        style: const TextStyle(
+                          color: Color(0xFFEF4444),
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ],
@@ -3302,7 +3344,10 @@ class _ManageAccountContentState extends State<_ManageAccountContent>
     decoration: BoxDecoration(
       color: Colors.white.withValues(alpha: 0.12),
       borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.28), width: 1.0),
+      border: Border.all(
+        color: Colors.white.withValues(alpha: 0.28),
+        width: 1.0,
+      ),
     ),
     child: TextField(
       controller: ctrl,
@@ -3336,7 +3381,10 @@ class _ManageAccountContentState extends State<_ManageAccountContent>
     decoration: BoxDecoration(
       color: Colors.white.withValues(alpha: 0.12),
       borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.28), width: 1.0),
+      border: Border.all(
+        color: Colors.white.withValues(alpha: 0.28),
+        width: 1.0,
+      ),
     ),
     child: TextField(
       controller: ctrl,

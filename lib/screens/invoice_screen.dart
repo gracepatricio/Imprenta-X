@@ -54,8 +54,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           final custUid = orderDoc.data()?['customer_uid']?.toString() ?? '';
           if (custUid.isNotEmpty) {
             final userDoc = await db.collection('User').doc(custUid).get();
-            final custId =
-                userDoc.data()?['customer_id']?.toString() ?? '';
+            final custId = userDoc.data()?['customer_id']?.toString() ?? '';
             if (custId.isNotEmpty) {
               data = {...data, 'customer_id': custId};
               // Backfill both docs so future lookups are instant
@@ -508,13 +507,11 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                           vertical: 10,
                         ),
                         decoration: pw.BoxDecoration(
-                          color: const PdfColor.fromInt(0x1AEF4444),
+                          color: const PdfColor.fromInt(
+                            0xFFB91C1C,
+                          ), // solid dark red background
                           borderRadius: const pw.BorderRadius.all(
                             pw.Radius.circular(6),
-                          ),
-                          border: pw.Border.all(
-                            color: const PdfColor.fromInt(0x44EF4444),
-                            width: 0.8,
                           ),
                         ),
                         child: pw.Column(
@@ -525,11 +522,20 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                               style: pw.TextStyle(
                                 font: bold,
                                 fontSize: 8,
-                                color: const PdfColor.fromInt(0xFFEF4444),
+                                color: PdfColors.white,
                                 letterSpacing: 0.5,
                               ),
                             ),
-                            pw.SizedBox(height: 4),
+                            pw.SizedBox(height: 6),
+                            pw.Text(
+                              'Reason for Cancellation',
+                              style: pw.TextStyle(
+                                font: bold,
+                                fontSize: 8.5,
+                                color: PdfColors.white,
+                              ),
+                            ),
+                            pw.SizedBox(height: 3),
                             pw.Text(
                               (inv['cancel_reason']?.toString().isNotEmpty ==
                                       true)
@@ -538,7 +544,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                               style: pw.TextStyle(
                                 font: regular,
                                 fontSize: 9,
-                                color: const PdfColor.fromInt(0xFFDC2626),
+                                color: PdfColors.white,
                               ),
                             ),
                           ],
@@ -546,6 +552,55 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                       ),
                       pw.SizedBox(height: 8),
                     ],
+
+                    pw.SizedBox(height: 12),
+
+                    // Special instructions
+                    pw.Container(
+                      width: double.infinity,
+                      padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                      decoration: pw.BoxDecoration(
+                        color: const PdfColor.fromInt(0xFFF8FAFC),
+                        borderRadius: const pw.BorderRadius.all(
+                          pw.Radius.circular(6),
+                        ),
+                        border: pw.Border.all(
+                          color: const PdfColor.fromInt(0xFFE2E8F0),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'Special Instructions: ',
+                            style: pw.TextStyle(
+                              font: bold,
+                              fontSize: 8.5,
+                              color: textMid,
+                            ),
+                          ),
+                          pw.Expanded(
+                            child: pw.Text(() {
+                              // Check order-level notes first
+                              final orderNotes = inv['notes']?.toString() ?? '';
+                              if (orderNotes.isNotEmpty) return orderNotes;
+                              // Fallback: collect all non-empty product notes
+                              final productNotes = items
+                                  .map((p) => p['notes']?.toString() ?? '')
+                                  .where((n) => n.isNotEmpty)
+                                  .join('; ');
+                              return productNotes.isNotEmpty
+                                  ? productNotes
+                                  : 'None';
+                            }(), style: s(regular, 8.5, textMid)),
+                          ),
+                        ],
+                      ),
+                    ),
 
                     pw.SizedBox(height: 20),
 
@@ -1000,7 +1055,11 @@ class _InvoiceView extends StatelessWidget {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.location_on_outlined, size: 13, color: Color(0xFF475569)),
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 13,
+                            color: Color(0xFF94A3B8),
+                          ),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
@@ -1022,7 +1081,10 @@ class _InvoiceView extends StatelessWidget {
                           ),
                           const Text(
                             _bizTin,
-                            style: TextStyle(color: Color(0xFF334155), fontSize: 11),
+                            style: TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 11,
+                            ),
                           ),
                         ],
                       ),
@@ -1147,7 +1209,11 @@ class _InvoiceView extends StatelessWidget {
                             ],
                           ),
                         ),
-                        Container(width: 1, height: 52, color: const Color(0xFFE2E8F0)),
+                        Container(
+                          width: 1,
+                          height: 52,
+                          color: const Color(0xFFE2E8F0),
+                        ),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(
@@ -1173,7 +1239,10 @@ class _InvoiceView extends StatelessWidget {
                               ),
                               const Text(
                                 'TIN: $_bizTin',
-                                style: TextStyle(color: Color(0xFF334155), fontSize: 11),
+                                style: TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 11,
+                                ),
                               ),
                             ],
                           ),
@@ -1186,8 +1255,9 @@ class _InvoiceView extends StatelessWidget {
             ),
           ),
           // ── Items ───────────────────────────────────────────────────────────
+          // ── Items ───────────────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1206,7 +1276,10 @@ class _InvoiceView extends StatelessWidget {
                       // Header row
                       Container(
                         color: const Color(0xFF1E3A5F),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
                         child: Row(
                           children: const [
                             Expanded(
@@ -1251,21 +1324,27 @@ class _InvoiceView extends StatelessWidget {
                         final name = p['name']?.toString() ?? '—';
                         final qty = (p['qty'] as num?)?.toInt() ?? 1;
                         final unit = (p['unit_price'] as num?)?.toDouble() ?? 0;
-                        final sub = (p['price'] as num?)?.toDouble() ?? (unit * qty);
+                        final sub =
+                            (p['price'] as num?)?.toDouble() ?? (unit * qty);
                         final size = p['size_label']?.toString();
                         final mat = p['material']?.toString();
                         final notes = p['notes']?.toString() ?? '';
                         final isLast = idx == items.length - 1;
                         return Container(
                           decoration: BoxDecoration(
-                            color: idx.isEven ? const Color(0xFFF8FAFC) : Colors.white,
+                            color: idx.isEven
+                                ? const Color(0xFFF8FAFC)
+                                : Colors.white,
                             border: Border(
                               bottom: isLast
                                   ? BorderSide.none
                                   : const BorderSide(color: Color(0xFFE2E8F0)),
                             ),
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1290,14 +1369,6 @@ class _InvoiceView extends StatelessWidget {
                                         ].join(' · '),
                                         style: const TextStyle(
                                           color: Color(0xFF334155),
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    if (notes.isNotEmpty)
-                                      Text(
-                                        'Note: $notes',
-                                        style: const TextStyle(
-                                          color: Color(0xFF475569),
                                           fontSize: 11,
                                         ),
                                       ),
@@ -1341,7 +1412,51 @@ class _InvoiceView extends StatelessWidget {
                   ),
                 ),
 
+                const SizedBox(height: 5),
+
+                // ── Special instructions (always shown before cancelled notice) ──────
                 const SizedBox(height: 20),
+                const _SectionLabel('SPECIAL INSTRUCTIONS'),
+                const SizedBox(height: 8),
+                Builder(
+                  builder: (context) {
+                    // Get order-level notes from inv, fallback to first product's notes
+                    final orderNotes = inv['notes']?.toString() ?? '';
+                    final items2 =
+                        (inv['items'] as List?)?.cast<Map<String, dynamic>>() ??
+                        [];
+                    final productNotes = items2.isNotEmpty
+                        ? (items2.first['notes']?.toString() ?? '')
+                        : '';
+                    final displayNote = orderNotes.isNotEmpty
+                        ? orderNotes
+                        : productNotes.isNotEmpty
+                        ? productNotes
+                        : '';
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Text(
+                        displayNote.isNotEmpty
+                            ? displayNote
+                            : 'Special Instructions: None',
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    );
+                  },
+                ),
 
                 if (isCancelled) ...[
                   const SizedBox(height: 12),
@@ -1380,6 +1495,15 @@ class _InvoiceView extends StatelessWidget {
                                   letterSpacing: 0.5,
                                 ),
                               ),
+                              const SizedBox(height: 5),
+                              const Text(
+                                'Reason for Cancellation',
+                                style: TextStyle(
+                                  color: Color(0xFFE57373),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                               const SizedBox(height: 3),
                               Text(
                                 inv['cancel_reason']?.toString().isNotEmpty ==
@@ -1387,7 +1511,7 @@ class _InvoiceView extends StatelessWidget {
                                     ? inv['cancel_reason'].toString()
                                     : 'No reason specified.',
                                 style: const TextStyle(
-                                  color: Colors.red,
+                                  color: Color(0xFF0F1A2E),
                                   fontSize: 12,
                                 ),
                               ),
@@ -1397,9 +1521,11 @@ class _InvoiceView extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 8),
                 ],
 
+                const SizedBox(
+                  height: 28,
+                ), // ← spacing before payment summary for ALL cases
                 // ── Payment summary ──────────────────────────────────────────
                 const _SectionLabel('PAYMENT SUMMARY'),
                 const SizedBox(height: 10),
@@ -1448,10 +1574,7 @@ class _InvoiceView extends StatelessWidget {
                               large: false,
                             ),
                             const SizedBox(height: 10),
-                            const Divider(
-                              color: Color(0xFFE2E8F0),
-                              height: 1,
-                            ),
+                            const Divider(color: Color(0xFFE2E8F0), height: 1),
                             const SizedBox(height: 10),
                             _PayRow(
                               label: isFullPaid
@@ -1568,13 +1691,19 @@ class _InvoiceView extends StatelessWidget {
                       const SizedBox(height: 4),
                       const Text(
                         '$_bizAddr1, $_bizAddr2',
-                        style: TextStyle(color: Color(0xFF475569), fontSize: 10),
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 10,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'This is an official electronic invoice issued by Imprenta Inc.',
-                        style: TextStyle(color: Color(0xFF475569), fontSize: 10),
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 10,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -1757,7 +1886,9 @@ class _MetaCard extends StatelessWidget {
               Text(
                 value,
                 style: TextStyle(
-                  color: highlight ? const Color(0xFF1E3A5F) : const Color(0xFF1E293B),
+                  color: highlight
+                      ? const Color(0xFF1E3A5F)
+                      : const Color(0xFF1E293B),
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
