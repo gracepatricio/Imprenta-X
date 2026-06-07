@@ -405,6 +405,20 @@ class _MobileOrderHistoryState extends State<_MobileOrderHistory> {
   }
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+String _resolveNotes(Map<String, dynamic> data) {
+  final orderNote = data['notes']?.toString() ?? '';
+  if (orderNote.isNotEmpty) return orderNote;
+  final prods = (data['products'] as List? ?? [])
+      .whereType<Map<String, dynamic>>()
+      .toList();
+  return prods
+      .map((p) => p['notes']?.toString() ?? '')
+      .where((n) => n.isNotEmpty)
+      .join(' | ');
+}
+
 // ── Read-only order card ───────────────────────────────────────────────────
 
 class _MobileOrderCard extends StatelessWidget {
@@ -523,6 +537,31 @@ class _MobileOrderCard extends StatelessWidget {
             DesignFilesSection(products: products),
             const SizedBox(height: 8),
           ],
+
+          // Special instructions
+          Builder(builder: (_) {
+            final notes = _resolveNotes(data);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.notes_outlined,
+                      size: 12,
+                      color: Colors.white.withValues(alpha: 0.4)),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      'Special Instructions: ${notes.isNotEmpty ? notes : 'None'}',
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.45),
+                          fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
 
           // Footer row
           Row(

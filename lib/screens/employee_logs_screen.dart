@@ -1788,6 +1788,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
         'customer_id': '',
         'issued_date': now,
         'items': products,
+        'notes': _notesCtrl.text.trim(),
         'total_amount': total,
         'amount_paid': paidAmount,
         'remaining_balance': remaining,
@@ -5997,6 +5998,27 @@ class _QueueCard extends StatelessWidget {
                   DesignFilesSection(products: products),
                 ],
 
+                // Special instructions
+                Builder(builder: (_) {
+                  final notes = _resolveNotes(data);
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.notes_outlined, size: 12, color: _Glass.textMuted),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            'Special Instructions: ${notes.isNotEmpty ? notes : 'None'}',
+                            style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+
                 if (estimatedCompletion != null &&
                     jobStatus != 'cancelled') ...[
                   const SizedBox(height: 6),
@@ -6192,34 +6214,19 @@ class _QueueCard extends StatelessWidget {
                 ] else ...[
                   Row(
                     children: [
-                      const Icon(
-                        Icons.calendar_today_outlined,
-                        size: 11,
-                        color: _Glass.textMuted,
-                      ),
+                      const Icon(Icons.calendar_today_outlined, size: 11, color: _Glass.textMuted),
                       const SizedBox(width: 4),
-                      Text(
-                        dateStr,
-                        style: const TextStyle(
-                          color: _Glass.textMuted,
-                          fontSize: 12,
-                        ),
+                      Flexible(
+                        child: Text(dateStr,
+                            style: const TextStyle(color: _Glass.textMuted, fontSize: 12),
+                            overflow: TextOverflow.ellipsis),
                       ),
                       if (turnaround != null) ...[
                         const SizedBox(width: 8),
-                        const Icon(
-                          Icons.schedule,
-                          size: 11,
-                          color: _Glass.textMuted,
-                        ),
+                        const Icon(Icons.schedule, size: 11, color: _Glass.textMuted),
                         const SizedBox(width: 4),
-                        Text(
-                          '~$turnaround day${turnaround == 1 ? '' : 's'}',
-                          style: const TextStyle(
-                            color: _Glass.textMuted,
-                            fontSize: 12,
-                          ),
-                        ),
+                        Text('~$turnaround day${turnaround == 1 ? '' : 's'}',
+                            style: const TextStyle(color: _Glass.textMuted, fontSize: 12)),
                       ],
                       const Spacer(),
                       FutureBuilder<DocumentSnapshot>(

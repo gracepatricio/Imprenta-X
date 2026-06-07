@@ -70,7 +70,9 @@
       "Bash(firebase firestore:get /Products)",
       "Bash(gcloud auth *)",
       "Bash(firebase login:ci --no-localhost)",
-      "PowerShell(Get-ChildItem *)"
+      "PowerShell(Get-ChildItem *)",
+      "Bash(grep -n *)",
+      "Bash(xargs grep -l \"invoice\\\\|Invoice\\\\|order_detail\\\\|OrderDetail\")"
     ]
   }
 }

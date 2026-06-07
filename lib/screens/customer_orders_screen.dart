@@ -976,6 +976,41 @@ class _OrderDetailSheet extends StatelessWidget {
             );
           }),
 
+          // Special instructions
+          Builder(builder: (_) {
+            final orderNote = order['notes']?.toString() ?? '';
+            final notes = orderNote.isNotEmpty
+                ? orderNote
+                : (order['products'] as List? ?? [])
+                    .whereType<Map<String, dynamic>>()
+                    .map((p) => p['notes']?.toString() ?? '')
+                    .where((n) => n.isNotEmpty)
+                    .join(' | ');
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.notes_outlined, size: 14, color: Colors.white38),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Special Instructions',
+                            style: TextStyle(color: Colors.white38, fontSize: 11,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text(notes.isNotEmpty ? notes : 'None',
+                            style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
           const Divider(color: Colors.white12, height: 24),
 
           // Balance summary

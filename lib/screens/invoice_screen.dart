@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../services/file_utils.dart' as file_utils;
 import 'app_theme.dart';
+import 'design_file_viewer.dart';
 
 // ── Business constants ─────────────────────────────────────────────────────────
 const _bizName = 'IMPRENTA INC.';
@@ -46,25 +47,38 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       if (!doc.exists) throw Exception('Invoice not found');
       var data = doc.data()!;
 
+      // Fetch the order doc once — used for customer_id resolution and notes
+      final orderId = data['order_id']?.toString() ?? '';
+      DocumentSnapshot? orderDoc;
+      if (orderId.isNotEmpty) {
+        orderDoc = await db.collection('Orders').doc(orderId).get();
+      }
+
       // Resolve missing customer_id via order → user chain, then backfill
-      if ((data['customer_id']?.toString() ?? '').isEmpty) {
-        final orderId = data['order_id']?.toString() ?? '';
-        if (orderId.isNotEmpty) {
-          final orderDoc = await db.collection('Orders').doc(orderId).get();
-          final custUid = orderDoc.data()?['customer_uid']?.toString() ?? '';
-          if (custUid.isNotEmpty) {
-            final userDoc = await db.collection('User').doc(custUid).get();
-            final custId = userDoc.data()?['customer_id']?.toString() ?? '';
-            if (custId.isNotEmpty) {
-              data = {...data, 'customer_id': custId};
-              // Backfill both docs so future lookups are instant
-              await Future.wait([
-                doc.reference.update({'customer_id': custId}),
-                if (orderDoc.exists)
-                  orderDoc.reference.update({'customer_id': custId}),
-              ]);
-            }
+      if ((data['customer_id']?.toString() ?? '').isEmpty && orderDoc != null) {
+        final custUid = orderDoc.data() != null
+            ? (orderDoc.data() as Map<String, dynamic>)['customer_uid']?.toString() ?? ''
+            : '';
+        if (custUid.isNotEmpty) {
+          final userDoc = await db.collection('User').doc(custUid).get();
+          final custId = userDoc.data()?['customer_id']?.toString() ?? '';
+          if (custId.isNotEmpty) {
+            data = {...data, 'customer_id': custId};
+            await Future.wait([
+              doc.reference.update({'customer_id': custId}),
+              if (orderDoc.exists)
+                orderDoc.reference.update({'customer_id': custId}),
+            ]);
           }
+        }
+      }
+
+      // Merge order-level notes if invoice doesn't already have them
+      // (walk-in orders store notes on the Order doc, not the Invoice doc)
+      if ((data['notes']?.toString() ?? '').isEmpty && orderDoc != null && orderDoc.exists) {
+        final orderNotes = (orderDoc.data() as Map<String, dynamic>?)?['notes']?.toString() ?? '';
+        if (orderNotes.isNotEmpty) {
+          data = {...data, 'notes': orderNotes};
         }
       }
 
@@ -1372,6 +1386,27 @@ class _InvoiceView extends StatelessWidget {
                                           fontSize: 11,
                                         ),
                                       ),
+                                    Builder(builder: (_) {
+                                      final urls = List<String>.from(p['file_urls'] as List? ?? []);
+                                      final fnames = List<String>.from(p['file_names'] as List? ?? []);
+                                      if (urls.isEmpty) return const SizedBox.shrink();
+                                      return Padding(
+                                        padding: const EdgeInsets.only(top: 6),
+                                        child: Wrap(
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          children: urls.asMap().entries.map((en) {
+                                            final i = en.key;
+                                            final u = en.value;
+                                            if (u.isEmpty) return const SizedBox.shrink();
+                                            final fn = i < fnames.length && fnames[i].isNotEmpty
+                                                ? fnames[i]
+                                                : 'File ${i + 1}';
+                                            return DesignFileChip(name: fn, url: u);
+                                          }).toList(),
+                                        ),
+                                      );
+                                    }),
                                   ],
                                 ),
                               ),
@@ -1420,19 +1455,17 @@ class _InvoiceView extends StatelessWidget {
                 const SizedBox(height: 8),
                 Builder(
                   builder: (context) {
-                    // Get order-level notes from inv, fallback to first product's notes
                     final orderNotes = inv['notes']?.toString() ?? '';
                     final items2 =
                         (inv['items'] as List?)?.cast<Map<String, dynamic>>() ??
                         [];
-                    final productNotes = items2.isNotEmpty
-                        ? (items2.first['notes']?.toString() ?? '')
-                        : '';
+                    final productNotes = items2
+                        .map((p) => p['notes']?.toString() ?? '')
+                        .where((n) => n.isNotEmpty)
+                        .join(' | ');
                     final displayNote = orderNotes.isNotEmpty
                         ? orderNotes
-                        : productNotes.isNotEmpty
-                        ? productNotes
-                        : '';
+                        : productNotes;
                     return Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
