@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'turnaround_service.dart';
 
 class CartFile {
   final String name;
@@ -25,6 +26,8 @@ class CartItem {
   final String notes;
   // Add-on services the customer selected, each: {name, price}
   final List<Map<String, dynamic>> selectedServices;
+  // Total bulk discount applied to this item (already computed at order time).
+  final double discountAmount;
 
   const CartItem({
     required this.productId,
@@ -40,6 +43,7 @@ class CartItem {
     required this.files,
     required this.notes,
     this.selectedServices = const [],
+    this.discountAmount = 0,
   });
 
   bool get hasSizeInput => widthFt != null && heightFt != null;
@@ -77,41 +81,20 @@ class CartItem {
         base += sp * quantity;
       }
     }
-    return base;
+    return (base - discountAmount).clamp(0, double.infinity);
   }
 
   String get servicesLabel =>
       selectedServices.map((s) => s['name']?.toString() ?? '').join(', ');
 
-  double get estimatedDaysExact {
-    final cat = category.toLowerCase();
-    double d;
-    if (cat.contains('calling card')) {
-      if (quantity <= 100) d = 0.5;
-      else if (quantity <= 500) d = 1.0;
-      else d = (quantity / 500).ceilToDouble().clamp(2.0, 7.0);
-    } else if (cat.contains('sticker') || cat.contains('photo')) {
-      if (quantity <= 50)  d = 0.5;
-      else if (quantity <= 200) d = 1.0;
-      else d = (quantity / 200).ceilToDouble().clamp(2.0, 5.0);
-    } else if (cat.contains('large format')) {
-      final area = hasSizeInput ? widthFt! * heightFt! : 4.0;
-      if (area <= 6)       d = 0.5;
-      else if (area <= 15) d = 1.0;
-      else if (area <= 30) d = 1.5;
-      else                 d = 2.0;
-      if (quantity > 1) d = (d * quantity).clamp(d, 14.0);
-    } else if (cat.contains('invitation')) {
-      if (quantity <= 50)  d = 1.0;
-      else if (quantity <= 200) d = 2.0;
-      else d = 3.0;
-    } else if (cat.contains('menu') || cat.contains('board')) {
-      d = quantity.toDouble().clamp(1.0, 3.0);
-    } else {
-      d = 1.0;
-    }
-    return d.clamp(0.5, 21.0);
-  }
+  double get estimatedDaysExact => TurnaroundService.perItemDays(
+    category:    category,
+    qty:         quantity,
+    widthFt:     widthFt,
+    heightFt:    heightFt,
+    productName: productName,
+    pricingUnit: pricingUnit,
+  );
 
   int get estimatedDays => estimatedDaysExact.ceil().clamp(1, 21);
 
@@ -138,6 +121,7 @@ class CartItem {
     if (material != null) 'material': material,
     'notes': notes,
     if (selectedServices.isNotEmpty) 'selectedServices': selectedServices,
+    if (discountAmount > 0) 'discountAmount': discountAmount,
     'fileData': files.map((f) => {
       'name': f.name,
       if (f.url  != null) 'url':  f.url,
@@ -170,7 +154,8 @@ class CartItem {
         path: fd['path'] as String?,
       )).toList();
     })(),
-    notes:       j['notes'] as String,
+    notes:          j['notes'] as String,
+    discountAmount: (j['discountAmount'] as num?)?.toDouble() ?? 0,
   );
 }
 

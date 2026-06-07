@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../services/design_file_picker.dart';
 import '../services/cart_manager.dart';
+import '../services/turnaround_service.dart';
 import 'app_theme.dart';
 
 class CustomerOrderScreen extends StatefulWidget {
@@ -33,6 +34,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
 
   // Order options
   int     _quantity = 1;
+  final   _qtyCtrl  = TextEditingController(text: '1');
   String? _material;
 
   // Files
@@ -49,6 +51,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   Map<String, double> _stockMap = {};
   bool _availabilityLoaded = false;
   double? _maxOrderable;
+
 
   // ── Product accessors ────────────────────────────────────────────────────────
 
@@ -130,6 +133,46 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   bool get _hasSurcharge =>
       _underMinSurcharge > 0 && _quantity < _minQty;
 
+  // Bulk pricing tiers from the product definition.
+  List<Map<String, dynamic>> get _bulkPricing {
+    final raw = widget.product['bulk_pricing'] as List?;
+    if (raw == null) return [];
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  // The best-matching bulk pricing tier for the current quantity.
+  Map<String, dynamic>? get _activeBulkTier {
+    final tiers = _bulkPricing;
+    if (tiers.isEmpty) return null;
+    Map<String, dynamic>? active;
+    for (final tier in tiers) {
+      final minQty = (tier['min_quantity'] as num?)?.toInt() ?? 0;
+      if (_quantity >= minQty) {
+        final activeMin = (active?['min_quantity'] as num?)?.toInt() ?? -1;
+        if (minQty > activeMin) active = tier;
+      }
+    }
+    return active;
+  }
+
+  // Total discount amount for the current configuration.
+  double get _discountAmount {
+    final tier = _activeBulkTier;
+    if (tier == null) return 0;
+    final type  = tier['discount_type']?.toString() ?? 'rate';
+    final value = (tier['discount_value'] as num?)?.toDouble() ?? 0;
+    if (value <= 0) return 0;
+    double baseTotal = _calcUnitTotal(_effectiveBasePrice);
+    for (final svc in _additionalServicesList) {
+      final svcName = svc['name']?.toString() ?? '';
+      if (_selectedServices.contains(svcName)) {
+        baseTotal += _calcUnitTotal((svc['price'] as num?)?.toDouble() ?? 0);
+      }
+    }
+    if (type == 'rate') return baseTotal * (value / 100);
+    return value * _quantity; // fixed = ₱ off per piece ordered
+  }
+
   // ── Pricing ──────────────────────────────────────────────────────────────────
 
   double _calcUnitTotal(double price) {
@@ -152,52 +195,16 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     }
     // Under-minimum surcharge (flat, not per-unit).
     if (_hasSurcharge) total += _underMinSurcharge;
-    return total;
+    // Apply bulk discount.
+    total -= _discountAmount;
+    return total.clamp(0, double.infinity);
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
 
   // ── Turnaround computation ────────────────────────────────────────────────────
 
-  double get _turnaroundExact {
-    final cat = _category.toLowerCase();
-    double d;
-
-    if (cat.contains('calling card')) {
-      if (_quantity <= 100) d = 0.5;
-      else if (_quantity <= 500) d = 1.0;
-      else d = (_quantity / 500).ceilToDouble().clamp(2.0, 7.0);
-    } else if (cat.contains('sticker') || cat.contains('photo')) {
-      if (_quantity <= 50)  d = 0.5;
-      else if (_quantity <= 200) d = 1.0;
-      else d = (_quantity / 200).ceilToDouble().clamp(2.0, 5.0);
-    } else if (cat.contains('large format')) {
-      final area = _needsSizeInput ? _widthFt * _heightFt : 4.0;
-      if (area <= 6)       d = 0.5;
-      else if (area <= 15) d = 1.0;
-      else if (area <= 30) d = 1.5;
-      else                 d = 2.0;
-      if (_quantity > 1) d = (d * _quantity).clamp(d, 14.0);
-    } else if (cat.contains('invitation')) {
-      d = _quantity <= 50 ? 1.0 : (_quantity <= 200 ? 2.0 : 3.0);
-    } else if (cat.contains('menu') || cat.contains('board')) {
-      d = _quantity.toDouble().clamp(1.0, 3.0);
-    } else {
-      d = 1.0;
-    }
-
-    return d.clamp(0.5, 21.0);
-  }
-
-  String get _turnaroundLabel {
-    final d = _turnaroundExact;
-    if (d <= 0.5) return 'Same day';
-    if (d <  1.0) return '< 1 day';
-    if (d == 1.0) return '~1 day';
-    if (d <= 1.5) return '~1–2 days';
-    if (d <= 2.0) return '~2 days';
-    return '~${d.ceil()} days';
-  }
+  static const _turnaroundLabel = 'Same day – 4 days';
 
   @override
   void initState() {
@@ -207,6 +214,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     if (edit != null) {
       // Pre-populate from existing cart item
       _quantity = edit.quantity;
+      _qtyCtrl.text = _quantity.toString();
       _material = edit.material;
       _notesCtrl.text = edit.notes;
       _files.addAll(edit.files);
@@ -241,6 +249,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
         _sizePreset = '4×4 in';
       }
     }
+    _qtyCtrl.text = _quantity.toString();
     _loadAvailability();
   }
 
@@ -248,6 +257,7 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   void dispose() {
     _widthCtrl.dispose();
     _heightCtrl.dispose();
+    _qtyCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
   }
@@ -446,21 +456,22 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
     setState(() => _addingToCart = false);
 
     final item = CartItem(
-      productId:   widget.product['product_id']?.toString() ?? '',
-      productName: _productName,
-      category:    _category,
-      imageUrl:    _imageUrl,
-      unitPrice:   _effectiveBasePrice, // uses variant price if selected
-      pricingUnit: _pricingUnit,
-      quantity:    _quantity,
-      widthFt:     _needsSizeInput ? _widthFt  : null,
-      heightFt:    _needsSizeInput ? _heightFt : null,
-      material:    _material,
-      files:       cartFiles,
-      notes:       _notesCtrl.text.trim(),
+      productId:      widget.product['product_id']?.toString() ?? '',
+      productName:    _productName,
+      category:       _category,
+      imageUrl:       _imageUrl,
+      unitPrice:      _effectiveBasePrice, // uses variant price if selected
+      pricingUnit:    _pricingUnit,
+      quantity:       _quantity,
+      widthFt:        _needsSizeInput ? _widthFt  : null,
+      heightFt:       _needsSizeInput ? _heightFt : null,
+      material:       _material,
+      files:          cartFiles,
+      notes:          _notesCtrl.text.trim(),
       selectedServices: _additionalServicesList
           .where((s) => _selectedServices.contains(s['name']?.toString()))
           .toList(),
+      discountAmount: _discountAmount,
     );
 
     final isEdit = widget.editIndex != null;
@@ -704,19 +715,34 @@ decoration: AppTheme.backgroundDecoration(context),
         // ── Pricing info row ─────────────────────────────────────────────
         if (_pricingUnit.isNotEmpty) ...[
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(_category,
-                  style: const TextStyle(color: AppTheme.gold, fontSize: 12)),
-              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.gold.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(_category,
+                    style: const TextStyle(
+                        color: AppTheme.gold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(width: 10),
               Text(
                 _pricingUnit == 'per_qty'
-                    ? '₱${_effectiveBasePrice.toStringAsFixed(0)} per $_pricingQty pcs'
+                    ? '₱${_effectiveBasePrice.toStringAsFixed(0)} / $_pricingQty pcs'
                     : _pricingUnit == 'per_sqin'
                     ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq in'
                     : _pricingUnit == 'per_sqft'
                     ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq ft'
-                    : '₱${_effectiveBasePrice.toStringAsFixed(2)} / piece',
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    : '₱${_effectiveBasePrice.toStringAsFixed(2)} / pc',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.2),
               ),
             ],
           ),
@@ -824,32 +850,111 @@ decoration: AppTheme.backgroundDecoration(context),
         ],
 
         // ── Quantity ─────────────────────────────────────────────────────
-        _label(_pricingUnit == 'per_qty'
-            ? 'Quantity (units of $_pricingQty pcs)'
-            : 'Quantity'),
+        _label('Quantity'),
+        if (_pricingUnit == 'per_qty') ...[
+          const SizedBox(height: 3),
+          RichText(
+            text: TextSpan(
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              children: [
+                const TextSpan(text: 'Each unit = '),
+                TextSpan(
+                  text: '$_pricingQty pcs',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold),
+                ),
+                TextSpan(
+                  text: '  ·  ₱${_effectiveBasePrice.toStringAsFixed(0)} per $_pricingQty pcs',
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         Row(
           children: [
             _qtyBtn(Icons.remove, () {
-              // If there's a surcharge for under-minimum, allow going below
-              // min_quantity (customer pays the surcharge).  Otherwise enforce.
               final hardMin = _underMinSurcharge > 0 ? 1 : _minQty;
-              if (_quantity > hardMin) setState(() => _quantity--);
+              if (_quantity > hardMin) {
+                setState(() {
+                  _quantity--;
+                  _qtyCtrl.text = _quantity.toString();
+                });
+              }
             }),
-            const SizedBox(width: 16),
-            Text('$_quantity',
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 64,
+              child: TextField(
+                controller: _qtyCtrl,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
                 style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(width: 16),
-            _qtyBtn(Icons.add, () => setState(() => _quantity++)),
+                    fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.2)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                        color: AppTheme.gold.withValues(alpha: 0.7), width: 1.5),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.06),
+                ),
+                onChanged: (v) {
+                  final parsed = int.tryParse(v);
+                  if (parsed == null) return;
+                  final hardMin = _underMinSurcharge > 0 ? 1 : _minQty;
+                  final clamped = parsed < 1 ? 1 : parsed;
+                  setState(() => _quantity = clamped < hardMin ? hardMin : clamped);
+                },
+                onSubmitted: (v) {
+                  // Clamp and sync display after submit/blur.
+                  final hardMin = _underMinSurcharge > 0 ? 1 : _minQty;
+                  final clamped = (int.tryParse(v) ?? _quantity)
+                      .clamp(hardMin, 999999);
+                  setState(() => _quantity = clamped);
+                  _qtyCtrl.text = _quantity.toString();
+                },
+              ),
+            ),
             const SizedBox(width: 10),
-            Text(
-              _pricingUnit == 'per_qty'
-                  ? 'min. $_minQty unit = ${_minQty * _pricingQty} pcs'
-                  : 'min. $_minQty',
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
+            _qtyBtn(Icons.add, () {
+              setState(() {
+                _quantity++;
+                _qtyCtrl.text = _quantity.toString();
+              });
+            }),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _pricingUnit == 'per_qty'
+                        ? 'min. $_minQty unit (${_minQty * _pricingQty} pcs)'
+                        : 'min. $_minQty',
+                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
+                  if (_pricingUnit == 'per_qty')
+                    Text(
+                      '= ${_quantity * _pricingQty} pcs total',
+                      style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600),
+                    ),
+                ],
+              ),
             ),
             if (_hasSurcharge) ...[
               const SizedBox(width: 8),
@@ -872,6 +977,10 @@ decoration: AppTheme.backgroundDecoration(context),
             ],
           ],
         ),
+        if (_bulkPricing.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _buildBulkDiscountInfo(),
+        ],
         const SizedBox(height: 16),
 
         // ── Variant / Material ────────────────────────────────────────────
@@ -1169,8 +1278,28 @@ decoration: AppTheme.backgroundDecoration(context),
             'Under-min surcharge',
             '+₱${_underMinSurcharge.toStringAsFixed(0)}',
           ),
+        if (_discountAmount > 0)
+          _sumRow(
+            'Bulk Discount',
+            '-₱${_discountAmount.toStringAsFixed(2)}',
+            valueColor: Colors.greenAccent,
+          ),
         _sumRow('Shipping', 'Pick-Up'),
-        _sumRow('Turnaround', _turnaroundLabel),
+        _sumRow('Est. Turnaround', _turnaroundLabel),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            const Icon(Icons.info_outline, color: Colors.white38, size: 11),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                'Estimate only — chat with our team for your exact ready date.',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 10),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
         const Divider(color: Colors.white12, height: 16),
         Row(
           children: [
@@ -1309,7 +1438,7 @@ decoration: AppTheme.backgroundDecoration(context),
     );
   }
 
-  Widget _sumRow(String label, String value) => Padding(
+  Widget _sumRow(String label, String value, {Color? valueColor}) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
     child: Row(
       children: [
@@ -1318,11 +1447,92 @@ decoration: AppTheme.backgroundDecoration(context),
                 style: const TextStyle(
                     color: Colors.white54, fontSize: 12))),
         Text(value,
-            style: const TextStyle(
-                color: Colors.white,
+            style: TextStyle(
+                color: valueColor ?? Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w500)),
       ],
     ),
   );
+
+  Widget _buildBulkDiscountInfo() {
+    final sorted = [..._bulkPricing]
+      ..sort((a, b) => ((a['min_quantity'] as num?) ?? 0)
+          .compareTo((b['min_quantity'] as num?) ?? 0));
+    final activeTier = _activeBulkTier;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.local_offer_outlined, color: Colors.greenAccent, size: 14),
+              SizedBox(width: 6),
+              Text('Bulk Discounts',
+                  style: TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ...sorted.map((tier) {
+            final minQty = (tier['min_quantity'] as num?)?.toInt() ?? 0;
+            final type   = tier['discount_type']?.toString() ?? 'rate';
+            final value  = (tier['discount_value'] as num?)?.toDouble() ?? 0;
+            final isActive = activeTier != null &&
+                (activeTier['min_quantity'] as num?)?.toInt() == minQty;
+            final discLabel = type == 'rate'
+                ? '${value.toStringAsFixed(value % 1 == 0 ? 0 : 1)}% off'
+                : '₱${value.toStringAsFixed(value % 1 == 0 ? 0 : 2)} off per piece';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Row(
+                children: [
+                  Icon(
+                    isActive ? Icons.check_circle : Icons.radio_button_unchecked,
+                    size: 12,
+                    color: isActive ? Colors.greenAccent : Colors.white38,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Order ≥ $minQty: $discLabel',
+                    style: TextStyle(
+                      color: isActive ? Colors.greenAccent : Colors.white54,
+                      fontSize: 11,
+                      fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          if (activeTier != null) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Text(
+                'Discount applied: -₱${_discountAmount.toStringAsFixed(2)}',
+                style: const TextStyle(
+                    color: Colors.greenAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

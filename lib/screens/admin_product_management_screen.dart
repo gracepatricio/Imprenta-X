@@ -234,6 +234,8 @@ class _AdminProductManagementScreenState
     }
   }
 
+
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1088,6 +1090,11 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   final List<TextEditingController> _svcNameControllers = [];
   final List<TextEditingController> _svcPriceControllers = [];
 
+  // Turnaround config
+  late TextEditingController _taBaseCtrl;
+  late TextEditingController _taRateCtrl;
+  late TextEditingController _taMaxCtrl;
+
   @override
   void initState() {
     super.initState();
@@ -1136,6 +1143,15 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _isAvailable = e?['is_available'] as bool? ?? true;
     _isFeatured = e?['featured'] as bool? ?? false;
     _imageUrl = e?['image_url'] ?? '';
+
+    // Turnaround config
+    final taConf = e?['turnaround_config'] as Map<String, dynamic>?;
+    _taBaseCtrl = TextEditingController(
+        text: (taConf?['base_days'] as num?)?.toString() ?? '');
+    _taRateCtrl = TextEditingController(
+        text: (taConf?['rate'] as num?)?.toString() ?? '');
+    _taMaxCtrl = TextEditingController(
+        text: (taConf?['max_days'] as num?)?.toString() ?? '');
     _bom = List<Map<String, dynamic>>.from(
       (e?['bill_of_materials'] as List?)?.map(
             (x) => Map<String, dynamic>.from(x as Map),
@@ -1186,6 +1202,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     for (final c in _optionPriceControllers) c.dispose();
     for (final c in _svcNameControllers) c.dispose();
     for (final c in _svcPriceControllers) c.dispose();
+    _taBaseCtrl.dispose();
+    _taRateCtrl.dispose();
+    _taMaxCtrl.dispose();
     super.dispose();
   }
 
@@ -1296,6 +1315,17 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
             'price': double.tryParse(_svcPriceControllers[i].text.trim()) ?? 0.0,
           },
         ).where((s) => (s['name'] as String).isNotEmpty).toList(),
+        'turnaround_config': () {
+          final base = double.tryParse(_taBaseCtrl.text.trim());
+          final rate = double.tryParse(_taRateCtrl.text.trim());
+          final max  = double.tryParse(_taMaxCtrl.text.trim());
+          if (base == null && rate == null) return FieldValue.delete();
+          return {
+            if (base != null) 'base_days': base,
+            if (rate != null) 'rate': rate,
+            if (max  != null) 'max_days': max,
+          };
+        }(),
         'updated_at': FieldValue.serverTimestamp(),
         // Remove legacy fields.
         'availability_override': FieldValue.delete(),
@@ -2083,6 +2113,87 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           onRemove: () =>
                               setState(() => _bulkPricing.removeAt(e.key)),
                         ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // ── Turnaround Config ────────────────────────────────
+                      _SectionLabel('Turnaround Settings (Optional)'),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Leave blank to use smart defaults based on pricing unit. '
+                        'Set these to override for this specific product.',
+                        style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Base days',
+                                    style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 4),
+                                TextField(
+                                  controller: _taBaseCtrl,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+                                  decoration: _Glass.field('e.g. 0.5'),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _pricingUnit == 'per_sqft'
+                                      ? 'Rate (days / sq ft ordered)'
+                                      : _pricingUnit == 'per_sqin'
+                                      ? 'Rate (days / sq in ordered)'
+                                      : 'Rate (days / piece)',
+                                  style: const TextStyle(
+                                      color: _Glass.textMuted,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 4),
+                                TextField(
+                                  controller: _taRateCtrl,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+                                  decoration: _Glass.field('e.g. 0.005'),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 90,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Max days',
+                                    style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 4),
+                                TextField(
+                                  controller: _taMaxCtrl,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+                                  decoration: _Glass.field('e.g. 7'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 18),
 

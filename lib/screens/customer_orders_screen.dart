@@ -519,7 +519,7 @@ class _OrderCardState extends State<_OrderCard> {
       }
     }
     final products      = (widget.order['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final turnaroundDays = (widget.order['turnaround_days'] as int?) ?? 3;
+    final turnaroundDays = (widget.order['turnaround_days'] as int?) ?? 4;
 
     // Generate invoice ID
     final invoiceRef = FirebaseFirestore.instance.collection('Counters').doc('invoice');

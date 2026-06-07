@@ -74,7 +74,9 @@
       "Bash(grep -n *)",
       "Bash(xargs grep -l \"invoice\\\\|Invoice\\\\|order_detail\\\\|OrderDetail\")",
       "Bash(findstr /i \"product\\\\|home\\\\|service\\\\|category\\\\|card\")",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(dir *)",
+      "Bash(git stash *)"
     ]
   }
 }

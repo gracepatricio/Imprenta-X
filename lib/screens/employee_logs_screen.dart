@@ -1804,9 +1804,11 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
     final products = _items
         .map(
           (item) => {
-            'category': item.productData['category']?.toString() ?? '',
-            'qty': item.qty,
-            if (item.widthFt != null) 'width_ft': item.widthFt,
+            'category':     item.productData['category']?.toString() ?? '',
+            'name':         item.productData['product_name']?.toString() ?? '',
+            'qty':          item.qty,
+            'pricing_unit': item.productData['pricing_unit']?.toString(),
+            if (item.widthFt != null)  'width_ft':  item.widthFt,
             if (item.heightFt != null) 'height_ft': item.heightFt,
           },
         )
@@ -1834,9 +1836,9 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
     final fullyPaid = remaining < 0.01;
     final customerName = _nameCtrl.text.trim();
     final customerEmail = _emailCtrl.text.trim();
-    final turnaroundDays = _turnaround;
+    const turnaroundDays = 4;
     final estimatedCompletion = DateTime.now().add(
-      Duration(days: turnaroundDays),
+      const Duration(days: turnaroundDays),
     );
 
     setState(() => _submitting = true);
@@ -2398,9 +2400,9 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                               ),
                               child: Row(
                                 children: [
-                                  Text(
-                                    'Est. ~$_turnaround day${_turnaround == 1 ? '' : 's'}',
-                                    style: const TextStyle(
+                                  const Text(
+                                    'Est. Same day – 4 days',
+                                    style: TextStyle(
                                       color: _Glass.textSecondary,
                                       fontSize: 12,
                                     ),
@@ -6619,15 +6621,6 @@ class _QueueCard extends StatelessWidget {
                               dateStr,
                               style: const TextStyle(color: _Glass.textMuted, fontSize: 12),
                             ),
-                            if (turnaround != null) ...[
-                              const SizedBox(width: 6),
-                              const Icon(Icons.schedule, size: 11, color: _Glass.textMuted),
-                              const SizedBox(width: 3),
-                              Text(
-                                '~$turnaround day${turnaround == 1 ? '' : 's'}',
-                                style: const TextStyle(color: _Glass.textMuted, fontSize: 12),
-                              ),
-                            ],
                             const Spacer(),
                             GestureDetector(
                               onTap: () async {
@@ -6687,13 +6680,6 @@ class _QueueCard extends StatelessWidget {
                         const SizedBox(width: 4),
                         Text(dateStr,
                             style: const TextStyle(color: _Glass.textMuted, fontSize: 12)),
-                        if (turnaround != null) ...[
-                          const SizedBox(width: 8),
-                          const Icon(Icons.schedule, size: 11, color: _Glass.textMuted),
-                          const SizedBox(width: 4),
-                          Text('~$turnaround day${turnaround == 1 ? '' : 's'}',
-                              style: const TextStyle(color: _Glass.textMuted, fontSize: 12)),
-                        ],
                         const Spacer(),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
@@ -6886,14 +6872,13 @@ class _DueDateRow extends StatelessWidget {
 
     if (diff < 0) {
       color = _Glass.accentRose;
-      label =
-          'Overdue by ${-diff} day${diff == -1 ? '' : 's'} — ${_fmt(dueDate)}';
+      label = 'Overdue by ${-diff} day${diff == -1 ? '' : 's'} (${_fmt(dueDate)})';
     } else if (diff == 0) {
       color = _Glass.accentRose;
       label = 'Target completion: TODAY';
     } else if (diff == 1) {
       color = _Glass.accentAmber;
-      label = 'Target completion: Tomorrow (${_fmt(dueDate)})';
+      label = 'Target completion: Tomorrow, ${_fmt(dueDate)}';
     } else {
       color = _Glass.accentEmerald;
       label = 'Target completion: ${_fmt(dueDate)}';

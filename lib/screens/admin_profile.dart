@@ -493,11 +493,15 @@ class _AdminProfileState extends State<AdminProfile>
       );
       await user.reauthenticateWithCredential(credential);
       if (mounted) {
+        _slideCtrl.reset();
         setState(() {
           _verifyingCurrent = false;
           _pwStep = 1;
+          _pwError = null;
         });
-        _slideCtrl.forward(from: 0);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _slideCtrl.forward();
+        });
       }
     } on FirebaseAuthException catch (e) {
       String msg;

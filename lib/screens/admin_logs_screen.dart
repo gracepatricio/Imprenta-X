@@ -948,15 +948,6 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
         const Icon(Icons.calendar_today_outlined, size: 11, color: _G.textMuted),
         const SizedBox(width: 4),
         Text(dateStr, style: const TextStyle(color: _G.textMuted, fontSize: 12)),
-        if (turnaround != null) ...[
-          const SizedBox(width: 6),
-          const Icon(Icons.schedule, size: 11, color: _G.textMuted),
-          const SizedBox(width: 3),
-          Text(
-            '~$turnaround day${turnaround == 1 ? '' : 's'}',
-            style: const TextStyle(color: _G.textMuted, fontSize: 12),
-          ),
-        ],
       ],
     );
 
@@ -1614,14 +1605,13 @@ class _AdminDueDateRow extends StatelessWidget {
 
     if (diff < 0) {
       color = _G.accentRose;
-      label =
-          'Overdue by ${-diff} day${diff == -1 ? '' : 's'} — ${_fmt(dueDate)}';
+      label = 'Overdue by ${-diff} day${-diff == 1 ? '' : 's'} (${_fmt(dueDate)})';
     } else if (diff == 0) {
       color = _G.accentRose;
       label = 'Target completion: TODAY';
     } else if (diff == 1) {
       color = _G.accentAmber;
-      label = 'Target completion: Tomorrow (${_fmt(dueDate)})';
+      label = 'Target completion: Tomorrow, ${_fmt(dueDate)}';
     } else {
       color = _G.accentEmerald;
       label = 'Target completion: ${_fmt(dueDate)}';

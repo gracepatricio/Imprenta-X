@@ -438,7 +438,6 @@ class _MobileOrderCard extends StatelessWidget {
     final products =
         (data['products'] as List<dynamic>?)?.cast<Map>() ?? [];
     final total = (data['total_price'] as num?)?.toDouble() ?? 0.0;
-    final turnaround = data['turnaround_days'] as int?;
     final date = _fmtDate(data['created_at']);
     final color = _statusColor(status);
 
@@ -566,19 +565,6 @@ class _MobileOrderCard extends StatelessWidget {
           // Footer row
           Row(
             children: [
-              Icon(Icons.schedule,
-                  size: 12,
-                  color: Colors.white.withValues(alpha: 0.4)),
-              const SizedBox(width: 4),
-              Text(
-                turnaround != null
-                    ? '$turnaround day${turnaround == 1 ? '' : 's'}'
-                    : 'TBD',
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
-                    fontSize: 11),
-              ),
-              const SizedBox(width: 12),
               Icon(Icons.calendar_today,
                   size: 12,
                   color: Colors.white.withValues(alpha: 0.4)),
@@ -650,7 +636,7 @@ class _MobileDueDateRow extends StatelessWidget {
 
     if (diff < 0) {
       color = Colors.redAccent;
-      label = 'Overdue by ${-diff} day${diff == -1 ? '' : 's'} (${_fmt(dueDate)})';
+      label = 'Overdue by ${-diff} day${-diff == 1 ? '' : 's'} (${_fmt(dueDate)})';
     } else if (diff == 0) {
       color = Colors.redAccent;
       label = 'Target completion: TODAY';

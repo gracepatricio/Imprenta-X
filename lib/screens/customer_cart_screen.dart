@@ -145,24 +145,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     final minPay = _downpayment;
 
     final summaryItems = selectedList.map((i) => items[i]).toList();
-    final productMapsPreview = summaryItems
-        .map(
-          (item) => {
-            'category': item.category,
-            'qty': item.quantity,
-            if (item.widthFt != null) 'width_ft': item.widthFt,
-            if (item.heightFt != null) 'height_ft': item.heightFt,
-          },
-        )
-        .toList();
-    final turnaroundDays = TurnaroundService.computeOrderDays(
-      productMapsPreview,
-    );
-    final turnaroundLabel = () {
-      if (turnaroundDays <= 1) return '~1 business day';
-      if (turnaroundDays <= 3) return '~$turnaroundDays business days';
-      return '~$turnaroundDays days';
-    }();
+    const turnaroundLabel = 'Same day – 4 days';
 
     final amountCtrl = TextEditingController(text: minPay.toStringAsFixed(2));
 
@@ -826,19 +809,9 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
 
       // 3. Turnaround
       final selectedItems = selectedList.map((i) => items[i]).toList();
-      final productMaps = selectedItems
-          .map(
-            (item) => {
-              'category': item.category,
-              'qty': item.quantity,
-              if (item.widthFt != null) 'width_ft': item.widthFt,
-              if (item.heightFt != null) 'height_ft': item.heightFt,
-            },
-          )
-          .toList();
-      final turnaroundDays = TurnaroundService.computeOrderDays(productMaps);
+      const turnaroundDays = 4;
       final estimatedCompletion = DateTime.now().add(
-        Duration(days: turnaroundDays),
+        const Duration(days: turnaroundDays),
       );
 
       // 4. Create PayMongo link
