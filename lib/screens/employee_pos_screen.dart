@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
 import 'invoice_screen.dart';
@@ -202,7 +203,39 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
             // do NOT create a new record on a balance payment.
           }
 
-          // ── 5. Refresh orders panel ───────────────────────────────────
+          // ── 5. POS Activity Log ───────────────────────────────────────
+          try {
+            final user = FirebaseAuth.instance.currentUser;
+            if (user != null) {
+              String employeeName = user.displayName ?? user.email ?? 'Employee';
+              String employeeDisplayId = '';
+              try {
+                final userDoc = await _db.collection('User').doc(user.uid).get();
+                if (userDoc.exists) {
+                  employeeName = userDoc.data()?['full_name'] ?? employeeName;
+                  employeeDisplayId = userDoc.data()?['employee_id']?.toString() ?? '';
+                }
+              } catch (_) {}
+              await _db.collection('PosActivityLogs').add({
+                'employee_uid':        user.uid,
+                'employee_name':       employeeName,
+                'employee_display_id': employeeDisplayId,
+                'order_id':            salesOrderId,
+                'customer_name':       custName,
+                'customer_id':         custId,
+                'amount_paid':         cashPaid,
+                'total_order':         total,
+                'payment_type':        wasFullyPaid
+                    ? (prevPaid == 0 ? 'full' : 'balance')
+                    : 'downpayment',
+                'timestamp':           FieldValue.serverTimestamp(),
+              });
+            }
+          } catch (e) {
+            debugPrint('[POSLog] write failed: $e');
+          }
+
+          // ── 6. Refresh orders panel ───────────────────────────────────
           _loadOrdersWithBalance();
         },
       ),

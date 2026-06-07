@@ -4857,6 +4857,7 @@ class _ReadyOrderCard extends StatelessWidget {
 
     final db = FirebaseFirestore.instance;
     await db.collection('Orders').doc(orderId).update({'status': 'completed'});
+    await _logJobQueueActivity(orderId: orderId, action: 'completed');
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -5232,6 +5233,60 @@ class _ReadyOrderCard extends StatelessWidget {
 }
 
 // =============================================================================
+// _logJobQueueActivity — writes one entry to JobQueueActivityLogs
+// =============================================================================
+Future<void> _logJobQueueActivity({
+  required String orderId,
+  required String action,
+  String cancelReason = '',
+  double? amountRefunded,
+}) async {
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    String empName = user.displayName ?? user.email ?? 'Employee';
+    String empDisplayId = '';
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('User')
+          .doc(user.uid)
+          .get();
+      if (doc.exists) {
+        empName = doc.data()?['full_name'] ?? empName;
+        empDisplayId = doc.data()?['employee_id']?.toString() ?? '';
+      }
+    } catch (_) {}
+    final payload = <String, dynamic>{
+      'employee_uid': user.uid,
+      'employee_name': empName,
+      'employee_display_id': empDisplayId,
+      'order_id': orderId,
+      'action': action,
+      'timestamp': FieldValue.serverTimestamp(),
+    };
+    if (cancelReason.isNotEmpty) payload['cancel_reason'] = cancelReason;
+    if (amountRefunded != null) payload['amount_refunded'] = amountRefunded;
+    try {
+      final orderDoc = await FirebaseFirestore.instance
+          .collection('Orders')
+          .doc(orderId)
+          .get();
+      if (orderDoc.exists) {
+        payload['customer_name'] =
+            orderDoc.data()?['customer_name']?.toString() ?? '';
+        payload['customer_id'] =
+            orderDoc.data()?['customer_id']?.toString() ?? '';
+      }
+    } catch (_) {}
+    await FirebaseFirestore.instance
+        .collection('JobQueueActivityLogs')
+        .add(payload);
+  } catch (e) {
+    debugPrint('[JQLog] write failed: $e');
+  }
+}
+
+// =============================================================================
 // _RefundPickupSection
 // =============================================================================
 class _RefundPickupSection extends StatelessWidget {
@@ -5345,6 +5400,11 @@ class _RefundPickupSection extends StatelessWidget {
       'refund_picked_up_at': FieldValue.serverTimestamp(),
     });
     await batch.commit();
+    await _logJobQueueActivity(
+      orderId: orderId,
+      action: 'refund_confirmed',
+      amountRefunded: actualPaid > 0.01 ? actualPaid : null,
+    );
 
     if (actualPaid > 0.01) {
       await db.collection('Sales_Records').add({
@@ -5786,6 +5846,11 @@ class _QueueCard extends StatelessWidget {
     }
 
     await batch.commit();
+    await _logJobQueueActivity(
+      orderId: orderId,
+      action: 'cancelled',
+      cancelReason: finalReason,
+    );
 
     if (customerUid != null && customerUid.isNotEmpty) {
       final threadRef = FirebaseFirestore.instance
@@ -5912,6 +5977,7 @@ class _QueueCard extends StatelessWidget {
       'status': 'in_production',
     });
     await batch.commit();
+    await _logJobQueueActivity(orderId: orderId, action: 'started');
 
     final allDeductionLines = <String>[];
     final deductionErrors = <String>[];
@@ -6145,6 +6211,7 @@ class _QueueCard extends StatelessWidget {
 
     batch.update(db.collection('Orders').doc(orderId), {'status': 'ready'});
     await batch.commit();
+    await _logJobQueueActivity(orderId: orderId, action: 'marked_ready');
 
     if (customerUid != null && customerUid.isNotEmpty) {
       final balanceNote = remaining > 0

@@ -136,6 +136,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
   String? _statusFilter;
   String _employeeName = '';
   String _employeeUid = '';
+  String _employeeDisplayId = '';
 
   // Counts fed up from the stream so header pills stay live
   Map<String, int> _counts = {};
@@ -178,6 +179,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
         _employeeName =
             doc.data()?['full_name'] ?? user.displayName ?? 'Employee';
         _employeeUid = user.uid;
+        _employeeDisplayId = doc.data()?['employee_id']?.toString() ?? '';
       });
     }
   }
@@ -814,6 +816,7 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
           'new_stock': newStock,
           'updated_by_uid': _employeeUid,
           'updated_by_name': _employeeName,
+          'updated_by_display_id': _employeeDisplayId,
           'timestamp': FieldValue.serverTimestamp(),
           'update_method': method,
         });
