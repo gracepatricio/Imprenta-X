@@ -893,7 +893,9 @@ class _ProductCardState extends State<_ProductCard> {
                     imageUrl.isNotEmpty
                         ? Image.network(
                             imageUrl,
-                            fit: BoxFit.contain,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
                             errorBuilder: (_, __, ___) => _placeholder(),
                           )
                         : _placeholder(),
@@ -964,7 +966,7 @@ class _ProductCardState extends State<_ProductCard> {
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
-                              fontSize: 13,
+                              fontSize: 17,
                               height: 1.3,
                             ),
                             maxLines: 2,
@@ -1004,7 +1006,7 @@ class _ProductCardState extends State<_ProductCard> {
                               cardDesc,
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.45),
-                                fontSize: 11,
+                                fontSize: 12,
                                 height: 1.35,
                               ),
                               maxLines: 1,
@@ -1023,7 +1025,7 @@ class _ProductCardState extends State<_ProductCard> {
                             style: TextStyle(
                               color: AppTheme.gold,
                               fontWeight: FontWeight.w800,
-                              fontSize: 13,
+                              fontSize: 15,
                               shadows: [
                                 Shadow(
                                   color: AppTheme.gold.withValues(alpha: 0.35),
