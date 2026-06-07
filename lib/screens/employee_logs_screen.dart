@@ -589,6 +589,8 @@ class _JobQueueSection extends StatefulWidget {
 
 class _JobQueueSectionState extends State<_JobQueueSection> {
   late _QueueSubTab _sub;
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
   static const _statusTabs = [
     (
@@ -620,6 +622,12 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
   }
 
   @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isHistory = _sub == _QueueSubTab.history;
 
@@ -632,73 +640,161 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!isHistory)
-              Row(
-                children: [
-                  Expanded(
-                    child: _PillSegmentControl<_QueueSubTab>(
-                      selected: _sub,
-                      items: _statusTabs
-                          .map(
-                            (t) => _PillSegmentItem(
-                              value: t.$1,
-                              label: t.$2,
-                              icon: t.$3,
-                              accent: t.$4,
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() => _sub = v),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => setState(() => _sub = _QueueSubTab.history),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 9,
-                      ),
-                      decoration: _Glass.solidPill(const Color(0xFF8B5CF6)),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.history_rounded,
-                            size: 13,
-                            color: Colors.white,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final w = constraints.maxWidth;
+
+                  // Natural (preferred) widths at full screen
+                  const searchNatural = 200.0;
+                  const addW = 32.0;
+                  const gap = 8.0;
+                  const historyFullW = 94.0;  // icon + "History" text + padding
+                  const historyIconW = 32.0;  // icon-only, matches Add button
+
+                  // Below this breakpoint, collapse History label to icon-only
+                  // (200 search + 8 gap + pills~380 + 8 gap + 94 history + 8 gap + 32 add = 730)
+                  const compactBreak = 730.0;
+                  final compact = w < compactBreak;
+                  final historyW = compact ? historyIconW : historyFullW;
+
+                  // Minimum gap reserved between pills and History button
+                  const minPillsGap = 12.0;
+
+                  // Space left for [search][gap][pills] after right group + reserved gap
+                  final leftAvail = (w - gap - historyW - gap - addW - minPillsGap).clamp(140.0, double.infinity);
+
+                  // Search: full natural width when there's room, scales down proportionally
+                  final searchW = searchNatural.clamp(0.0, leftAvail * 0.40);
+
+                  // Pills: uncapped on wide screens (take natural size); capped on narrow
+                  final pillsMaxW = (leftAvail - searchW).clamp(60.0, double.infinity);
+
+                  final pills = _PillSegmentControl<_QueueSubTab>(
+                    selected: _sub,
+                    items: _statusTabs
+                        .map(
+                          (t) => _PillSegmentItem(
+                            value: t.$1,
+                            label: t.$2,
+                            icon: t.$3,
+                            accent: t.$4,
                           ),
-                          SizedBox(width: 6),
-                          Text(
-                            'History',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      _searchCtrl.clear();
+                      setState(() {
+                        _sub = v;
+                        _searchQuery = '';
+                      });
+                    },
+                  );
+
+                  return Row(
+                    children: [
+                      // Search bar — grows to natural 200px on wide screens
+                      SizedBox(
+                        width: searchW,
+                        height: 34,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: _Glass.surfaceMid,
+                            borderRadius: BorderRadius.circular(99),
+                            border: Border.all(color: _Glass.borderMid, width: 0.9),
                           ),
-                        ],
+                          child: Row(
+                            children: [
+                              const SizedBox(width: 9),
+                              const Icon(Icons.search_rounded, size: 14, color: _Glass.textMuted),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: TextField(
+                                  controller: _searchCtrl,
+                                  onChanged: (v) => setState(() => _searchQuery = v.trim().toLowerCase()),
+                                  style: const TextStyle(color: _Glass.textPrimary, fontSize: 11),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Order ID · Customer Name/ID',
+                                    hintStyle: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                ),
+                              ),
+                              if (_searchQuery.isNotEmpty)
+                                GestureDetector(
+                                  onTap: () {
+                                    _searchCtrl.clear();
+                                    setState(() => _searchQuery = '');
+                                  },
+                                  child: const Padding(
+                                    padding: EdgeInsets.only(right: 7),
+                                    child: Icon(Icons.close_rounded, size: 13, color: _Glass.textMuted),
+                                  ),
+                                )
+                              else
+                                const SizedBox(width: 7),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (_) => const _AddWalkInJobDialog(),
-                    ),
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: _Glass.solidPill(_navyBlue, glow: true),
-                      child: const Icon(
-                        Icons.add_rounded,
-                        size: 18,
-                        color: Colors.white,
+                      const SizedBox(width: 8),
+                      // Pills — uncapped on wide screens, scrollable on narrow
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: pillsMaxW),
+                        child: pills,
                       ),
-                    ),
-                  ),
-                ],
+                      // Guaranteed minimum gap between pills and History
+                      SizedBox(width: minPillsGap),
+                      // Spacer fills any remaining space, keeping History/+ at right edge
+                      const Spacer(),
+                      // History — full label on wide, icon-only on narrow
+                      GestureDetector(
+                        onTap: () => setState(() => _sub = _QueueSubTab.history),
+                        child: compact
+                            ? Container(
+                                width: historyIconW,
+                                height: historyIconW,
+                                decoration: _Glass.solidPill(const Color(0xFF8B5CF6)),
+                                child: const Icon(Icons.history_rounded, size: 16, color: Colors.white),
+                              )
+                            : Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                                decoration: _Glass.solidPill(const Color(0xFF8B5CF6)),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.history_rounded, size: 13, color: Colors.white),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'History',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (_) => const _AddWalkInJobDialog(),
+                        ),
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: _Glass.solidPill(_navyBlue, glow: true),
+                          child: const Icon(Icons.add_rounded, size: 18, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             if (!isHistory) const SizedBox(height: 10),
             if (!isHistory) const _DeadlineAlertBanner(),
@@ -719,13 +815,13 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
   Widget _buildQueueContent() {
     switch (_sub) {
       case _QueueSubTab.pending:
-        return const _QueueList(jobStatus: 'pending');
+        return _QueueList(jobStatus: 'pending', searchQuery: _searchQuery);
       case _QueueSubTab.active:
-        return const _QueueList(jobStatus: 'active');
+        return _QueueList(jobStatus: 'active', searchQuery: _searchQuery);
       case _QueueSubTab.ready:
-        return const _ReadyForPickupList();
+        return _ReadyForPickupList(searchQuery: _searchQuery);
       case _QueueSubTab.cancelled:
-        return const _QueueList(jobStatus: 'cancelled');
+        return _QueueList(jobStatus: 'cancelled', searchQuery: _searchQuery);
       case _QueueSubTab.history:
         return _EmployeeOrderHistory(
           onBack: () => setState(() => _sub = _QueueSubTab.pending),
@@ -1624,6 +1720,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
 
   String _paymentMethod = 'cash';
   bool _submitting = false;
+  bool _showProductError = false;
   final List<_WalkInItem> _items = [];
   List<QueryDocumentSnapshot> _products = [];
   bool _loadingProducts = true;
@@ -1681,13 +1778,9 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add at least one product.')),
-      );
-      return;
-    }
+    final formOk = _formKey.currentState!.validate();
+    if (_items.isEmpty) setState(() => _showProductError = true);
+    if (!formOk || _items.isEmpty) return;
     final paidAmount = double.tryParse(_paidCtrl.text.trim()) ?? 0.0;
     final total = _total;
     final remaining = (total - paidAmount).clamp(0.0, double.infinity);
@@ -1837,16 +1930,38 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
     if (current < min) _paidCtrl.text = min.toStringAsFixed(2);
   }
 
+  void _showEditItemDialog(int index, _WalkInItem item) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.7),
+      builder: (_) => _WalkInCustomizeDialog(
+        products: _products,
+        editItem: item,
+        onAdd: (updatedItem) {
+          if (mounted) {
+            setState(() {
+              _items[index] = updatedItem;
+              _updateDefaultDownpayment();
+            });
+          }
+        },
+      ),
+    );
+  }
+
   void _showAddProductDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.7),
       builder: (_) => _WalkInCustomizeDialog(
         products: _products,
         onAdd: (item) {
           if (mounted) {
             setState(() {
               _items.add(item);
+              _showProductError = false;
               _updateDefaultDownpayment();
             });
           }
@@ -1996,9 +2111,9 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                                     horizontal: 14,
                                     vertical: 7,
                                   ),
-                                  decoration: _Glass.solidPill(
-                                    _navyBlue,
-                                    glow: true,
+                                  decoration: BoxDecoration(
+                                    color: _navyBlue,
+                                    borderRadius: BorderRadius.circular(99),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -2027,20 +2142,46 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                           ),
                           const SizedBox(height: 8),
 
-                          if (_items.isEmpty)
+                          if (_items.isEmpty) ...[
                             Container(
                               padding: const EdgeInsets.all(14),
-                              decoration: _Glass.glass(radius: 10),
-                              child: const Center(
+                              decoration: BoxDecoration(
+                                color: _showProductError
+                                    ? _Glass.accentRose.withValues(alpha: 0.04)
+                                    : _Glass.surfaceMid,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: _showProductError
+                                      ? _Glass.accentRose.withValues(alpha: 0.55)
+                                      : _Glass.borderMid,
+                                  width: _showProductError ? 1.2 : 0.9,
+                                ),
+                              ),
+                              child: Center(
                                 child: Text(
                                   'No products added yet.',
                                   style: TextStyle(
-                                    color: _Glass.textMuted,
+                                    color: _showProductError
+                                        ? _Glass.accentRose
+                                        : _Glass.textMuted,
                                     fontSize: 13,
                                   ),
                                 ),
                               ),
-                            )
+                            ),
+                            if (_showProductError)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 4, left: 4),
+                                child: Text(
+                                  'Add at least 1 product.',
+                                  style: TextStyle(
+                                    color: _Glass.accentRose,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                          ]
                           else
                             ..._items.asMap().entries.map((e) {
                               final i = e.key;
@@ -2054,7 +2195,30 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                                 padding: const EdgeInsets.all(12),
                                 decoration: _Glass.glass(radius: 12),
                                 child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    // Product thumbnail
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: SizedBox(
+                                        width: 48,
+                                        height: 48,
+                                        child: (item.productData['image_url']?.toString() ?? '').isNotEmpty
+                                            ? Image.network(
+                                                item.productData['image_url'],
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (_, __, ___) => Container(
+                                                  color: _Glass.surfaceThin,
+                                                  child: const Icon(Icons.image_not_supported_outlined, size: 20, color: _Glass.textMuted),
+                                                ),
+                                              )
+                                            : Container(
+                                                color: _Glass.surfaceThin,
+                                                child: const Icon(Icons.image_not_supported_outlined, size: 20, color: _Glass.textMuted),
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -2128,6 +2292,25 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                                         ],
                                       ),
                                     ),
+                                    const SizedBox(width: 6),
+                                    // Edit button
+                                    GestureDetector(
+                                      onTap: () => _showEditItemDialog(i, item),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF0F1A2E).withValues(alpha: 0.08),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.edit_outlined,
+                                          color: Color(0xFF0F1A2E),
+                                          size: 16,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    // Remove button
                                     GestureDetector(
                                       onTap: () =>
                                           setState(() => _items.removeAt(i)),
@@ -2239,13 +2422,6 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                               return null;
                             },
                           ),
-                          const SizedBox(height: 10),
-                          _GlassFormField(
-                            controller: _notesCtrl,
-                            hint: 'Order Notes (optional)',
-                            icon: Icons.notes_outlined,
-                            maxLines: 2,
-                          ),
                         ],
                       ),
                     ),
@@ -2262,7 +2438,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                               : () => Navigator.pop(context),
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: _Glass.glass(radius: 12),
+                            decoration: _Glass.glass(radius: 99),
                             child: const Center(
                               child: Text(
                                 'Cancel',
@@ -2429,8 +2605,9 @@ class _GlassFormField extends StatelessWidget {
 class _WalkInCustomizeDialog extends StatefulWidget {
   final List<QueryDocumentSnapshot> products;
   final ValueChanged<_WalkInItem> onAdd;
+  final _WalkInItem? editItem;
 
-  const _WalkInCustomizeDialog({required this.products, required this.onAdd});
+  const _WalkInCustomizeDialog({required this.products, required this.onAdd, this.editItem});
 
   @override
   State<_WalkInCustomizeDialog> createState() => _WalkInCustomizeDialogState();
@@ -2463,10 +2640,14 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
   bool _availabilityLoaded = false;
   double? _maxOrderable;
 
-  // Design files
+  // Design files — new picks (have bytes for upload)
   final List<_WalkInDesignFile> _files = [];
+  // Already-uploaded files from a previous save (edit mode)
+  List<String> _existingFileUrls = [];
+  List<String> _existingFileNames = [];
   static const int _maxFileMB = 25;
   bool _uploading = false;
+  bool _showFileError = false;
 
   // ── Size presets ─────────────────────────────────────────────────────────
   static const _sizePresets = [
@@ -2505,6 +2686,41 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
     'Stickers & Labels',
     'Photo & Card Prints',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final edit = widget.editItem;
+    if (edit != null) {
+      // Find the matching product doc in the products list
+      final doc = widget.products.where((d) => d.id == edit.productDocId).firstOrNull;
+      if (doc != null) {
+        _selected = doc;
+        _step = 1;
+        _qty = edit.qty;
+        _qtyCtrl.text = '${edit.qty}';
+        _notesCtrl.text = edit.notes;
+        _material = edit.material;
+        _existingFileUrls = List.from(edit.fileUrls);
+        _existingFileNames = List.from(edit.fileNames);
+        _selectedServices
+          ..clear()
+          ..addAll(edit.selectedServices.map((s) => s['name']?.toString() ?? '').where((n) => n.isNotEmpty));
+        if (edit.widthFt != null) {
+          _widthFt = edit.widthFt!;
+          final isSqIn = (doc.data() as Map<String, dynamic>)['pricing_unit']?.toString() == 'per_sqin';
+          _widthCtrl.text = isSqIn ? (edit.widthFt! * 12).toStringAsFixed(0) : '${edit.widthFt}';
+        }
+        if (edit.heightFt != null) {
+          _heightFt = edit.heightFt!;
+          final isSqIn = (doc.data() as Map<String, dynamic>)['pricing_unit']?.toString() == 'per_sqin';
+          _heightCtrl.text = isSqIn ? (edit.heightFt! * 12).toStringAsFixed(0) : '${edit.heightFt}';
+        }
+        _sizePreset = 'Custom';
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadAvailability());
+    }
+  }
 
   @override
   void dispose() {
@@ -2677,6 +2893,7 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
             rejected.add('${pf.name} (${mb.toStringAsFixed(1)} MB)');
           } else {
             _files.add(_WalkInDesignFile(name: pf.name, bytes: pf.bytes));
+            _showFileError = false;
           }
         }
       });
@@ -2771,12 +2988,8 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
       ).showSnackBar(const SnackBar(content: Text('Please select a variant.')));
       return;
     }
-    if (_files.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please upload at least one design file.'),
-        ),
-      );
+    if (_files.isEmpty && _existingFileUrls.isEmpty) {
+      setState(() => _showFileError = true);
       return;
     }
     if (_maxOrderable != null) {
@@ -2796,8 +3009,9 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
     }
 
     setState(() => _uploading = true);
-    final fileUrls = <String>[];
-    final fileNames = <String>[];
+    // Start with already-uploaded files (edit mode), then append new uploads
+    final fileUrls = List<String>.from(_existingFileUrls);
+    final fileNames = List<String>.from(_existingFileNames);
     try {
       final ts = DateTime.now().millisecondsSinceEpoch;
       for (int i = 0; i < _files.length; i++) {
@@ -2930,7 +3144,7 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
           // Back / close button
           GestureDetector(
             onTap: () {
-              if (_step == 1) {
+              if (_step == 1 && widget.editItem == null) {
                 setState(() => _step = 0);
               } else {
                 Navigator.pop(context);
@@ -2945,7 +3159,7 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                 border: Border.all(color: _Glass.borderMid, width: 0.9),
               ),
               child: Icon(
-                _step == 1
+                (_step == 1 && widget.editItem == null)
                     ? Icons.arrow_back_ios_new_rounded
                     : Icons.close_rounded,
                 size: 14,
@@ -2978,22 +3192,6 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
               ],
             ),
           ),
-          // Step dots
-          Row(
-            children: List.generate(2, (i) {
-              final active = _step == i;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.only(left: 6),
-                width: active ? 20 : 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: active ? _navyBlue : _Glass.borderMid,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              );
-            }),
-          ),
         ],
       ),
     );
@@ -3017,6 +3215,13 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                   color: _Glass.surfaceThin,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: _Glass.borderMid, width: 0.8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: TextField(
                   controller: _searchCtrl,
@@ -3707,45 +3912,125 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                   style: TextStyle(color: _Glass.textMuted, fontSize: 11),
                 ),
                 const SizedBox(height: 10),
+                // ── Already-uploaded files (edit mode) ────────────────
+                if (_existingFileNames.isNotEmpty) ...[
+                  ..._existingFileNames.asMap().entries.map(
+                    (e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _Glass.accentEmerald.withValues(alpha: 0.07),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _Glass.accentEmerald.withValues(alpha: 0.22),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle_outline, size: 15, color: _Glass.accentEmerald),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                e.value,
+                                style: const TextStyle(
+                                  color: _Glass.textPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () => setState(() {
+                                _existingFileUrls.removeAt(e.key);
+                                _existingFileNames.removeAt(e.key);
+                              }),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: _Glass.accentRose.withValues(alpha: 0.08),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.close_rounded, size: 13, color: _Glass.accentRose),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                ],
+                // ── Upload area ───────────────────────────────────────
                 GestureDetector(
                   onTap: _pickFiles,
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: _files.isEmpty
+                      color: _showFileError && _files.isEmpty && _existingFileUrls.isEmpty
+                          ? _Glass.accentRose.withValues(alpha: 0.04)
+                          : (_files.isEmpty && _existingFileUrls.isEmpty)
                           ? _Glass.surfaceThin
                           : _Glass.accentBlue.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: _files.isEmpty
+                        color: _showFileError && _files.isEmpty && _existingFileUrls.isEmpty
+                            ? _Glass.accentRose.withValues(alpha: 0.70)
+                            : (_files.isEmpty && _existingFileUrls.isEmpty)
                             ? _Glass.borderMid
                             : _Glass.accentBlue.withValues(alpha: 0.35),
-                        width: _files.isEmpty ? 0.9 : 1.2,
+                        width: _showFileError && _files.isEmpty && _existingFileUrls.isEmpty
+                            ? 1.5
+                            : ((_files.isEmpty && _existingFileUrls.isEmpty) ? 0.9 : 1.2),
                       ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Column(
                       children: [
                         Icon(
                           Icons.cloud_upload_outlined,
                           size: 32,
-                          color: _files.isEmpty
+                          color: _showFileError && _files.isEmpty && _existingFileUrls.isEmpty
+                              ? _Glass.accentRose
+                              : (_files.isEmpty && _existingFileUrls.isEmpty)
                               ? _Glass.textMuted
                               : _Glass.accentBlue,
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          _files.isEmpty
+                          (_files.isEmpty && _existingFileUrls.isEmpty)
                               ? 'Tap to upload design files'
                               : 'Tap to add more files',
                           style: TextStyle(
-                            color: _files.isEmpty
+                            color: _showFileError && _files.isEmpty && _existingFileUrls.isEmpty
+                                ? _Glass.accentRose
+                                : (_files.isEmpty && _existingFileUrls.isEmpty)
                                 ? _Glass.textMuted
                                 : _Glass.accentBlue,
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
+                        if (_showFileError && _files.isEmpty && _existingFileUrls.isEmpty) ...[
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Design file is required',
+                            style: TextStyle(
+                              color: _Glass.accentRose,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                         if (_files.isNotEmpty) ...[
                           const SizedBox(height: 12),
                           ..._files.asMap().entries.map(
@@ -3757,14 +4042,10 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                                   vertical: 8,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: _Glass.accentBlue.withValues(
-                                    alpha: 0.07,
-                                  ),
+                                  color: _Glass.accentBlue.withValues(alpha: 0.07),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: _Glass.accentBlue.withValues(
-                                      alpha: 0.20,
-                                    ),
+                                    color: _Glass.accentBlue.withValues(alpha: 0.20),
                                     width: 0.8,
                                   ),
                                 ),
@@ -3788,15 +4069,11 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                                       ),
                                     ),
                                     GestureDetector(
-                                      onTap: () => setState(
-                                        () => _files.removeAt(e.key),
-                                      ),
+                                      onTap: () => setState(() => _files.removeAt(e.key)),
                                       child: Container(
                                         padding: const EdgeInsets.all(4),
                                         decoration: BoxDecoration(
-                                          color: _Glass.accentRose.withValues(
-                                            alpha: 0.08,
-                                          ),
+                                          color: _Glass.accentRose.withValues(alpha: 0.08),
                                           shape: BoxShape.circle,
                                         ),
                                         child: const Icon(
@@ -3826,6 +4103,13 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                     color: _Glass.surfaceThin,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: _Glass.borderMid, width: 0.8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: TextField(
                     controller: _notesCtrl,
@@ -3918,15 +4202,15 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                           ),
                         ),
                       ] else ...[
-                        const Icon(
-                          Icons.add_shopping_cart_rounded,
+                        Icon(
+                          widget.editItem != null ? Icons.check_rounded : Icons.add_shopping_cart_rounded,
                           size: 16,
                           color: Colors.white,
                         ),
                         const SizedBox(width: 8),
-                        const Text(
-                          'Add to Order',
-                          style: TextStyle(
+                        Text(
+                          widget.editItem != null ? 'Save Changes' : 'Add to Order',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
@@ -3966,6 +4250,13 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                   color: _Glass.surfaceThin,
                   borderRadius: BorderRadius.circular(99),
                   border: Border.all(color: _Glass.borderMid, width: 0.9),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
           child: Text(
             label,
@@ -4054,7 +4345,8 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
 // =============================================================================
 class _QueueList extends StatefulWidget {
   final String jobStatus;
-  const _QueueList({required this.jobStatus});
+  final String searchQuery;
+  const _QueueList({required this.jobStatus, this.searchQuery = ''});
 
   @override
   State<_QueueList> createState() => _QueueListState();
@@ -4106,7 +4398,7 @@ class _QueueListState extends State<_QueueList> {
           );
         }
 
-        final docs = [...(snap.data?.docs ?? [])]
+        final allDocs = [...(snap.data?.docs ?? [])]
           ..sort((a, b) {
             final ta =
                 (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
@@ -4118,7 +4410,18 @@ class _QueueListState extends State<_QueueList> {
             return ta.compareTo(tb);
           });
 
-        if (docs.isEmpty) {
+        final q = widget.searchQuery;
+        final docs = q.isEmpty
+            ? allDocs
+            : allDocs.where((doc) {
+                final d = doc.data() as Map<String, dynamic>;
+                final orderId = (d['order_id']?.toString() ?? '').toLowerCase();
+                final name = (d['customer_name']?.toString() ?? '').toLowerCase();
+                final uid = (d['customer_uid']?.toString() ?? '').toLowerCase();
+                return orderId.contains(q) || name.contains(q) || uid.contains(q);
+              }).toList();
+
+        if (allDocs.isEmpty) {
           final icon = widget.jobStatus == 'pending'
               ? Icons.queue_outlined
               : widget.jobStatus == 'cancelled'
@@ -4152,10 +4455,40 @@ class _QueueListState extends State<_QueueList> {
           );
         }
 
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: _Glass.glass(radius: 20, elevated: true),
+                  child: const Icon(Icons.search_off_rounded, size: 28, color: _Glass.textMuted),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'No orders match your search',
+                  style: TextStyle(
+                    color: _Glass.textSecondary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Try searching by Order ID, Customer Name, or Customer ID',
+                  style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
+
         return Scrollbar(
           controller: _scrollCtrl,
           thumbVisibility: true,
-          trackVisibility: true,
           child: ListView.separated(
             controller: _scrollCtrl,
             padding: const EdgeInsets.only(bottom: 16),
@@ -4181,7 +4514,8 @@ class _QueueListState extends State<_QueueList> {
 // _ReadyForPickupList
 // =============================================================================
 class _ReadyForPickupList extends StatefulWidget {
-  const _ReadyForPickupList();
+  final String searchQuery;
+  const _ReadyForPickupList({this.searchQuery = ''});
 
   @override
   State<_ReadyForPickupList> createState() => _ReadyForPickupListState();
@@ -4222,7 +4556,7 @@ class _ReadyForPickupListState extends State<_ReadyForPickupList> {
           );
         }
 
-        final docs = [...(snap.data?.docs ?? [])]
+        final allDocs = [...(snap.data?.docs ?? [])]
           ..sort((a, b) {
             final ta =
                 (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
@@ -4234,7 +4568,18 @@ class _ReadyForPickupListState extends State<_ReadyForPickupList> {
             return ta.compareTo(tb);
           });
 
-        if (docs.isEmpty) {
+        final q = widget.searchQuery;
+        final docs = q.isEmpty
+            ? allDocs
+            : allDocs.where((doc) {
+                final d = doc.data() as Map<String, dynamic>;
+                final orderId = (d['order_id']?.toString() ?? '').toLowerCase();
+                final name = (d['customer_name']?.toString() ?? '').toLowerCase();
+                final uid = (d['customer_uid']?.toString() ?? '').toLowerCase();
+                return orderId.contains(q) || name.contains(q) || uid.contains(q);
+              }).toList();
+
+        if (allDocs.isEmpty) {
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -4263,10 +4608,40 @@ class _ReadyForPickupListState extends State<_ReadyForPickupList> {
           );
         }
 
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: _Glass.glass(radius: 20, elevated: true),
+                  child: const Icon(Icons.search_off_rounded, size: 28, color: _Glass.textMuted),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'No orders match your search',
+                  style: TextStyle(
+                    color: _Glass.textSecondary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Try searching by Order ID, Customer Name, or Customer ID',
+                  style: TextStyle(color: _Glass.textMuted, fontSize: 11),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
+
         return Scrollbar(
           controller: _scrollCtrl,
           thumbVisibility: true,
-          trackVisibility: true,
           child: ListView.builder(
             controller: _scrollCtrl,
             padding: const EdgeInsets.only(bottom: 16),
@@ -5114,6 +5489,7 @@ class _QueueCard extends StatelessWidget {
     String selectedReason = '';
     String customReason = '';
     bool isOther = false;
+    bool showReasonError = false;
     final customCtrl = TextEditingController();
 
     const reasons = [
@@ -5172,17 +5548,20 @@ class _QueueCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: _Glass.surfaceThin,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: _Glass.borderMid, width: 0.9),
+                    border: Border.all(
+                      color: showReasonError ? _Glass.accentRose : _Glass.borderMid,
+                      width: showReasonError ? 1.4 : 0.9,
+                    ),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: selectedReason.isEmpty ? null : selectedReason,
-                      hint: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
+                      hint: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: Text(
                           'Select a reason…',
                           style: TextStyle(
-                            color: _Glass.textMuted,
+                            color: showReasonError ? _Glass.accentRose : _Glass.textMuted,
                             fontSize: 13,
                           ),
                         ),
@@ -5222,6 +5601,7 @@ class _QueueCard extends StatelessWidget {
                         setS(() {
                           selectedReason = val;
                           isOther = val == 'Others';
+                          showReasonError = false;
                           if (!isOther) {
                             customCtrl.clear();
                             customReason = '';
@@ -5231,6 +5611,19 @@ class _QueueCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (showReasonError) ...[
+                  const SizedBox(height: 5),
+                  const Row(
+                    children: [
+                      Icon(Icons.error_outline, size: 12, color: _Glass.accentRose),
+                      SizedBox(width: 4),
+                      Text(
+                        'Please select a reason.',
+                        style: TextStyle(color: _Glass.accentRose, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ],
                 if (isOther) ...[
                   const SizedBox(height: 10),
                   Container(
@@ -5289,13 +5682,7 @@ class _QueueCard extends StatelessWidget {
                       onTap: () {
                         final reason = isOther ? customReason : selectedReason;
                         if (reason.isEmpty) {
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Please select a cancellation reason.',
-                              ),
-                            ),
-                          );
+                          setS(() => showReasonError = true);
                           return;
                         }
                         Navigator.pop(ctx, true);
@@ -5896,23 +6283,15 @@ class _QueueCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            orderId,
-                            style: const TextStyle(
-                              color: _Glass.textPrimary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
                           Row(
                             children: [
                               Text(
-                                customerName,
+                                orderId,
                                 style: const TextStyle(
-                                  color: _Glass.textSecondary,
-                                  fontSize: 12,
+                                  color: _Glass.textPrimary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                  letterSpacing: -0.2,
                                 ),
                               ),
                               if (data['walk_in'] == true) ...[
@@ -5945,6 +6324,14 @@ class _QueueCard extends StatelessWidget {
                                 ),
                               ],
                             ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            customerName,
+                            style: const TextStyle(
+                              color: _Glass.textSecondary,
+                              fontSize: 12,
+                            ),
                           ),
                           if (customerId.isNotEmpty) ...[
                             const SizedBox(height: 2),
@@ -6022,7 +6409,7 @@ class _QueueCard extends StatelessWidget {
                 if (estimatedCompletion != null &&
                     jobStatus != 'cancelled') ...[
                   const SizedBox(height: 6),
-                  _DueDateRow(dueDate: estimatedCompletion),
+                  _DueDateRow(dueDate: estimatedCompletion, statusColor: statusColor),
                 ],
 
                 const SizedBox(height: 10),
@@ -6033,166 +6420,130 @@ class _QueueCard extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if ((data['cancel_reason']?.toString() ?? '').isNotEmpty)
-                        Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _Glass.accentRose.withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: _Glass.accentRose.withValues(alpha: 0.22),
-                              width: 0.9,
+                      // ── Row 1: cancel reason (left) + total/paid/invoice (right) ──
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: (data['cancel_reason']?.toString() ?? '').isNotEmpty
+                                  ? ConstrainedBox(
+                                      constraints: const BoxConstraints(maxWidth: 260),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 7,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _Glass.accentRose.withValues(alpha: 0.06),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: _Glass.accentRose.withValues(alpha: 0.22),
+                                            width: 0.9,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Icon(Icons.info_outline, size: 12, color: _Glass.accentRose),
+                                            const SizedBox(width: 5),
+                                            Flexible(
+                                              child: Text(
+                                                'Reason: ${data['cancel_reason']}',
+                                                style: const TextStyle(color: _Glass.accentRose, fontSize: 11),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
                             ),
                           ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.info_outline,
-                                size: 13,
-                                color: _Glass.accentRose,
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  'Reason: ${data['cancel_reason']}',
+                          const SizedBox(width: 10),
+                          // Right column: total → paid
+                          Builder(builder: (ctx) {
+                            final paid = (data['amount_paid'] as num?)?.toDouble() ?? 0;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '₱${total.toStringAsFixed(2)}',
                                   style: const TextStyle(
-                                    color: _Glass.accentRose,
-                                    fontSize: 12,
+                                    color: _Glass.accentAmber,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.calendar_today_outlined,
-                            size: 11,
-                            color: _Glass.textMuted,
-                          ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              dateStr,
-                              style: const TextStyle(
-                                color: _Glass.textMuted,
-                                fontSize: 12,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (turnaround != null) ...[
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.schedule,
-                              size: 11,
-                              color: _Glass.textMuted,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '~$turnaround day${turnaround == 1 ? '' : 's'}',
-                              style: const TextStyle(
-                                color: _Glass.textMuted,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '₱${total.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  color: _Glass.accentAmber,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              Builder(
-                                builder: (context) {
-                                  final paid =
-                                      (data['amount_paid'] as num?)
-                                          ?.toDouble() ??
-                                      0;
-                                  if (paid <= 0) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  return Text(
+                                if (paid > 0)
+                                  Text(
                                     'Paid: ₱${paid.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       color: _Glass.accentEmerald,
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
                                     ),
-                                  );
-                                },
+                                  ),
+                              ],
+                            );
+                          }),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // ── Row 2: date + turnaround + invoice (same row) ─
+                      Builder(
+                        builder: (ctx) => Row(
+                          children: [
+                            const Icon(Icons.calendar_today_outlined, size: 11, color: _Glass.textMuted),
+                            const SizedBox(width: 4),
+                            Text(
+                              dateStr,
+                              style: const TextStyle(color: _Glass.textMuted, fontSize: 12),
+                            ),
+                            if (turnaround != null) ...[
+                              const SizedBox(width: 6),
+                              const Icon(Icons.schedule, size: 11, color: _Glass.textMuted),
+                              const SizedBox(width: 3),
+                              Text(
+                                '~$turnaround day${turnaround == 1 ? '' : 's'}',
+                                style: const TextStyle(color: _Glass.textMuted, fontSize: 12),
                               ),
                             ],
-                          ),
-                          const Spacer(),
-                          Builder(
-                            builder: (ctx) => GestureDetector(
+                            const Spacer(),
+                            GestureDetector(
                               onTap: () async {
-                                final oid =
-                                    data['order_id']?.toString() ?? queueDocId;
-                                final orderSnap = await FirebaseFirestore
-                                    .instance
-                                    .collection('Orders')
-                                    .doc(oid)
-                                    .get();
-                                final invId = orderSnap
-                                    .data()?['invoice_id']
-                                    ?.toString();
+                                final oid = data['order_id']?.toString() ?? queueDocId;
+                                final orderSnap = await FirebaseFirestore.instance
+                                    .collection('Orders').doc(oid).get();
+                                final invId = orderSnap.data()?['invoice_id']?.toString();
                                 if (!ctx.mounted) return;
                                 if (invId != null && invId.isNotEmpty) {
-                                  Navigator.of(ctx).push(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          InvoiceScreen(invoiceId: invId),
-                                    ),
-                                  );
+                                  Navigator.of(ctx).push(MaterialPageRoute(
+                                    builder: (_) => InvoiceScreen(invoiceId: invId),
+                                  ));
                                 } else {
                                   ScaffoldMessenger.of(ctx).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'No invoice for this order',
-                                      ),
-                                    ),
+                                    const SnackBar(content: Text('No invoice for this order')),
                                   );
                                 }
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 9,
-                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 decoration: _Glass.glass(radius: 99),
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      Icons.receipt_long_rounded,
-                                      size: 15,
-                                      color: _Glass.textSecondary,
-                                    ),
-                                    SizedBox(width: 6),
+                                    Icon(Icons.receipt_long_rounded, size: 13, color: _Glass.textSecondary),
+                                    SizedBox(width: 5),
                                     Text(
                                       'View Invoice',
                                       style: TextStyle(
                                         color: _Glass.textSecondary,
-                                        fontSize: 12,
+                                        fontSize: 11,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -6200,8 +6551,8 @@ class _QueueCard extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 10),
                       _RefundPickupSection(
@@ -6212,58 +6563,48 @@ class _QueueCard extends StatelessWidget {
                     ],
                   ),
                 ] else ...[
-                  Row(
-                    children: [
-                      const Icon(Icons.calendar_today_outlined, size: 11, color: _Glass.textMuted),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(dateStr,
-                            style: const TextStyle(color: _Glass.textMuted, fontSize: 12),
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      if (turnaround != null) ...[
-                        const SizedBox(width: 8),
-                        const Icon(Icons.schedule, size: 11, color: _Glass.textMuted),
+                  Builder(builder: (_) {
+                    final paid = (data['amount_paid'] as num?)?.toDouble() ?? 0;
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.calendar_today_outlined, size: 11, color: _Glass.textMuted),
                         const SizedBox(width: 4),
-                        Text('~$turnaround day${turnaround == 1 ? '' : 's'}',
+                        Text(dateStr,
                             style: const TextStyle(color: _Glass.textMuted, fontSize: 12)),
-                      ],
-                      const Spacer(),
-                      FutureBuilder<DocumentSnapshot>(
-                        future: FirebaseFirestore.instance
-                            .collection('Orders')
-                            .doc(orderId)
-                            .get(),
-                        builder: (context, snap) {
-                          final docData =
-                              snap.data?.data() as Map<String, dynamic>?;
-                          final paid = docData?['amount_paid'] as num?;
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
+                        if (turnaround != null) ...[
+                          const SizedBox(width: 8),
+                          const Icon(Icons.schedule, size: 11, color: _Glass.textMuted),
+                          const SizedBox(width: 4),
+                          Text('~$turnaround day${turnaround == 1 ? '' : 's'}',
+                              style: const TextStyle(color: _Glass.textMuted, fontSize: 12)),
+                        ],
+                        const Spacer(),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '₱${total.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: _Glass.accentAmber,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            if (paid > 0)
                               Text(
-                                '₱${total.toStringAsFixed(2)}',
+                                'Paid: ₱${paid.toStringAsFixed(2)}',
                                 style: const TextStyle(
-                                  color: _Glass.accentAmber,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
+                                  color: _Glass.accentEmerald,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              if (paid != null && paid > 0)
-                                Text(
-                                  'Paid: ₱${paid.toDouble().toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    color: _Glass.accentEmerald,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                          ],
+                        ),
+                      ],
+                    );
+                  }),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -6415,7 +6756,8 @@ class _QueueCard extends StatelessWidget {
 // =============================================================================
 class _DueDateRow extends StatelessWidget {
   final DateTime dueDate;
-  const _DueDateRow({required this.dueDate});
+  final Color? statusColor;
+  const _DueDateRow({required this.dueDate, this.statusColor});
 
   @override
   Widget build(BuildContext context) {
@@ -6444,6 +6786,17 @@ class _DueDateRow extends StatelessWidget {
 
     return Row(
       children: [
+        if (statusColor != null) ...[
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: statusColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+        ],
         Icon(
           Icons.flag_rounded,
           size: 14,

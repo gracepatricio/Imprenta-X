@@ -141,8 +141,8 @@ enum _LogsTab { jobQueue, salesRecord, employeeActivity, customerFeedback }
 // AdminLogsScreen — unified header + tabs
 // =============================================================================
 class AdminLogsScreen extends StatefulWidget {
-  final String? initialJobStatus;
   const AdminLogsScreen({super.key, this.initialJobStatus});
+  final String? initialJobStatus;
 
   @override
   State<AdminLogsScreen> createState() => _AdminLogsScreenState();
@@ -150,15 +150,6 @@ class AdminLogsScreen extends StatefulWidget {
 
 class _AdminLogsScreenState extends State<AdminLogsScreen> {
   _LogsTab _activeTab = _LogsTab.jobQueue;
-
-  @override
-  void didUpdateWidget(AdminLogsScreen old) {
-    super.didUpdateWidget(old);
-    if (old.initialJobStatus != widget.initialJobStatus &&
-        widget.initialJobStatus != null) {
-      setState(() => _activeTab = _LogsTab.jobQueue);
-    }
-  }
 
   static const _tabs = [
     (_LogsTab.jobQueue, 'Job Queue', Icons.queue_outlined),
@@ -359,7 +350,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
   Widget _buildContent() {
     switch (_activeTab) {
       case _LogsTab.jobQueue:
-        return _JobQueueTab(initialStatus: widget.initialJobStatus);
+        return const _JobQueueTab();
       case _LogsTab.salesRecord:
         return const _SalesRecordSubTab();
       case _LogsTab.employeeActivity:
@@ -376,39 +367,14 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
 enum _QueueSubTab { pending, active, ready, cancelled, history }
 
 class _JobQueueTab extends StatefulWidget {
-  final String? initialStatus;
-  const _JobQueueTab({this.initialStatus});
+  const _JobQueueTab();
 
   @override
   State<_JobQueueTab> createState() => _JobQueueTabState();
 }
 
 class _JobQueueTabState extends State<_JobQueueTab> {
-  late _QueueSubTab _sub;
-
-  static _QueueSubTab _toSubTab(String? status) {
-    switch (status) {
-      case 'active':    return _QueueSubTab.active;
-      case 'ready':     return _QueueSubTab.ready;
-      case 'cancelled': return _QueueSubTab.cancelled;
-      default:          return _QueueSubTab.pending;
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _sub = _toSubTab(widget.initialStatus);
-  }
-
-  @override
-  void didUpdateWidget(_JobQueueTab old) {
-    super.didUpdateWidget(old);
-    if (old.initialStatus != widget.initialStatus &&
-        widget.initialStatus != null) {
-      setState(() => _sub = _toSubTab(widget.initialStatus));
-    }
-  }
+  _QueueSubTab _sub = _QueueSubTab.pending;
 
   static const _statusTabs = [
     (
@@ -627,21 +593,9 @@ class _PillSegmentControl<T> extends StatelessWidget {
 }
 
 // ── Queue status list ─────────────────────────────────────────────────────────
-class _QueueStatusList extends StatefulWidget {
+class _QueueStatusList extends StatelessWidget {
   final String jobStatus;
   const _QueueStatusList({required this.jobStatus});
-  @override
-  State<_QueueStatusList> createState() => _QueueStatusListState();
-}
-
-class _QueueStatusListState extends State<_QueueStatusList> {
-  final _scrollCtrl = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollCtrl.dispose();
-    super.dispose();
-  }
 
   static String _fmtDate(dynamic ts) {
     if (ts == null) return '—';
@@ -661,9 +615,7 @@ class _QueueStatusListState extends State<_QueueStatusList> {
         'Nov',
         'Dec',
       ];
-      final hh = d.hour.toString().padLeft(2, '0');
-      final mm = d.minute.toString().padLeft(2, '0');
-      return '${m[d.month - 1]} ${d.day}, ${d.year} $hh:$mm';
+      return '${m[d.month - 1]} ${d.day}, ${d.year}';
     } catch (_) {
       return '—';
     }
@@ -691,18 +643,10 @@ class _QueueStatusListState extends State<_QueueStatusList> {
 
   @override
   Widget build(BuildContext context) {
-    final String ordersStatus;
-    if (widget.jobStatus == 'active') {
-      ordersStatus = 'in_production';
-    } else if (widget.jobStatus == 'completed') {
-      ordersStatus = 'ready';
-    } else {
-      ordersStatus = widget.jobStatus;
-    }
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('Orders')
-          .where('status', isEqualTo: ordersStatus)
+          .collection('Order_Queue')
+          .where('job_status', isEqualTo: jobStatus)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -751,7 +695,7 @@ class _QueueStatusListState extends State<_QueueStatusList> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'No ${widget.jobStatus} jobs',
+                  'No $jobStatus jobs',
                   style: const TextStyle(
                     color: _G.textPrimary,
                     fontSize: 15,
@@ -786,40 +730,35 @@ class _QueueStatusListState extends State<_QueueStatusList> {
             ),
             Expanded(
               child: Scrollbar(
-                controller: _scrollCtrl,
                 thumbVisibility: true,
                 trackVisibility: true,
                 child: ListView.separated(
-                  controller: _scrollCtrl,
-                  padding: const EdgeInsets.only(right: 8, bottom: 16),
                   itemCount: docs.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (_, i) {
                     final data = docs[i].data() as Map<String, dynamic>;
-                    final orderId = data['order_id']?.toString() ?? docs[i].id;
+                    final orderId = data['order_id']?.toString() ?? '—';
                     final customer = data['customer_name']?.toString() ?? '—';
                     final customerId = data['customer_id']?.toString() ?? '';
-                    final rawStatus = data['status']?.toString() ?? data['job_status']?.toString() ?? widget.jobStatus;
-                    final status = rawStatus == 'in_production' ? 'active'
-                        : rawStatus == 'ready' ? 'completed'
-                        : rawStatus;
-                    final total = (data['total_price'] as num?)?.toDouble() ?? 0;
-                    final products = (data['products'] as List?)
-                            ?.cast<Map<String, dynamic>>() ?? [];
+                    final status = data['job_status']?.toString() ?? jobStatus;
+                    final total =
+                        (data['total_price'] as num?)?.toDouble() ?? 0;
+                    final products =
+                        (data['products'] as List?)
+                            ?.cast<Map<String, dynamic>>() ??
+                        [];
                     final dateStr = _fmtDate(data['created_at']);
                     final statusColor = _statusColor(status);
                     final productSummary = products.isEmpty
                         ? null
-                        : products.map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}').join(', ');
-                    final estimatedCompletion = (() {
-                      final ts = data['estimated_completion'] as Timestamp?;
-                      if (ts != null) return ts.toDate().toLocal();
-                      final created = (data['created_at'] as Timestamp?)?.toDate().toLocal();
-                      final ta = data['turnaround_days'] as int?;
-                      if (created == null || ta == null) return null;
-                      return created.add(Duration(days: ta));
-                    })();
+                        : products
+                              .map(
+                                (p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}',
+                              )
+                              .join(', ');
 
+                    // Use _JobCardWithPayment which fetches amount_paid and
+                    // notes from the Orders collection (not Order_Queue)
                     return _JobCardWithPayment(
                       index: i + 1,
                       orderId: orderId,
@@ -831,34 +770,19 @@ class _QueueStatusListState extends State<_QueueStatusList> {
                       products: products,
                       dateStr: dateStr,
                       total: total,
-                      queueNotes: _resolveNotes(data),
+                      queueNotes: data['notes']?.toString() ?? '',
                       cancelReason: data['cancel_reason']?.toString() ?? '',
                       turnaround: data['turnaround_days'] as int?,
-                      estimatedCompletion: estimatedCompletion,
-                      invoiceId: data['invoice_id']?.toString(),
                     );
                   },
-                ),
-              ),
+                ), // ListView.separated
+              ), // Scrollbar
             ),
           ],
         );
       },
     );
   }
-}
-
-// Reads order-level notes, then falls back to per-product notes for online orders.
-String _resolveNotes(Map<String, dynamic> data) {
-  final orderNote = data['notes']?.toString() ?? '';
-  if (orderNote.isNotEmpty) return orderNote;
-  final prods = (data['products'] as List? ?? [])
-      .whereType<Map<String, dynamic>>()
-      .toList();
-  return prods
-      .map((p) => p['notes']?.toString() ?? '')
-      .where((n) => n.isNotEmpty)
-      .join(' | ');
 }
 
 // =============================================================================
@@ -876,11 +800,9 @@ class _JobCardWithPayment extends StatelessWidget {
   final List<Map<String, dynamic>> products;
   final String dateStr;
   final double total;
-  final String queueNotes;
+  final String queueNotes; // notes from Order_Queue (may be empty)
   final String cancelReason;
   final int? turnaround;
-  final DateTime? estimatedCompletion;
-  final String? invoiceId;
 
   const _JobCardWithPayment({
     required this.index,
@@ -896,8 +818,6 @@ class _JobCardWithPayment extends StatelessWidget {
     this.queueNotes = '',
     this.cancelReason = '',
     this.turnaround,
-    this.estimatedCompletion,
-    this.invoiceId,
   });
 
   @override
@@ -914,14 +834,10 @@ class _JobCardWithPayment extends StatelessWidget {
 
         final amountPaid =
             (orderData['amount_paid'] as num?)?.toDouble() ?? 0.0;
-        final remaining = (orderData['remaining_balance'] as num?)?.toDouble()
-            ?? (total - amountPaid).clamp(0.0, double.infinity);
 
-        // Prefer notes from Orders doc (checks order-level + per-product); fall back to queue notes
-        final orderResolvedNotes = _resolveNotes(orderData);
-        final resolvedNotes = orderResolvedNotes.isNotEmpty ? orderResolvedNotes : queueNotes;
-
-        final resolvedInvoiceId = invoiceId ?? orderData['invoice_id']?.toString();
+        // Prefer notes from Orders doc; fall back to Order_Queue notes
+        final orderNotes = orderData['notes']?.toString() ?? '';
+        final resolvedNotes = orderNotes.isNotEmpty ? orderNotes : queueNotes;
 
         return _JobCard(
           index: index,
@@ -935,12 +851,9 @@ class _JobCardWithPayment extends StatelessWidget {
           dateStr: dateStr,
           total: total,
           amountPaid: amountPaid,
-          remaining: remaining,
           notes: resolvedNotes,
           cancelReason: cancelReason,
           turnaround: turnaround,
-          estimatedCompletion: estimatedCompletion,
-          invoiceId: resolvedInvoiceId,
         );
       },
     );
@@ -960,12 +873,9 @@ class _JobCard extends StatelessWidget {
   final String dateStr;
   final double total;
   final double amountPaid;
-  final double remaining;
   final String notes;
   final String cancelReason;
   final int? turnaround;
-  final DateTime? estimatedCompletion;
-  final String? invoiceId;
 
   const _JobCard({
     required this.index,
@@ -979,19 +889,14 @@ class _JobCard extends StatelessWidget {
     required this.dateStr,
     required this.total,
     this.amountPaid = 0,
-    this.remaining = 0,
     this.notes = '',
     this.cancelReason = '',
     this.turnaround,
-    this.estimatedCompletion,
-    this.invoiceId,
   });
 
   @override
   Widget build(BuildContext context) {
     final isCancelled = statusLabel == 'Cancelled';
-    final isReady = statusLabel == 'Ready';
-    final fullyPaid = remaining < 0.01;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -1105,246 +1010,187 @@ class _JobCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.notes_outlined, size: 12, color: _G.textMuted),
+                    const Icon(
+                      Icons.notes_outlined,
+                      size: 12,
+                      color: _G.textMuted,
+                    ),
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         'Special Instructions: ${notes.isNotEmpty ? notes : 'None'}',
-                        style: const TextStyle(color: _G.textMuted, fontSize: 11),
+                        style: const TextStyle(
+                          color: _G.textMuted,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ],
                 ),
 
-                // Target completion
-                if (estimatedCompletion != null && !isCancelled) ...[
-                  const SizedBox(height: 6),
-                  _AdminDueDateRow(dueDate: estimatedCompletion!),
-                ],
-
                 const SizedBox(height: 10),
                 Divider(height: 0.8, color: _G.borderDim),
                 const SizedBox(height: 10),
 
-                // Footer — cancelled vs ready vs pending/active
+                // Footer — cancelled vs pending/active
                 if (isCancelled) ...[
+                  // Cancel reason chip
                   if (cancelReason.isNotEmpty) ...[
                     Container(
                       width: double.infinity,
                       margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: _G.accentRose.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _G.accentRose.withValues(alpha: 0.22), width: 0.9),
+                        border: Border.all(
+                          color: _G.accentRose.withValues(alpha: 0.22),
+                          width: 0.9,
+                        ),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.info_outline, size: 13, color: _G.accentRose),
+                          const Icon(
+                            Icons.info_outline,
+                            size: 13,
+                            color: _G.accentRose,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
-                            child: Text('Reason: $cancelReason',
-                                style: const TextStyle(color: _G.accentRose, fontSize: 12)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  // Date + turnaround
-                  Row(
-                    children: [
-                      const Icon(Icons.calendar_today_outlined, size: 11, color: _G.textMuted),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(dateStr,
-                            style: const TextStyle(color: _G.textMuted, fontSize: 12),
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      if (turnaround != null) ...[
-                        const SizedBox(width: 8),
-                        const Icon(Icons.schedule, size: 11, color: _G.textMuted),
-                        const SizedBox(width: 4),
-                        Text('~$turnaround day${turnaround == 1 ? '' : 's'}',
-                            style: const TextStyle(color: _G.textMuted, fontSize: 12)),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('₱${total.toStringAsFixed(2)}',
-                          style: const TextStyle(color: _G.accentAmber, fontSize: 14, fontWeight: FontWeight.w800)),
-                      if (amountPaid > 0)
-                        Text('Paid: ₱${amountPaid.toStringAsFixed(2)}',
-                            style: const TextStyle(color: _G.accentEmerald, fontSize: 11, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ] else if (isReady) ...[
-                  // Date + turnaround row
-                  Row(
-                    children: [
-                      const Icon(Icons.calendar_today_outlined, size: 11, color: _G.textMuted),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(dateStr,
-                            style: const TextStyle(color: _G.textMuted, fontSize: 12),
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      if (turnaround != null) ...[
-                        const SizedBox(width: 8),
-                        const Icon(Icons.schedule, size: 11, color: _G.textMuted),
-                        const SizedBox(width: 4),
-                        Text('~$turnaround day${turnaround == 1 ? '' : 's'}',
-                            style: const TextStyle(color: _G.textMuted, fontSize: 12)),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  // Payment chips
-                  LayoutBuilder(builder: (_, constraints) {
-                    final canFitThree = constraints.maxWidth >= 260;
-                    final totalChip = _PayChip(
-                      label: 'Total',
-                      value: '₱${total.toStringAsFixed(2)}',
-                      color: _G.textPrimary,
-                      bgColor: _G.surfaceThin,
-                      borderColor: _G.borderMid,
-                    );
-                    final paidChip = _PayChip(
-                      label: 'Paid',
-                      value: '₱${amountPaid.toStringAsFixed(2)}',
-                      color: _G.accentEmerald,
-                      bgColor: const Color(0xFFF0FDF4),
-                      borderColor: const Color(0xFFBBF7D0),
-                    );
-                    final balanceChip = _PayChip(
-                      label: fullyPaid ? 'Fully Paid' : 'Balance Due',
-                      value: fullyPaid ? '✓ Paid' : '₱${remaining.toStringAsFixed(2)}',
-                      color: fullyPaid ? _G.accentEmerald : _G.amber,
-                      bgColor: fullyPaid ? const Color(0xFFF0FDF4) : const Color(0xFFFFFBEB),
-                      borderColor: fullyPaid ? const Color(0xFFBBF7D0) : const Color(0xFFFDE68A),
-                      bold: true,
-                    );
-                    if (canFitThree) {
-                      return Row(children: [
-                        Expanded(child: totalChip),
-                        const SizedBox(width: 6),
-                        Expanded(child: paidChip),
-                        const SizedBox(width: 6),
-                        Expanded(child: balanceChip),
-                      ]);
-                    }
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(children: [
-                          Expanded(child: totalChip),
-                          const SizedBox(width: 6),
-                          Expanded(child: paidChip),
-                        ]),
-                        const SizedBox(height: 6),
-                        balanceChip,
-                      ],
-                    );
-                  }),
-                  // Progress bar
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Paid ₱${amountPaid.toStringAsFixed(2)}',
-                          style: const TextStyle(color: _G.accentEmerald, fontSize: 10)),
-                      Text(
-                        fullyPaid ? 'Fully Paid' : 'Due ₱${remaining.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          color: fullyPaid ? _G.accentEmerald : _G.amber,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: LinearProgressIndicator(
-                      value: total > 0 ? (amountPaid / total).clamp(0.0, 1.0) : 0,
-                      backgroundColor: _G.borderSolid,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                          fullyPaid ? _G.accentEmerald : _G.accentAmber),
-                      minHeight: 5,
-                    ),
-                  ),
-                ] else ...[
-                  // Pending / active — responsive row
-                  Row(
-                    children: [
-                      const Icon(Icons.calendar_today_outlined, size: 11, color: _G.textMuted),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(dateStr,
-                            style: const TextStyle(color: _G.textMuted, fontSize: 12),
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      if (turnaround != null) ...[
-                        const SizedBox(width: 8),
-                        const Icon(Icons.schedule, size: 11, color: _G.textMuted),
-                        const SizedBox(width: 4),
-                        Text('~$turnaround day${turnaround == 1 ? '' : 's'}',
-                            style: const TextStyle(color: _G.textMuted, fontSize: 12)),
-                      ],
-                      const Spacer(),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text('₱${total.toStringAsFixed(2)}',
-                              style: const TextStyle(color: _G.accentAmber, fontSize: 14, fontWeight: FontWeight.w800)),
-                          if (amountPaid > 0)
-                            Text('Paid: ₱${amountPaid.toStringAsFixed(2)}',
-                                style: const TextStyle(color: _G.accentEmerald, fontSize: 11, fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-
-                // View Invoice button — shown for all statuses when invoice exists
-                if (invoiceId != null && invoiceId!.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => InvoiceScreen(invoiceId: invoiceId!),
-                      ),
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _G.accentViolet.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(99),
-                        border: Border.all(
-                          color: _G.accentViolet.withValues(alpha: 0.35),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.receipt_long_rounded, size: 14, color: _G.accentViolet),
-                          SizedBox(width: 6),
-                          Text(
-                            'View Invoice',
-                            style: TextStyle(
-                              color: _G.accentViolet,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                            child: Text(
+                              'Reason: $cancelReason',
+                              style: const TextStyle(
+                                color: _G.accentRose,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
+                  ],
+                  // Date + turnaround row
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.calendar_today_outlined,
+                        size: 11,
+                        color: _G.textMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          dateStr,
+                          style: const TextStyle(
+                            color: _G.textMuted,
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (turnaround != null) ...[
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.schedule,
+                          size: 11,
+                          color: _G.textMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '~$turnaround day${turnaround == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            color: _G.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  // Total + paid
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '₱${total.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: _G.accentAmber,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (amountPaid > 0)
+                        Text(
+                          'Paid: ₱${amountPaid.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: _G.accentEmerald,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ] else ...[
+                  // Pending / active: date + turnaround + total + paid
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.calendar_today_outlined,
+                        size: 11,
+                        color: _G.textMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        dateStr,
+                        style: const TextStyle(
+                          color: _G.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                      if (turnaround != null) ...[
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.schedule,
+                          size: 11,
+                          color: _G.textMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '~$turnaround day${turnaround == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            color: _G.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '₱${total.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: _G.accentAmber,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          if (amountPaid > 0)
+                            Text(
+                              'Paid: ₱${amountPaid.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: _G.accentEmerald,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
                 ],
               ],
@@ -1463,9 +1309,7 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
         'Nov',
         'Dec',
       ];
-      final hh = d.hour.toString().padLeft(2, '0');
-      final mm = d.minute.toString().padLeft(2, '0');
-      return '${m[d.month - 1]} ${d.day}, ${d.year} $hh:$mm';
+      return '${m[d.month - 1]} ${d.day}, ${d.year}';
     } catch (_) {
       return '—';
     }
@@ -1802,7 +1646,7 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
                             invoiceId: invoiceId,
                             cancelReason:
                                 data['cancel_reason']?.toString() ?? '',
-                            notes: _resolveNotes(data),
+                            notes: data['notes']?.toString() ?? '',
                           );
                         },
                       ), // ListView.separated
@@ -1815,54 +1659,6 @@ class _AdminOrderHistoryState extends State<_AdminOrderHistory> {
         ),
       ],
     );
-  }
-}
-
-// ── Due Date Row (admin) ──────────────────────────────────────────────────────
-class _AdminDueDateRow extends StatelessWidget {
-  final DateTime dueDate;
-  const _AdminDueDateRow({required this.dueDate});
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final due = DateTime(dueDate.year, dueDate.month, dueDate.day);
-    final diff = due.difference(today).inDays;
-
-    final Color color;
-    final String label;
-    if (diff < 0) {
-      color = _G.accentRose;
-      label = 'Overdue by ${-diff} day${diff == -1 ? '' : 's'} — ${_fmt(dueDate)}';
-    } else if (diff == 0) {
-      color = _G.accentRose;
-      label = 'Target completion: TODAY';
-    } else if (diff == 1) {
-      color = _G.accentAmber;
-      label = 'Target completion: Tomorrow (${_fmt(dueDate)})';
-    } else {
-      color = _G.accentEmerald;
-      label = 'Target completion: ${_fmt(dueDate)}';
-    }
-
-    return Row(
-      children: [
-        Icon(Icons.flag_rounded, size: 14, color: color.withValues(alpha: 0.85)),
-        const SizedBox(width: 5),
-        Flexible(
-          child: Text(label,
-              style: TextStyle(color: color, fontSize: 12,
-                  fontWeight: diff <= 0 ? FontWeight.w700 : FontWeight.w500),
-              overflow: TextOverflow.ellipsis),
-        ),
-      ],
-    );
-  }
-
-  static String _fmt(DateTime d) {
-    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return '${m[d.month - 1]} ${d.day}, ${d.year}';
   }
 }
 
@@ -2366,28 +2162,6 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
   static final _dateFmt = DateFormat('MMM dd, yyyy hh:mm a');
 
   @override
-  void initState() {
-    super.initState();
-    _purgeOrderDeductionLogs();
-  }
-
-  Future<void> _purgeOrderDeductionLogs() async {
-    const batchSize = 400;
-    while (true) {
-      final snap = await FirebaseFirestore.instance
-          .collection('InventoryLogs')
-          .where('update_method', isEqualTo: 'order_deduction')
-          .limit(batchSize)
-          .get();
-      if (snap.docs.isEmpty) break;
-      final batch = FirebaseFirestore.instance.batch();
-      for (final doc in snap.docs) batch.delete(doc.reference);
-      await batch.commit();
-      if (snap.docs.length < batchSize) break;
-    }
-  }
-
-  @override
   void dispose() {
     _empCtrl.dispose();
     _matCtrl.dispose();
@@ -2792,9 +2566,6 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
 
                 final filtered = docs.where((d) {
                   final data = d.data() as Map<String, dynamic>;
-                  if (data['update_method']?.toString() == 'order_deduction') {
-                    return false;
-                  }
                   final emp =
                       data['updated_by_name']?.toString().toLowerCase() ?? '';
                   final mat =
