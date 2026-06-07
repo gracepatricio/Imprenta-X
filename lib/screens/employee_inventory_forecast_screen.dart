@@ -13,7 +13,7 @@ import 'sales_import_widget.dart' show showSalesImportSheet;
 //    Trend:  Tₜ = β·(Lₜ − Lₜ₋₁) + (1−β)·Tₜ₋₁
 //    Fore:   F{t+m} = Lₜ + m·Tₜ   (clamped ≥ 0)
 //    MAPE  = mean( |Xₜ − Fₜ| / Xₜ ) × 100  over non-zero actuals
-//    α, β  auto-selected per product by minimising MAPE (grid search)
+//    α, β  auto-selected per product by minimising MAPE (grid search 56 pts)
 //
 //  Phase 2 — Dependent Demand (BOM explosion)
 //    material_need  = Σ products  F{t+1}(product) × BOM_qty_per_unit
@@ -28,18 +28,19 @@ const _lime    = Color(0xFF65A30D);
 const _slate   = Color(0xFF475569);
 const _muted   = Color(0x880F172A);
 const _border  = Color(0x30000000);
+const _indigo  = Color(0xFF6366F1);
 
 
 // ── DES algorithm ─────────────────────────────────────────────────────────────
 
 class _DES {
-  final double L;      // level  Lₜ at last fitted point
-  final double T;      // trend  Tₜ at last fitted point
+  final double L;
+  final double T;
   final double alpha;
   final double beta;
   final double? mape;
-  final List<double> fits;    // one-step-ahead F values for t=2..n
-  final List<double> actuals; // corresponding actual X values
+  final List<double> fits;
+  final List<double> actuals;
 
   const _DES({
     required this.L, required this.T,
@@ -48,12 +49,10 @@ class _DES {
     required this.fits, required this.actuals,
   });
 
-  // Forecast m periods ahead from the end of the fitted series.
+  // Forecast m periods ahead; clamp ≥ 0.
   double forecast(int m) => math.max(0.0, L + T * m);
 }
 
-/// Fit Holt's Linear Trend DES to [series] with given α, β.
-/// Leading zeros are trimmed so the model starts at the first real observation.
 _DES _fitHolt(List<double> series, double alpha, double beta) {
   final first = series.indexWhere((v) => v > 0.001);
   final data  = first >= 0 ? series.sublist(first) : <double>[];
@@ -71,7 +70,7 @@ _DES _fitHolt(List<double> series, double alpha, double beta) {
   final apes    = <double>[];
 
   for (int t = 1; t < n; t++) {
-    final f  = math.max(0.0, L + T);   // one-step forecast (m = 1)
+    final f  = math.max(0.0, L + T);
     final x  = data[t];
     fits.add(f);
     actuals.add(x);
@@ -89,10 +88,10 @@ _DES _fitHolt(List<double> series, double alpha, double beta) {
       mape: mape, fits: fits, actuals: actuals);
 }
 
-/// Return the best-fitting (α, β) for [series] by grid search over MAPE.
+// Grid search with 56 (α, β) combinations — wider range for better fit.
 _DES _bestFit(List<double> series) {
-  const alphas = [0.1, 0.2, 0.3, 0.4, 0.5];
-  const betas  = [0.05, 0.1, 0.15, 0.2, 0.25];
+  const alphas = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7];
+  const betas  = [0.01, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4];
   _DES? best;
   double bestMape = double.infinity;
   for (final a in alphas) {
@@ -111,14 +110,13 @@ _DES _bestFit(List<double> series) {
 // Data models
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// One product that contributes demand to a raw material via BOM.
 class _Source {
   final String name;
-  final double forecastQty; // F{t+1} in product units
-  final double qpu;         // BOM: sqft (or base units) per product unit
+  final double forecastQty;
+  final double qpu;
   final double? mape;
   final double alpha, beta;
-  final double contribution; // forecastQty × qpu  (in raw material base units)
+  final double contribution;
   const _Source({
     required this.name, required this.forecastQty, required this.qpu,
     required this.mape, required this.alpha, required this.beta,
@@ -126,36 +124,45 @@ class _Source {
   });
 }
 
-/// Urgency of a raw material's stock situation.
-enum _Status { critical, atRisk, healthy, noDemand }
+enum _Status { critical, atRisk, healthy, overstock, noDemand }
+
+enum _TrendDir { up, down, flat }
 
 class _Material {
   final String id, name, unit;
   final double stock, restock;
-  final double forecastUnits; // next-30d forecast in stocking units
+  // Multi-horizon forecasts (in stocking units).
+  final double forecast7d, forecast30d, forecast90d;
   final double dailyRate;
   final double daysLeft, daysToRestock;
+  // Smarter reorder: enough to cover 30d demand + restore safety stock buffer.
+  final double reorderQty;
   final double? weightedMape;
   final List<_Source> sources;
-  final List<double> periods; // 36-period history in stocking units
-  // true when forecast derives from restock_level proxy, not real sales
+  final List<double> periods;
   final bool synthetic;
+  // Raw Holt trend component from the material-level DES (per period).
+  final double trendSlope;
 
   const _Material({
     required this.id, required this.name, required this.unit,
     required this.stock, required this.restock,
-    required this.forecastUnits, required this.dailyRate,
+    required this.forecast7d, required this.forecast30d, required this.forecast90d,
+    required this.dailyRate,
     required this.daysLeft, required this.daysToRestock,
+    required this.reorderQty,
     required this.weightedMape, required this.sources, required this.periods,
     this.synthetic = false,
+    this.trendSlope = 0.0,
   });
+
+  // Convenience alias used in legacy call-sites.
+  double get forecastUnits => forecast30d;
 
   _Status get status {
     if (dailyRate < 0.001) return _Status.noDemand;
-    // If stock hasn't been entered yet (synthetic baseline + zero stock),
-    // show At Risk instead of Critical so the screen doesn't alarm before
-    // the admin has had a chance to enter their actual stock levels.
     if (stock <= 0) return synthetic ? _Status.atRisk : _Status.critical;
+    if (daysLeft > 90 && stock > restock * 2 && restock > 0) return _Status.overstock;
     if (daysLeft <= 7) return _Status.critical;
     if (daysLeft <= 21 || stock <= restock) return _Status.atRisk;
     return _Status.healthy;
@@ -163,19 +170,21 @@ class _Material {
 
   Color get statusColor {
     switch (status) {
-      case _Status.critical: return _rose;
-      case _Status.atRisk:   return _amber;
-      case _Status.healthy:  return _emerald;
-      case _Status.noDemand: return _slate;
+      case _Status.critical:  return _rose;
+      case _Status.atRisk:    return _amber;
+      case _Status.healthy:   return _emerald;
+      case _Status.overstock: return _indigo;
+      case _Status.noDemand:  return _slate;
     }
   }
 
   String get statusLabel {
     switch (status) {
-      case _Status.critical: return 'Critical';
-      case _Status.atRisk:   return 'At Risk';
-      case _Status.healthy:  return 'Healthy';
-      case _Status.noDemand: return 'No Demand';
+      case _Status.critical:  return 'Critical';
+      case _Status.atRisk:    return 'At Risk';
+      case _Status.healthy:   return 'Healthy';
+      case _Status.overstock: return 'Overstock';
+      case _Status.noDemand:  return 'No Demand';
     }
   }
 
@@ -199,6 +208,14 @@ class _Material {
     if (m < 50)   return 'Fair';
     return 'Poor';
   }
+
+  _TrendDir get trendDir {
+    if (forecast30d < 0.001) return _TrendDir.flat;
+    final threshold = forecast30d * 0.05; // 5% of 30d forecast per period
+    if (trendSlope > threshold)  return _TrendDir.up;
+    if (trendSlope < -threshold) return _TrendDir.down;
+    return _TrendDir.flat;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,12 +234,17 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
   List<_Material> _all = [];
   String _filter = 'All';
   String _sort   = 'Days Left';
+  String _search = '';
+  final _searchCtrl = TextEditingController();
 
-  static const _nPeriods   = 36; // 3 years × 12 months
+  static const _nPeriods   = 36;
   static const _periodDays = 30;
 
   @override
   void initState() { super.initState(); _load(); }
+
+  @override
+  void dispose() { _searchCtrl.dispose(); super.dispose(); }
 
   // ── Load & compute ──────────────────────────────────────────────────────────
 
@@ -232,7 +254,6 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
       final db  = FirebaseFirestore.instance;
       final now = DateTime.now();
 
-      // Period boundaries: limits[0] = 3 yrs ago, limits[36] = now
       final limits = List.generate(_nPeriods + 1, (k) =>
           Timestamp.fromDate(now.subtract(
               Duration(days: _periodDays * (_nPeriods - k)))));
@@ -246,9 +267,6 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         return null;
       }
 
-      // ── Fetch all data ─────────────────────────────────────────────────────
-      // Order_Queue holds the live job queue; Orders may hold archived ones.
-      // Query both so no completed orders are missed.
       final [matSnap, prodSnap, ordSnap, oqSnap, srSnap] = await Future.wait([
         db.collection('RawMaterials').get(),
         db.collection('Products').get(),
@@ -259,7 +277,6 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
 
       final mats = {for (final d in matSnap.docs) d.id: d.data()};
 
-      // ── BOM catalog: keyed by product doc-ID (primary) and name (fallback) ─
       final bomById   = <String, List<Map<String, dynamic>>>{};
       final bomByName = <String, List<Map<String, dynamic>>>{};
       final nameById  = <String, String>{};
@@ -273,9 +290,6 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         nameById[d.id]               = name;
       }
 
-      // ── Accumulate per-period product sales ────────────────────────────────
-      // key  = product doc-id when BOM is found by id, else lowercase name
-      // This keeps duplicate-proof aggregation even when both sources fire.
       final sales   = <String, List<double>>{};
       final display = <String, String>{};
       final bomKey  = <String, List<Map<String, dynamic>>>{};
@@ -288,7 +302,6 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         sales[key]![idx] += qty;
       }
 
-      // Combine Orders + Order_Queue, deduplicated by Firestore doc id
       final seen   = <String>{};
       final allOrd = [...ordSnap.docs, ...oqSnap.docs]
           .where((d) => seen.add(d.id)).toList();
@@ -304,7 +317,7 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
           final qty  = (p['qty'] as num?)?.toDouble() ?? 1.0;
           if (qty <= 0) continue;
           final bom = bomById[pid] ?? bomByName[name.toLowerCase()] ?? [];
-          if (bom.isEmpty) continue; // skip products with no BOM
+          if (bom.isEmpty) continue;
           final key   = pid.isNotEmpty && bomById.containsKey(pid)
               ? pid : name.toLowerCase();
           final label = nameById[pid] ?? name;
@@ -312,7 +325,6 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         }
       }
 
-      // Sales_Records (CSV imports)
       for (final doc in srSnap.docs) {
         final ts = doc.data()['sale_date'] as Timestamp?;
         if (ts == null) continue;
@@ -328,16 +340,14 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         }
       }
 
-      // ── Phase 1: DES per product ──────────────────────────────────────────
+      // Phase 1: DES per product.
       final holt = <String, _DES>{};
       for (final e in sales.entries) { holt[e.key] = _bestFit(e.value); }
 
-      // ── Phase 2: BOM explosion → per-material consumption series + sources ─
-      // periodSqft[matId][p] = base-unit consumption in period p (summed over products)
+      // Phase 2: BOM explosion.
       final periodSqft = <String, List<double>>{
         for (final id in mats.keys) id: List.filled(_nPeriods, 0.0),
       };
-      // sources for display (product-level breakdown)
       final sourcesMap = <String, List<_Source>>{};
 
       for (final e in sales.entries) {
@@ -351,12 +361,10 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
           final qpu = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
           if (mid.isEmpty || !periodSqft.containsKey(mid)) continue;
 
-          // Always accumulate historical consumption regardless of fQty
           for (int p = 0; p < _nPeriods; p++) {
             periodSqft[mid]![p] += e.value[p] * qpu;
           }
 
-          // Only add to sources display if forecast is meaningful
           if (fQty >= 0.001) {
             final contrib = fQty * qpu;
             sourcesMap.putIfAbsent(mid, () => []).add(_Source(
@@ -369,16 +377,14 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         }
       }
 
-      // ── Phase 3: DES on each material's aggregated consumption history ─────
-      // Running DES on the material series directly is more stable than
-      // chaining product DES → BOM explosion, especially with sparse data.
+      // Phase 3: DES on each material's aggregated consumption history.
       final materialDES = <String, _DES>{};
       for (final id in mats.keys) {
         materialDES[id] =
             _bestFit(periodSqft[id] ?? List.filled(_nPeriods, 0.0));
       }
 
-      // ── Build _Material per raw material ───────────────────────────────────
+      // Build _Material per raw material.
       final result = <_Material>[];
       for (final e in mats.entries) {
         final id       = e.key;
@@ -397,32 +403,37 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         final stock   = hasConv ? rawStock   / sqftPer : rawStock;
         final restock = hasConv ? rawRestock / sqftPer : rawRestock;
 
-        // Use the material-level DES for the primary forecast
         final mDes = materialDES[id]!;
-        double fRaw = mDes.forecast(1); // base units next period
+        double fRaw30 = mDes.forecast(1); // next 30d in base units
         bool isSynthetic = false;
 
-        // Synthetic DES fallback — no real BOM-linked sales found.
-        // Build a 12-period constant series equal to restock_level and run DES
-        // on it so every material has a proper Holt forecast. This baseline is
-        // replaced automatically once real sales data arrives.
-        if (fRaw < 0.001 && rawRestock > 0.001) {
+        if (fRaw30 < 0.001 && rawRestock > 0.001) {
           final synth = List.generate(_nPeriods, (i) =>
               i < _nPeriods - 12 ? 0.0 : rawRestock);
-          fRaw = _bestFit(synth).forecast(1); // ≈ rawRestock, trend ≈ 0
+          fRaw30 = _bestFit(synth).forecast(1);
           isSynthetic = true;
         }
 
-        final fSU      = toSU(fRaw);
-        final daily    = fSU / _periodDays;
+        // Multi-horizon forecasts in stocking units.
+        // 7d  ≈ forecast(1) × (7/30)   using the same DES state
+        // 30d = forecast(1)  (one full period)
+        // 90d = forecast(3)  (three periods ahead)
+        final fSU30 = toSU(fRaw30);
+        final fSU7  = fSU30 * (7.0 / _periodDays);
+        final fRaw90 = isSynthetic ? fRaw30 * 3 : mDes.forecast(3);
+        final fSU90 = toSU(math.max(0.0, fRaw90));
+
+        final daily    = fSU30 / _periodDays;
         final daysLeft = daily > 0.001 ? stock / daily : double.infinity;
         final daysRest = daily > 0.001 && stock > restock
             ? (stock - restock) / daily
             : (stock <= restock ? 0.0 : double.infinity);
 
+        // Smarter reorder: order enough for next 30d demand AND restore safety stock.
+        final reorderQty = math.max(0.0, fSU30 + restock - stock);
+
         final srcs = sourcesMap[id] ?? [];
 
-        // Weighted MAPE from sources; fall back to material-level DES MAPE
         double? wMape;
         final withMape = srcs.where((s) => s.mape != null).toList();
         if (withMape.isNotEmpty) {
@@ -442,12 +453,16 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         result.add(_Material(
           id: id, name: name, unit: unit,
           stock: stock, restock: restock,
-          forecastUnits: fSU, dailyRate: daily,
+          forecast7d:  fSU7,
+          forecast30d: fSU30,
+          forecast90d: fSU90,
+          dailyRate: daily,
           daysLeft: daysLeft, daysToRestock: daysRest,
-          // No accuracy metric for synthetic baseline forecasts
+          reorderQty: reorderQty,
           weightedMape: isSynthetic ? null : wMape,
           sources: srcs, periods: ps,
           synthetic: isSynthetic,
+          trendSlope: toSU(mDes.T),
         ));
       }
 
@@ -461,18 +476,25 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
 
   List<_Material> get _visible {
     var list = _all.where((m) {
+      // Status filter
       switch (_filter) {
-        case 'Critical':  return m.status == _Status.critical;
-        case 'At Risk':   return m.status == _Status.atRisk;
-        case 'Healthy':   return m.status == _Status.healthy;
-        case 'No Demand': return m.status == _Status.noDemand;
-        default:          return true;
+        case 'Critical':  if (m.status != _Status.critical)  return false;
+        case 'At Risk':   if (m.status != _Status.atRisk)    return false;
+        case 'Healthy':   if (m.status != _Status.healthy)   return false;
+        case 'Overstock': if (m.status != _Status.overstock) return false;
+        case 'No Demand': if (m.status != _Status.noDemand)  return false;
       }
+      // Search filter
+      if (_search.isNotEmpty &&
+          !m.name.toLowerCase().contains(_search.toLowerCase())) {
+        return false;
+      }
+      return true;
     }).toList();
     list.sort((a, b) {
       switch (_sort) {
         case 'Name':     return a.name.compareTo(b.name);
-        case 'Forecast': return b.forecastUnits.compareTo(a.forecastUnits);
+        case 'Forecast': return b.forecast30d.compareTo(a.forecast30d);
         case 'MAPE':
           final ma = a.weightedMape ?? double.infinity;
           final mb = b.weightedMape ?? double.infinity;
@@ -500,7 +522,10 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
       _header(),
       Expanded(
         child: _visible.isEmpty
-            ? Center(child: Text('No "$_filter" materials.',
+            ? Center(child: Text(
+                _search.isNotEmpty
+                    ? 'No materials matching "$_search".'
+                    : 'No "$_filter" materials.',
                 style: const TextStyle(color: _muted)))
             : RefreshIndicator(
                 onRefresh: _load, color: _navy,
@@ -521,7 +546,7 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
       color: const Color(0xFFF8FAFC),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Title row
+        // Title + action buttons
         Row(children: [
           const Expanded(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -530,7 +555,7 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
                   style: TextStyle(color: _navy, fontSize: 15,
                       fontWeight: FontWeight.w800)),
               SizedBox(height: 1),
-              Text("Holt's DES (α+β auto) · 3-yr history · BOM explosion",
+              Text("Holt's DES (α+β auto, 56-pt grid) · 3-yr history · BOM explosion",
                   style: TextStyle(color: _muted, fontSize: 10)),
             ],
           )),
@@ -546,16 +571,49 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         ]),
         const SizedBox(height: 10),
 
-        // Status summary chips
+        // Search bar
+        Container(
+          height: 36,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: TextField(
+            controller: _searchCtrl,
+            style: const TextStyle(color: _navy, fontSize: 12),
+            onChanged: (v) => setState(() => _search = v),
+            decoration: InputDecoration(
+              hintText: 'Search materials…',
+              hintStyle: TextStyle(color: _slate.withValues(alpha: 0.5), fontSize: 12),
+              prefixIcon: const Icon(Icons.search_rounded, size: 16, color: _slate),
+              suffixIcon: _search.isNotEmpty
+                  ? GestureDetector(
+                      onTap: () { _searchCtrl.clear(); setState(() => _search = ''); },
+                      child: const Icon(Icons.close_rounded, size: 14, color: _slate))
+                  : null,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              isDense: true,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // Status summary chips (All + each status)
         SingleChildScrollView(scrollDirection: Axis.horizontal,
           child: Row(children: [
-            _SChip('Critical',  _cnt(_Status.critical),  _rose,    _filter == 'Critical',
+            _SChip('All',       _all.length,              _navy,    _filter == 'All',
+                () => _setFilter('All')),
+            _SChip('Critical',  _cnt(_Status.critical),   _rose,    _filter == 'Critical',
                 () => _setFilter('Critical')),
-            _SChip('At Risk',   _cnt(_Status.atRisk),    _amber,   _filter == 'At Risk',
+            _SChip('At Risk',   _cnt(_Status.atRisk),     _amber,   _filter == 'At Risk',
                 () => _setFilter('At Risk')),
-            _SChip('Healthy',   _cnt(_Status.healthy),   _emerald, _filter == 'Healthy',
+            _SChip('Healthy',   _cnt(_Status.healthy),    _emerald, _filter == 'Healthy',
                 () => _setFilter('Healthy')),
-            _SChip('No Demand', _cnt(_Status.noDemand),  _slate,   _filter == 'No Demand',
+            _SChip('Overstock', _cnt(_Status.overstock),  _indigo,  _filter == 'Overstock',
+                () => _setFilter('Overstock')),
+            _SChip('No Demand', _cnt(_Status.noDemand),   _slate,   _filter == 'No Demand',
                 () => _setFilter('No Demand')),
           ]),
         ),
@@ -590,8 +648,7 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
     );
   }
 
-  void _setFilter(String f) =>
-      setState(() => _filter = _filter == f ? 'All' : f);
+  void _setFilter(String f) => setState(() => _filter = f);
 
   void _openDiag(BuildContext ctx) => showModalBottomSheet(
     context: ctx, isScrollControlled: true,
@@ -653,7 +710,6 @@ class _MatCardState extends State<_MatCard> {
     final color = m.statusColor;
     final dLabel = m.daysLeft.isInfinite ? '∞' : m.daysLeft.toStringAsFixed(0);
 
-    // Stock bar
     final sPct = m.restock > 0
         ? (m.stock / (m.restock * 3)).clamp(0.0, 1.0)
         : (m.stock > 0 ? 1.0 : 0.0);
@@ -700,12 +756,17 @@ class _MatCardState extends State<_MatCard> {
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Name + status badge
+                  // Name + trend arrow + status badge
                   Row(children: [
                     Expanded(child: Text(m.name,
                         style: const TextStyle(color: _navy,
                             fontSize: 13, fontWeight: FontWeight.w700),
                         maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    // Trend direction icon
+                    if (m.dailyRate > 0.001) ...[
+                      const SizedBox(width: 4),
+                      _TrendIcon(dir: m.trendDir),
+                    ],
                     if (m.synthetic) ...[
                       const SizedBox(width: 4),
                       _Badge('~Est', _slate),
@@ -729,8 +790,7 @@ class _MatCardState extends State<_MatCard> {
                       m.unit.isEmpty
                           ? 'Stock: ${_fmt(m.stock)}'
                           : 'Stock: ${_fmt(m.stock)} ${m.unit}',
-                      style: const TextStyle(
-                          color: _slate, fontSize: 11)),
+                      style: const TextStyle(color: _slate, fontSize: 11)),
                     const Spacer(),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -747,18 +807,20 @@ class _MatCardState extends State<_MatCard> {
                     ),
                   ]),
 
-                  // Forecast pill
-                  if (m.forecastUnits > 0.001) ...[
+                  // Forecast pill + mini sparkline
+                  if (m.forecast30d > 0.001) ...[
                     const SizedBox(height: 4),
                     Text(
                       '${m.synthetic ? 'Est. baseline' : 'Forecast'} next 30d: '
-                      '${_fmt(m.forecastUnits)}'
+                      '${_fmt(m.forecast30d)}'
                       '${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
                       style: TextStyle(
                           color: m.synthetic
                               ? _slate.withValues(alpha: 0.7)
                               : _navy.withValues(alpha: 0.65),
                           fontSize: 11, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    _MiniSparkline(periods: m.periods, color: color),
                   ],
                 ],
               )),
@@ -775,19 +837,30 @@ class _MatCardState extends State<_MatCard> {
 
           // ── Expanded detail ────────────────────────────────────────────────
           if (_open) ...[
-            Divider(height: 1,
-                color: color.withValues(alpha: 0.20)),
+            Divider(height: 1, color: color.withValues(alpha: 0.20)),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
 
+                // ── Multi-horizon forecast strip ───────────────────────────
+                Row(children: [
+                  Expanded(child: _HorizonBox('7-day',
+                      '${_fmt(m.forecast7d)}${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
+                      _slate)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _HorizonBox('30-day',
+                      '${_fmt(m.forecast30d)}${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
+                      _navy)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _HorizonBox('90-day',
+                      '${_fmt(m.forecast90d)}${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
+                      _indigo)),
+                ]),
+                const SizedBox(height: 10),
+
                 // ── Key stats grid ─────────────────────────────────────────
                 Wrap(spacing: 8, runSpacing: 8, children: [
-                  _StatBox('Forecast (30d)',
-                    m.forecastUnits < 0.001 ? 'No demand'
-                        : '${_fmt(m.forecastUnits)} ${m.unit}',
-                    _navy),
                   _StatBox('Days to Stockout',
                     m.daysLeft.isInfinite ? '∞'
                         : '~${m.daysLeft.toStringAsFixed(0)} d', color),
@@ -801,9 +874,16 @@ class _MatCardState extends State<_MatCard> {
                   _StatBox('MAPE', '${m.mapeText}  ${m.mapeGrade}',
                     m.mapeColor),
                   _StatBox('Suggest Reorder',
-                    math.max(0, m.forecastUnits - m.stock) < 0.001
-                        ? 'None' : '${_fmt(math.max(0, m.forecastUnits - m.stock))} ${m.unit}',
+                    m.reorderQty < 0.001
+                        ? 'None' : '${_fmt(m.reorderQty)} ${m.unit}',
                     _emerald),
+                  _StatBox('Trend',
+                    m.trendDir == _TrendDir.up   ? '↑ Rising'
+                      : m.trendDir == _TrendDir.down ? '↓ Falling'
+                      : '→ Stable',
+                    m.trendDir == _TrendDir.up   ? _rose
+                      : m.trendDir == _TrendDir.down ? _emerald
+                      : _slate),
                 ]),
                 const SizedBox(height: 12),
 
@@ -824,7 +904,7 @@ class _MatCardState extends State<_MatCard> {
                     _mono('Forecast: F{t+m} = Lₜ + m·Tₜ'),
                     _mono('MAPE: mean(|Xₜ−Fₜ|/Xₜ)×100  over non-zero periods'),
                     const SizedBox(height: 4),
-                    Text('α and β are auto-selected per product to minimise MAPE.',
+                    Text('α and β auto-selected per product (56-pt grid) to minimise MAPE.',
                         style: TextStyle(color: _slate.withValues(alpha: 0.7),
                             fontSize: 9, fontStyle: FontStyle.italic)),
                   ]),
@@ -864,7 +944,6 @@ class _MatCardState extends State<_MatCard> {
         border: Border.all(color: const Color(0xFFE2E8F0)),
         borderRadius: BorderRadius.circular(8)),
       child: Column(children: [
-        // Header
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: const BoxDecoration(
@@ -909,7 +988,6 @@ class _MatCardState extends State<_MatCard> {
           if (i < m.sources.length - 1)
             const Divider(height: 1, color: Color(0xFFF1F5F9)),
         ],
-        // Total row
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: const BoxDecoration(
@@ -924,7 +1002,7 @@ class _MatCardState extends State<_MatCard> {
             const Expanded(flex: 2, child: SizedBox()),
             const Expanded(flex: 2, child: SizedBox()),
             Expanded(flex: 2,
-                child: Text(_fmt(m.forecastUnits),
+                child: Text(_fmt(m.forecast30d),
                     textAlign: TextAlign.right,
                     style: TextStyle(color: _navy.withValues(alpha: 0.9),
                         fontSize: 11, fontWeight: FontWeight.w800))),
@@ -945,13 +1023,13 @@ class _MatCardState extends State<_MatCard> {
     final ps    = m.periods;
     final start = math.max(0, ps.length - 12);
     final slice = ps.sublist(start);
+    final maxVal = slice.fold(0.0, math.max);
 
     return Container(
       decoration: BoxDecoration(
           border: Border.all(color: const Color(0xFFE2E8F0)),
           borderRadius: BorderRadius.circular(8)),
       child: Column(children: [
-        // Header
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: const BoxDecoration(
@@ -959,24 +1037,23 @@ class _MatCardState extends State<_MatCard> {
               borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
           child: Row(children: [
             _th('Period', flex: 3),
-            _th('Actual Consumption', flex: 4, right: true),
-            _th(m.unit.isNotEmpty ? m.unit : 'units', flex: 3, right: true),
+            _th('Consumption', flex: 4, right: true),
+            _th('Bar', flex: 3, right: false),
           ]),
         ),
         const Divider(height: 1, color: Color(0xFFE2E8F0)),
         for (int i = 0; i < slice.length; i++) ...[
           Builder(builder: (_) {
-            final v      = slice[i];
+            final v       = slice[i];
             final fromEnd = slice.length - 1 - i;
             final label  = fromEnd == 0 ? 'P1  last 30d'
                 : fromEnd == 1 ? 'P2  30–60d ago'
                 : fromEnd == 2 ? 'P3  60–90d ago'
                 : 'P${fromEnd + 1}  ${(fromEnd + 1) * 30}d+';
+            final barPct  = maxVal > 0 ? (v / maxVal).clamp(0.0, 1.0) : 0.0;
             return Container(
-              color: fromEnd < 3
-                  ? _navy.withValues(alpha: 0.02) : null,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 5),
+              color: fromEnd < 3 ? _navy.withValues(alpha: 0.02) : null,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               child: Row(children: [
                 Expanded(flex: 3, child: Text(label,
                     style: TextStyle(
@@ -992,14 +1069,26 @@ class _MatCardState extends State<_MatCard> {
                       fontSize: 10,
                       fontWeight: v > 0.001
                           ? FontWeight.w600 : FontWeight.w400))),
-                const Expanded(flex: 3, child: SizedBox()),
+                // Mini bar
+                Expanded(flex: 3, child: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: barPct,
+                      minHeight: 6,
+                      backgroundColor: const Color(0xFFE2E8F0),
+                      valueColor: AlwaysStoppedAnimation(
+                          fromEnd < 3 ? _navy.withValues(alpha: 0.6) : _slate.withValues(alpha: 0.35)),
+                    ),
+                  ),
+                )),
               ]),
             );
           }),
           if (i < slice.length - 1)
             const Divider(height: 1, color: Color(0xFFF8FAFC)),
         ],
-        // Forecast row
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
@@ -1012,7 +1101,7 @@ class _MatCardState extends State<_MatCard> {
                     style: TextStyle(color: _navy, fontSize: 10,
                         fontWeight: FontWeight.w800))),
             Expanded(flex: 4, child: Text(
-                m.forecastUnits < 0.001 ? '0' : _fmt(m.forecastUnits),
+                m.forecast30d < 0.001 ? '0' : _fmt(m.forecast30d),
                 textAlign: TextAlign.right,
                 style: const TextStyle(color: _navy, fontSize: 11,
                     fontWeight: FontWeight.w800))),
@@ -1025,7 +1114,14 @@ class _MatCardState extends State<_MatCard> {
 
   Widget _recoBox(_Material m, Color color) {
     String text;
-    if (m.dailyRate < 0.001) {
+    final u    = m.unit.isNotEmpty ? m.unit : 'units';
+    final need = m.reorderQty;
+
+    if (m.status == _Status.overstock) {
+      text = 'Overstocked — stock covers ~${m.daysLeft.toStringAsFixed(0)} days of demand '
+          '(${_fmt(m.stock)} $u on hand vs. ${_fmt(m.forecast30d)} $u/30d forecast). '
+          'No reorder needed; consider redistributing excess inventory.';
+    } else if (m.dailyRate < 0.001) {
       text = m.sources.isEmpty
           ? 'No BOM-linked product sales found. Add bill_of_materials in '
             'Admin → Products, then Import sales data to get a demand forecast.'
@@ -1035,13 +1131,13 @@ class _MatCardState extends State<_MatCard> {
       final dStr = m.daysLeft.isInfinite
           ? 'no foreseeable stockout'
           : '~${m.daysLeft.toStringAsFixed(0)} days until stockout (estimated)';
-      final u = m.unit.isNotEmpty ? m.unit : 'units';
-      final need = math.max(0.0, m.forecastUnits - m.stock);
       if (m.status == _Status.critical) {
-        text = 'URGENT — $dStr. Estimated reorder: ${_fmt(need)} $u. '
+        text = 'URGENT — $dStr. Estimated reorder: ${_fmt(need)} $u '
+            '(covers next 30d + safety stock). '
             '(Baseline forecast — import real sales to improve accuracy.)';
       } else if (m.status == _Status.atRisk) {
-        text = 'Reorder soon — $dStr. Recommended: ${_fmt(need)} $u. '
+        text = 'Reorder soon — $dStr. Recommended: ${_fmt(need)} $u '
+            '(covers next 30d + safety stock). '
             '(Baseline forecast — import real sales to improve accuracy.)';
       } else {
         text = 'Stock OK ($dStr). '
@@ -1054,15 +1150,15 @@ class _MatCardState extends State<_MatCard> {
           : '~${m.daysLeft.toStringAsFixed(0)} days until stockout';
       final mNote = m.weightedMape != null
           ? ' · MAPE ${m.mapeText} (${m.mapeGrade})' : '';
-      final need = math.max(0.0, m.forecastUnits - m.stock);
-      final u    = m.unit.isNotEmpty ? m.unit : 'units';
       if (m.status == _Status.critical) {
-        text = 'URGENT — $dStr$mNote. Order ≥${_fmt(need)} $u now.';
+        text = 'URGENT — $dStr$mNote. Order ≥${_fmt(need)} $u now '
+            '(covers next 30d demand + restores safety stock buffer).';
       } else if (m.status == _Status.atRisk) {
-        text = 'Reorder soon — $dStr$mNote. Recommended: ${_fmt(need)} $u.';
+        text = 'Reorder soon — $dStr$mNote. Recommended: ${_fmt(need)} $u '
+            '(covers next 30d demand + safety stock).';
       } else {
         text = 'Stock OK ($dStr)$mNote. '
-            '${need < 0.001 ? 'No top-up needed.' : 'Top-up if needed: ${_fmt(need)} $u.'}';
+            '${need < 0.001 ? 'No top-up needed.' : 'Top-up if needed: ${_fmt(need)} $u (30d demand + safety stock).'}';
       }
     }
     return Container(
@@ -1141,6 +1237,98 @@ class _MatCardState extends State<_MatCard> {
   static Widget sectionLabel(String t) => Text(t,
       style: const TextStyle(color: _navy, fontSize: 11,
           fontWeight: FontWeight.w700));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mini sparkline — last 8 periods as bar chart
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _MiniSparkline extends StatelessWidget {
+  final List<double> periods;
+  final Color color;
+  const _MiniSparkline({required this.periods, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final start = math.max(0, periods.length - 8);
+    final slice = periods.sublist(start);
+    final maxVal = slice.fold(0.0, math.max);
+    if (maxVal < 0.001) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 20,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: List.generate(slice.length, (i) {
+          final pct = (slice[i] / maxVal).clamp(0.0, 1.0);
+          final isLast = i == slice.length - 1;
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: Container(
+                height: math.max(2, 20 * pct),
+                decoration: BoxDecoration(
+                  color: isLast
+                      ? color.withValues(alpha: 0.85)
+                      : color.withValues(alpha: 0.30 + 0.07 * i),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trend direction icon
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TrendIcon extends StatelessWidget {
+  final _TrendDir dir;
+  const _TrendIcon({required this.dir});
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color) = switch (dir) {
+      _TrendDir.up   => (Icons.trending_up_rounded,   _rose),
+      _TrendDir.down => (Icons.trending_down_rounded, _emerald),
+      _TrendDir.flat => (Icons.trending_flat_rounded, _slate),
+    };
+    return Icon(icon, size: 14, color: color.withValues(alpha: 0.8));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Multi-horizon box
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HorizonBox extends StatelessWidget {
+  final String label, value;
+  final Color color;
+  const _HorizonBox(this.label, this.value, this.color);
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: color.withValues(alpha: 0.20))),
+    child: Column(children: [
+      Text(label, style: TextStyle(
+          color: color.withValues(alpha: 0.7),
+          fontSize: 9, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 2),
+      Text(value,
+          style: TextStyle(color: color, fontSize: 11,
+              fontWeight: FontWeight.w800),
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center),
+    ]),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1339,15 +1527,15 @@ class _DiagSheetState extends State<_DiagSheet> {
 
       if (mounted) {
         setState(() {
-        _res = {
-          'products': allNames.length, 'materials': validMats.length,
-          'csvDocs': csvDocs, 'csvLines': csvLines,
-          'ordDocs': ordDocs, 'ordMatch': ordMatch,
-          'matched': matched, 'unmatched': unmatched,
-          'noBom': noBom, 'badMat': badMat,
-        };
-        _loading = false;
-      });
+          _res = {
+            'products': allNames.length, 'materials': validMats.length,
+            'csvDocs': csvDocs, 'csvLines': csvLines,
+            'ordDocs': ordDocs, 'ordMatch': ordMatch,
+            'matched': matched, 'unmatched': unmatched,
+            'noBom': noBom, 'badMat': badMat,
+          };
+          _loading = false;
+        });
       }
     } catch (e) {
       if (mounted) { setState(() { _error = e.toString(); _loading = false; }); }
@@ -1362,7 +1550,6 @@ class _DiagSheetState extends State<_DiagSheet> {
           color: Color(0xFFFAFAFC),
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       child: Column(children: [
-        // Handle + header
         Center(child: Container(margin: const EdgeInsets.only(top: 12),
             width: 36, height: 4,
             decoration: BoxDecoration(color: const Color(0xFFD1D5DB),

@@ -349,9 +349,26 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
 
   // ── Add / Update cart ────────────────────────────────────────────────────────
 
-  // For Large Format Printing, enforce minimum 2×3 ft (either orientation).
+  // Minimum dimension (in ft) derived from the smallest value across all
+  // per_sqin presets — currently 4 in (= 4/12 ft from the 4×4 in preset).
+  double get _minDimFtIn {
+    return _presetDimsIn.values.fold<double>(double.infinity,
+        (acc, d) => [acc, d.$1, d.$2].reduce((a, b) => a < b ? a : b));
+  }
+
+  // Human-readable minimum label for per_sqin products (e.g. "4×4 in").
+  String get _minSizeLabelIn {
+    final minIn = (_minDimFtIn * 12).round();
+    return '${minIn}×${minIn} in';
+  }
+
+  // Validates size input for both product types that need a dimension.
   bool get _sizeIsValid {
     if (!_needsSizeInput) return true;
+    if (_sizeInInches) {
+      // Both dimensions must be ≥ the smallest preset dimension.
+      return _widthFt >= _minDimFtIn && _heightFt >= _minDimFtIn;
+    }
     if (!_category.toLowerCase().contains('large format')) return true;
     // Valid if one side ≥ 3 and the other ≥ 2
     return ((_widthFt >= 3 && _heightFt >= 2) ||
@@ -361,8 +378,11 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   Future<void> _addToCart() async {
     if (_addingToCart) return;
     if (_needsSizeInput && !_sizeIsValid) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Minimum tarpaulin size is 2×3 ft (or 3×2 ft).'),
+      final msg = _sizeInInches
+          ? 'Minimum size is $_minSizeLabelIn. Custom sizes cannot be smaller than the smallest available option.'
+          : 'Minimum tarpaulin size is 2×3 ft (or 3×2 ft).';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
         backgroundColor: Colors.red,
       ));
       return;
@@ -649,7 +669,8 @@ decoration: AppTheme.backgroundDecoration(context),
     return Container(
       color: const Color(0xFF0A0719),
       child: _imageUrl.isNotEmpty
-          ? Image.network(_imageUrl, fit: BoxFit.contain,
+          ? Image.network(_imageUrl, fit: BoxFit.cover,
+              width: double.infinity, height: double.infinity,
               errorBuilder: (_, __, ___) => _imgPlaceholder())
           : _imgPlaceholder(),
     );
@@ -770,12 +791,31 @@ decoration: AppTheme.backgroundDecoration(context),
               !_sizeIsValid) ...[
             const SizedBox(height: 6),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.info_outline, color: Colors.orangeAccent, size: 13),
                 const SizedBox(width: 6),
-                const Text(
-                  'Minimum size is 2×3 ft',
-                  style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                const Flexible(
+                  child: Text(
+                    'Minimum size is 2×3 ft',
+                    style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (_sizeInInches && !_sizeIsValid) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 14),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'Minimum size is $_minSizeLabelIn — cannot go smaller than the smallest option.',
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                  ),
                 ),
               ],
             ),
@@ -1150,27 +1190,36 @@ decoration: AppTheme.backgroundDecoration(context),
         ),
         const SizedBox(height: 8),
         Container(
-          padding: const EdgeInsets.all(10),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: Colors.orange.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
                 color: Colors.orange.withValues(alpha: 0.3)),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.max,
             children: [
-              const Text('50% Downpayment Required',
+              const Flexible(
+                child: Text(
+                  '50% Downpayment Required',
                   style: TextStyle(
                       color: Colors.orangeAccent,
                       fontSize: 11,
-                      fontWeight: FontWeight.bold)),
-              const SizedBox(height: 2),
-              Text('₱${(_subtotal * 0.5).toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      color: Colors.orangeAccent,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold)),
+                      fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '₱${(_subtotal * 0.5).toStringAsFixed(2)}',
+                style: const TextStyle(
+                    color: Colors.orangeAccent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold),
+              ),
             ],
           ),
         ),
