@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -395,11 +396,13 @@ class _PillSegmentItem<T> {
   final String label;
   final IconData icon;
   final Color accent;
+  final int? count;
   const _PillSegmentItem({
     required this.value,
     required this.label,
     required this.icon,
     required this.accent,
+    this.count,
   });
 }
 
@@ -475,6 +478,30 @@ class _PillSegmentControl<T> extends StatelessWidget {
                             : FontWeight.w500,
                       ),
                     ),
+                    if (item.count != null && item.count! > 0) ...[
+                      const SizedBox(width: 5),
+                      Container(
+                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? Colors.white.withValues(alpha: 0.28)
+                              : item.accent.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          item.count! > 99 ? '99+' : '${item.count}',
+                          style: TextStyle(
+                            color: isActive ? Colors.white : item.accent,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            height: 1.3,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -592,6 +619,9 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
 
+  final Map<_QueueSubTab, int> _counts = {};
+  final List<StreamSubscription<QuerySnapshot>> _countSubs = [];
+
   static const _statusTabs = [
     (
       _QueueSubTab.pending,
@@ -619,10 +649,26 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
     super.initState();
     final idx = widget.initialTab.clamp(0, 4);
     _sub = _QueueSubTab.values[idx];
+    _subscribeCount(_QueueSubTab.pending, 'pending');
+    _subscribeCount(_QueueSubTab.active, 'in_production');
+    _subscribeCount(_QueueSubTab.ready, 'ready');
+    _subscribeCount(_QueueSubTab.cancelled, 'cancelled');
+  }
+
+  void _subscribeCount(_QueueSubTab tab, String status) {
+    final sub = FirebaseFirestore.instance
+        .collection('Orders')
+        .where('status', isEqualTo: status)
+        .snapshots()
+        .listen((snap) {
+          if (mounted) setState(() => _counts[tab] = snap.size);
+        });
+    _countSubs.add(sub);
   }
 
   @override
   void dispose() {
+    for (final s in _countSubs) s.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -678,6 +724,7 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
                             label: t.$2,
                             icon: t.$3,
                             accent: t.$4,
+                            count: _counts[t.$1],
                           ),
                         )
                         .toList(),
@@ -4417,8 +4464,8 @@ class _QueueListState extends State<_QueueList> {
                 final d = doc.data() as Map<String, dynamic>;
                 final orderId = (d['order_id']?.toString() ?? '').toLowerCase();
                 final name = (d['customer_name']?.toString() ?? '').toLowerCase();
-                final uid = (d['customer_uid']?.toString() ?? '').toLowerCase();
-                return orderId.contains(q) || name.contains(q) || uid.contains(q);
+                final customerId = (d['customer_id']?.toString() ?? '').toLowerCase();
+                return orderId.contains(q) || name.contains(q) || customerId.contains(q);
               }).toList();
 
         if (allDocs.isEmpty) {
@@ -4575,8 +4622,8 @@ class _ReadyForPickupListState extends State<_ReadyForPickupList> {
                 final d = doc.data() as Map<String, dynamic>;
                 final orderId = (d['order_id']?.toString() ?? '').toLowerCase();
                 final name = (d['customer_name']?.toString() ?? '').toLowerCase();
-                final uid = (d['customer_uid']?.toString() ?? '').toLowerCase();
-                return orderId.contains(q) || name.contains(q) || uid.contains(q);
+                final customerId = (d['customer_id']?.toString() ?? '').toLowerCase();
+                return orderId.contains(q) || name.contains(q) || customerId.contains(q);
               }).toList();
 
         if (allDocs.isEmpty) {
@@ -4716,7 +4763,8 @@ class _ReadyOrderCard extends StatelessWidget {
         'Nov',
         'Dec',
       ];
-      return '${m[d.month - 1]} ${d.day}';
+      return '${m[d.month - 1]} ${d.day}, ${d.year} '
+          '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
     } catch (_) {
       return '—';
     }
