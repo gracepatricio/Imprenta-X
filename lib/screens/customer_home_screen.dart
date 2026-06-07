@@ -833,7 +833,7 @@ class _ServicesSection extends StatelessWidget {
     _ServiceItem(
       title: 'Large Format & Signage',
       subtitle: 'Tarpaulins, banners & sintra boards',
-      icon: Icons.photo_size_select_actual_outlined,
+      icon: Icons.panorama_outlined,
       accentColor: Color(0xFF4C6EF5),
       iconColor: Color(0xFFAABEFF),
       bgColor: Color(0xFF1A2760),
@@ -843,7 +843,7 @@ class _ServicesSection extends StatelessWidget {
     _ServiceItem(
       title: 'Stickers & Labels',
       subtitle: 'Custom stickers, vinyl & decals',
-      icon: Icons.local_offer_outlined,
+      icon: Icons.sell_outlined,
       accentColor: Color(0xFFE08C00),
       iconColor: Color(0xFFFFD166),
       bgColor: Color(0xFF3D2200),
@@ -853,7 +853,7 @@ class _ServicesSection extends StatelessWidget {
     _ServiceItem(
       title: 'Photo & Card Prints',
       subtitle: 'Photos, calling cards & invitations',
-      icon: Icons.credit_card_outlined,
+      icon: Icons.photo_library_outlined,
       accentColor: Color(0xFF059669),
       iconColor: Color(0xFF6EE7B7),
       bgColor: Color(0xFF0A3326),

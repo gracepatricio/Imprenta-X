@@ -588,7 +588,7 @@ decoration: AppTheme.backgroundDecoration(context),
     child: Column(
       children: [
         AspectRatio(
-          aspectRatio: 16 / 9,
+          aspectRatio: 4 / 3,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: BackdropFilter(
@@ -646,10 +646,13 @@ decoration: AppTheme.backgroundDecoration(context),
   );
 
   Widget _productImage() {
-    return _imageUrl.isNotEmpty
-        ? Image.network(_imageUrl, fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _imgPlaceholder())
-        : _imgPlaceholder();
+    return Container(
+      color: const Color(0xFF0A0719),
+      child: _imageUrl.isNotEmpty
+          ? Image.network(_imageUrl, fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => _imgPlaceholder())
+          : _imgPlaceholder(),
+    );
   }
 
   Widget _imgPlaceholder() => Container(

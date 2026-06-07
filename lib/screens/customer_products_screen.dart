@@ -183,7 +183,7 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
                                       crossAxisCount: cols,
                                       mainAxisSpacing: 14,
                                       crossAxisSpacing: 14,
-                                      childAspectRatio: 0.60,
+                                      childAspectRatio: isWide ? 0.60 : 0.55,
                                     ),
                                     itemCount: products.length,
                                     itemBuilder: (_, i) => _ProductCard(
@@ -623,24 +623,30 @@ class _CategoryGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final all = ['All', ...categories];
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: all.map((cat) {
-        final isAll = cat == 'All';
-        final isSelected = isAll ? selected == null : selected == cat;
-        return _CategoryChip(
-          label: cat,
-          isSelected: isSelected,
-          onTap: () {
-            if (isAll) {
-              onSelect(null);
-            } else {
-              onSelect(isSelected ? null : cat);
-            }
-          },
-        );
-      }).toList(),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: all.asMap().entries.map((entry) {
+          final i = entry.key;
+          final cat = entry.value;
+          final isAll = cat == 'All';
+          final isSelected = isAll ? selected == null : selected == cat;
+          return Padding(
+            padding: EdgeInsets.only(right: i < all.length - 1 ? 8.0 : 0),
+            child: _CategoryChip(
+              label: cat,
+              isSelected: isSelected,
+              onTap: () {
+                if (isAll) {
+                  onSelect(null);
+                } else {
+                  onSelect(isSelected ? null : cat);
+                }
+              },
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 }
@@ -887,7 +893,7 @@ class _ProductCardState extends State<_ProductCard> {
                     imageUrl.isNotEmpty
                         ? Image.network(
                             imageUrl,
-                            fit: BoxFit.cover,
+                            fit: BoxFit.contain,
                             errorBuilder: (_, __, ___) => _placeholder(),
                           )
                         : _placeholder(),
@@ -940,100 +946,98 @@ class _ProductCardState extends State<_ProductCard> {
               ),
 
               // ── Info ──
-              Expanded(
-                flex: 4,
+              SizedBox(
+                height: 130,
                 child: Padding(
-padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          height: 1.3,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (cardDesc.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          cardDesc,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.45),
-                            fontSize: 11,
-                            height: 1.4,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      if (variants.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 4,
-                          children: variants.take(3).map((v) => Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(99),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.20)),
+                      // Top: name + optional variants row
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              height: 1.3,
                             ),
-                            child: Text(
-                              v.toString(),
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.70),
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (variants.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: variants.map((v) => Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 7, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.10),
+                                      borderRadius: BorderRadius.circular(99),
+                                      border: Border.all(
+                                          color: Colors.white.withValues(alpha: 0.22)),
+                                    ),
+                                    child: Text(
+                                      v.toString(),
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.75),
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                )).toList(),
                               ),
                             ),
-                          )).toList(),
-                        ),
-                      ],
-                      const Spacer(),
-                      Text(
-                        priceText,
-                        style: TextStyle(
-                          color: AppTheme.gold,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                          shadows: [
-                            Shadow(
-                              color: AppTheme.gold.withValues(alpha: 0.35),
-                              blurRadius: 6,
+                          ] else if (cardDesc.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              cardDesc,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.45),
+                                fontSize: 11,
+                                height: 1.35,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
-                        ),
+                        ],
                       ),
-                      if (widget.stockLoaded) Builder(builder: (_) {
-                        final bom = (widget.data['bill_of_materials'] as List?) ?? [];
-                        if (bom.isEmpty) return const SizedBox.shrink();
-                        final max = _maxForCard(widget.data, widget.stockMap);
-                        final inStock = max > 0;
-                        final color = inStock ? const Color(0xFF4ADE80) : const Color(0xFFF87171);
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 3),
-                          child: Row(children: [
-                            Container(width: 6, height: 6,
-                              decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-                            const SizedBox(width: 4),
-                            Text(inStock ? 'In stock' : 'Out of stock',
-                              style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w600)),
-                          ]),
-                        );
-                      }),
-const SizedBox(height: 4),
+                      // Bottom: price + button
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            priceText,
+                            style: TextStyle(
+                              color: AppTheme.gold,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              shadows: [
+                                Shadow(
+                                  color: AppTheme.gold.withValues(alpha: 0.35),
+                                  blurRadius: 6,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 5),
                       SizedBox(
                         width: double.infinity,
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
-padding: const EdgeInsets.symmetric(vertical: 6),
+                          padding: const EdgeInsets.symmetric(vertical: 6),
                           decoration: BoxDecoration(
                             color: _hovered
                                 ? AppTheme.gold
@@ -1079,6 +1083,8 @@ padding: const EdgeInsets.symmetric(vertical: 6),
                           ),
                         ),
                       ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -1103,47 +1109,4 @@ padding: const EdgeInsets.symmetric(vertical: 6),
     ),
     child: const Icon(Icons.image_outlined, color: Colors.white24, size: 32),
   );
-}
-
-// Returns the max orderable quantity for a product card (best-case across all variants).
-// Infinity = no BOM / always available. 0 = nothing in stock.
-double _maxForCard(Map<String, dynamic> data, Map<String, double> stockMap) {
-  final bom = (data['bill_of_materials'] as List?) ?? [];
-  if (bom.isEmpty) return double.infinity;
-
-  double itemMin(List items) {
-    double? m;
-    for (final e in items) {
-      final matId = (e['material_id'] as String?) ?? '';
-      if (matId.isEmpty) continue;
-      final qpu = (e['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
-      if (qpu <= 0) continue;
-      final v = (stockMap[matId] ?? 0.0) / qpu;
-      if (m == null || v < m) m = v;
-    }
-    return m ?? double.infinity;
-  }
-
-  final shared = bom.where((e) {
-    final opt = (e['for_material_option'] as String?)?.trim() ?? '';
-    return opt.isEmpty;
-  }).toList();
-  final sharedMin = itemMin(shared);
-
-  final matOpts = (data['material_options'] as List?) ?? [];
-  if (matOpts.isEmpty) return sharedMin;
-
-  // For each variant, compute combined available qty; return best across variants.
-  double best = 0;
-  for (final v in matOpts) {
-    final vStr = v.toString().trim();
-    final varItems = bom.where((e) {
-      final opt = (e['for_material_option'] as String?)?.trim() ?? '';
-      return opt.isNotEmpty && opt == vStr;
-    }).toList();
-    final varMin = itemMin(varItems);
-    final combined = sharedMin < varMin ? sharedMin : varMin;
-    if (combined > best) best = combined;
-  }
-  return best;
 }
