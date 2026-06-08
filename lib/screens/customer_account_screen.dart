@@ -4156,12 +4156,13 @@ class _FeedbackContent extends StatelessWidget {
                   final d = docs[i].data() as Map<String, dynamic>;
                   final orderId = d['order_id']?.toString() ?? docs[i].id;
                   final products = List<Map>.from(d['products'] ?? []);
-                  final productName = products.isNotEmpty
-                      ? products.first['name']?.toString() ?? ''
-                      : '';
+                  final productNames = products
+                      .map((p) => p['name']?.toString() ?? '')
+                      .where((n) => n.isNotEmpty)
+                      .toList();
                   return _ReviewOrderCard(
                     orderId: orderId,
-                    productName: productName,
+                    productNames: productNames,
                     totalPrice: d['total_price'],
                     hasReview: d['has_review'] == true,
                     uid: uid,
@@ -4178,13 +4179,14 @@ class _FeedbackContent extends StatelessWidget {
 }
 
 class _ReviewOrderCard extends StatelessWidget {
-  final String orderId, productName, uid, fullName;
+  final String orderId, uid, fullName;
+  final List<String> productNames;
   final dynamic totalPrice;
   final bool hasReview;
 
   const _ReviewOrderCard({
     required this.orderId,
-    required this.productName,
+    required this.productNames,
     required this.totalPrice,
     required this.hasReview,
     required this.uid,
@@ -4223,9 +4225,9 @@ class _ReviewOrderCard extends StatelessWidget {
                     fontSize: 13,
                   ),
                 ),
-                if (productName.isNotEmpty)
+                if (productNames.isNotEmpty)
                   Text(
-                    productName,
+                    productNames.join(', '),
                     style: const TextStyle(color: _G.textMuted, fontSize: 11),
                   ),
                 if (totalPrice != null)
@@ -4260,7 +4262,7 @@ class _ReviewOrderCard extends StatelessWidget {
                 context: context,
                 builder: (_) => _ReviewDialog(
                   orderId: orderId,
-                  productName: productName,
+                  productNames: productNames,
                   uid: uid,
                   fullName: fullName,
                 ),
@@ -4298,10 +4300,11 @@ class _ReviewOrderCard extends StatelessWidget {
 }
 
 class _ReviewDialog extends StatefulWidget {
-  final String orderId, productName, uid, fullName;
+  final String orderId, uid, fullName;
+  final List<String> productNames;
   const _ReviewDialog({
     required this.orderId,
-    required this.productName,
+    required this.productNames,
     required this.uid,
     required this.fullName,
   });
@@ -4339,7 +4342,7 @@ class _ReviewDialogState extends State<_ReviewDialog> {
       'customer_uid': widget.uid,
       'customer_id': customerId,
       'customer_name': widget.fullName,
-      'product_name': widget.productName,
+      'product_names': widget.productNames,
       'rating': _rating,
       'message': _msgCtrl.text.trim(),
       'read': false,
@@ -4391,9 +4394,9 @@ class _ReviewDialogState extends State<_ReviewDialog> {
                   widget.orderId,
                   style: const TextStyle(color: _G.textMuted, fontSize: 12),
                 ),
-                if (widget.productName.isNotEmpty)
+                if (widget.productNames.isNotEmpty)
                   Text(
-                    widget.productName,
+                    widget.productNames.join(', '),
                     style: const TextStyle(color: _G.accentAmber, fontSize: 12),
                   ),
                 const SizedBox(height: 16),

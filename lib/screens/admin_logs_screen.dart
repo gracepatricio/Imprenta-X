@@ -993,6 +993,7 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Text(
                                 orderLabel,
@@ -1122,8 +1123,8 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
                   _AdminDueDateRow(dueDate: estimatedCompletion),
                 ],
 
-                // ── Ready: info chips + payment progress bar ─────────────
-                if (rawStatus == 'ready') ...[
+                // ── Ready: info chips + payment progress bar (queue only) ──
+                if (rawStatus == 'ready' && showDueDate) ...[
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -1215,43 +1216,54 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                   ],
-                  // Info chips + invoice
+                  // Info chips
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Expanded(
-                        child: Row(
-                          children: [
-                            _AdminInfoChip(
-                              'Total',
-                              '₱${total.toStringAsFixed(2)}',
-                              _G.textSecondary,
-                            ),
-                            const SizedBox(width: 10),
-                            _AdminInfoChip(
-                              'Paid',
-                              '₱${amountPaid.toStringAsFixed(2)}',
-                              _G.accentEmerald,
-                            ),
-                            const SizedBox(width: 10),
-                            _AdminInfoChip(
-                              fullyPaid ? 'Fully Paid' : 'Balance',
-                              fullyPaid
-                                  ? '—'
-                                  : '₱${remaining.toStringAsFixed(2)}',
-                              fullyPaid ? _G.accentEmerald : _G.accentAmber,
-                              bold: true,
-                            ),
-                          ],
-                        ),
+                      _AdminInfoChip(
+                        'Total',
+                        '₱${total.toStringAsFixed(2)}',
+                        _G.textSecondary,
                       ),
                       const SizedBox(width: 10),
+                      _AdminInfoChip(
+                        'Paid',
+                        '₱${amountPaid.toStringAsFixed(2)}',
+                        _G.accentEmerald,
+                      ),
+                      const SizedBox(width: 10),
+                      _AdminInfoChip(
+                        fullyPaid ? 'Fully Paid' : 'Balance',
+                        fullyPaid
+                            ? '—'
+                            : '₱${remaining.toStringAsFixed(2)}',
+                        fullyPaid ? _G.accentEmerald : _G.accentAmber,
+                        bold: true,
+                      ),
+                    ],
+                  ),
+                  if (rawStatus == 'ready') ...[
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: pct,
+                        backgroundColor: _G.borderDim,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          fullyPaid ? _G.accentEmerald : _G.accentAmber,
+                        ),
+                        minHeight: 5,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  // Date + turnaround (left) · invoice (right)
+                  Row(
+                    children: [
+                      dateRow(),
+                      const Spacer(),
                       _InvoiceButton(orderId: orderId),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  // Date + turnaround at very bottom
-                  dateRow(),
                 ]
 
                 // ── QUEUE layout (showDueDate == true) ───────────────────
@@ -2158,11 +2170,15 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
 
   // Job Queue filter
   String _jqFilter = '';
+  String _jqOrderFilter = '';
   final _jqCtrl = TextEditingController();
+  final _jqOrderCtrl = TextEditingController();
 
   // POS filter
   String _posFilter = '';
+  String _posOrderFilter = '';
   final _posCtrl = TextEditingController();
+  final _posOrderCtrl = TextEditingController();
 
   static final _dateFmt = DateFormat('MMM dd, yyyy hh:mm a');
 
@@ -2171,7 +2187,9 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
     _empCtrl.dispose();
     _matCtrl.dispose();
     _jqCtrl.dispose();
+    _jqOrderCtrl.dispose();
     _posCtrl.dispose();
+    _posOrderCtrl.dispose();
     super.dispose();
   }
 
@@ -2543,20 +2561,16 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
           child: const Row(
             children: [
               Expanded(flex: 2, child: Text('Timestamp', style: _hStyle)),
+              SizedBox(width: 8),
               Expanded(flex: 2, child: Text('Employee', style: _hStyle)),
-              Expanded(flex: 3, child: Text('Material', style: _hStyle)),
-              SizedBox(
-                width: 70,
-                child: Text('Added', style: _hStyle, textAlign: TextAlign.right),
-              ),
-              SizedBox(
-                width: 70,
-                child: Text('New Stock', style: _hStyle, textAlign: TextAlign.right),
-              ),
-              SizedBox(
-                width: 56,
-                child: Text('Method', style: _hStyle, textAlign: TextAlign.center),
-              ),
+              SizedBox(width: 8),
+              Expanded(flex: 2, child: Text('Material', style: _hStyle)),
+              SizedBox(width: 8),
+              Expanded(flex: 1, child: Text('Added', style: _hStyle, textAlign: TextAlign.right)),
+              SizedBox(width: 8),
+              Expanded(flex: 1, child: Text('New Stock', style: _hStyle, textAlign: TextAlign.right)),
+              SizedBox(width: 8),
+              Expanded(flex: 1, child: Text('Method', style: _hStyle, textAlign: TextAlign.center)),
             ],
           ),
         ),
@@ -2642,13 +2656,26 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                 ),
               ),
             ),
-            if (_jqFilter.isNotEmpty)
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextFormField(
+                controller: _jqOrderCtrl,
+                style: const TextStyle(color: _G.textPrimary, fontSize: 13),
+                onChanged: (v) => setState(() => _jqOrderFilter = v.toLowerCase()),
+                decoration: _G.field(
+                  'Filter by order ID',
+                  icon: Icons.receipt_outlined,
+                ),
+              ),
+            ),
+            if (_jqFilter.isNotEmpty || _jqOrderFilter.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 6),
                 child: GestureDetector(
                   onTap: () {
                     _jqCtrl.clear();
-                    setState(() => _jqFilter = '');
+                    _jqOrderCtrl.clear();
+                    setState(() { _jqFilter = ''; _jqOrderFilter = ''; });
                   },
                   child: Container(
                     width: 36,
@@ -2672,8 +2699,8 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
             children: [
               Expanded(flex: 2, child: Text('Timestamp', style: _hStyle)),
               Expanded(flex: 2, child: Text('Employee', style: _hStyle)),
-              Expanded(flex: 3, child: Text('Order / Customer', style: _hStyle)),
-              Expanded(flex: 3, child: Text('Action', style: _hStyle)),
+              Expanded(flex: 2, child: Text('Order / Customer', style: _hStyle)),
+              Expanded(flex: 2, child: Text('Action', style: _hStyle)),
             ],
           ),
         ),
@@ -2708,9 +2735,12 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                     data['employee_name']?.toString().toLowerCase() ?? '';
                 final empId =
                     data['employee_display_id']?.toString().toLowerCase() ?? '';
-                return _jqFilter.isEmpty ||
-                    emp.contains(_jqFilter) ||
-                    empId.contains(_jqFilter);
+                final orderId =
+                    data['order_id']?.toString().toLowerCase() ?? '';
+                return (_jqFilter.isEmpty ||
+                        emp.contains(_jqFilter) ||
+                        empId.contains(_jqFilter)) &&
+                    (_jqOrderFilter.isEmpty || orderId.contains(_jqOrderFilter));
               }).toList();
 
               if (filtered.isEmpty) {
@@ -2760,13 +2790,26 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                 ),
               ),
             ),
-            if (_posFilter.isNotEmpty)
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextFormField(
+                controller: _posOrderCtrl,
+                style: const TextStyle(color: _G.textPrimary, fontSize: 13),
+                onChanged: (v) => setState(() => _posOrderFilter = v.toLowerCase()),
+                decoration: _G.field(
+                  'Filter by order ID',
+                  icon: Icons.receipt_outlined,
+                ),
+              ),
+            ),
+            if (_posFilter.isNotEmpty || _posOrderFilter.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 6),
                 child: GestureDetector(
                   onTap: () {
                     _posCtrl.clear();
-                    setState(() => _posFilter = '');
+                    _posOrderCtrl.clear();
+                    setState(() { _posFilter = ''; _posOrderFilter = ''; });
                   },
                   child: Container(
                     width: 36,
@@ -2788,17 +2831,15 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
           ),
           child: const Row(
             children: [
-              Expanded(flex: 2, child: Text('Timestamp', style: _hStyle)),
-              Expanded(flex: 2, child: Text('Employee', style: _hStyle)),
-              Expanded(flex: 3, child: Text('Order / Customer', style: _hStyle)),
-              SizedBox(
-                width: 100,
-                child: Text('Amount', style: _hStyle, textAlign: TextAlign.right),
-              ),
-              SizedBox(
-                width: 90,
-                child: Text('Type', style: _hStyle, textAlign: TextAlign.center),
-              ),
+              Expanded(child: Text('Timestamp', style: _hStyle)),
+              SizedBox(width: 8),
+              Expanded(child: Text('Employee', style: _hStyle)),
+              SizedBox(width: 8),
+              Expanded(child: Text('Order / Customer', style: _hStyle)),
+              SizedBox(width: 8),
+              Expanded(child: Text('Amount', style: _hStyle)),
+              SizedBox(width: 8),
+              Expanded(child: Text('Type', style: _hStyle)),
             ],
           ),
         ),
@@ -2833,9 +2874,12 @@ class _InventoryLogsTabState extends State<_InventoryLogsTab> {
                     data['employee_name']?.toString().toLowerCase() ?? '';
                 final empId =
                     data['employee_display_id']?.toString().toLowerCase() ?? '';
-                return _posFilter.isEmpty ||
-                    emp.contains(_posFilter) ||
-                    empId.contains(_posFilter);
+                final orderId =
+                    data['order_id']?.toString().toLowerCase() ?? '';
+                return (_posFilter.isEmpty ||
+                        emp.contains(_posFilter) ||
+                        empId.contains(_posFilter)) &&
+                    (_posOrderFilter.isEmpty || orderId.contains(_posOrderFilter));
               }).toList();
 
               if (filtered.isEmpty) {
@@ -3077,7 +3121,7 @@ class _JobQueueActivityRow extends StatelessWidget {
           ),
           // Order / Customer
           Expanded(
-            flex: 3,
+            flex: 2,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -3096,9 +3140,21 @@ class _JobQueueActivityRow extends StatelessWidget {
                 if (custName.isNotEmpty)
                   Text(
                     custName,
-                    style: const TextStyle(color: _G.textSecondary, fontSize: 11),
+                    style: const TextStyle(
+                      color: _G.textSecondary,
+                      fontSize: 11,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                if (data['walk_in'] == true || custName.isEmpty)
+                  const Text(
+                    'Walk-in',
+                    style: TextStyle(
+                      color: _G.textMuted,
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 if (custId.isNotEmpty)
                   Text(
@@ -3114,7 +3170,7 @@ class _JobQueueActivityRow extends StatelessWidget {
           ),
           // Action
           Expanded(
-            flex: 3,
+            flex: 2,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -3229,7 +3285,6 @@ class _PosActivityRow extends StatelessWidget {
         children: [
           // Timestamp
           Expanded(
-            flex: 2,
             child: Padding(
               padding: const EdgeInsets.only(top: 1),
               child: Text(
@@ -3238,9 +3293,9 @@ class _PosActivityRow extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(width: 8),
           // Employee
           Expanded(
-            flex: 2,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -3267,9 +3322,9 @@ class _PosActivityRow extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 8),
           // Order / Customer
           Expanded(
-            flex: 3,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -3288,9 +3343,21 @@ class _PosActivityRow extends StatelessWidget {
                 if (custName.isNotEmpty)
                   Text(
                     custName,
-                    style: const TextStyle(color: _G.textSecondary, fontSize: 11),
+                    style: const TextStyle(
+                      color: _G.textSecondary,
+                      fontSize: 11,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                if (data['walk_in'] == true || custName.isEmpty)
+                  const Text(
+                    'Walk-in',
+                    style: TextStyle(
+                      color: _G.textMuted,
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 if (custId.isNotEmpty)
                   Text(
@@ -3304,9 +3371,9 @@ class _PosActivityRow extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 8),
           // Amount
-          SizedBox(
-            width: 100,
+          Expanded(
             child: Padding(
               padding: const EdgeInsets.only(top: 1),
               child: Text(
@@ -3316,14 +3383,14 @@ class _PosActivityRow extends StatelessWidget {
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),
-                textAlign: TextAlign.right,
               ),
             ),
           ),
+          const SizedBox(width: 8),
           // Type pill
-          SizedBox(
-            width: 90,
-            child: Center(
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -3352,295 +3419,533 @@ class _PosActivityRow extends StatelessWidget {
 }
 
 // =============================================================================
-// Customer Feedback Tab (unchanged)
+// Customer Feedback Tab
 // =============================================================================
-class _CustomerFeedbackTab extends StatelessWidget {
+class _CustomerFeedbackTab extends StatefulWidget {
   const _CustomerFeedbackTab();
 
+  @override
+  State<_CustomerFeedbackTab> createState() => _CustomerFeedbackTabState();
+}
+
+class _CustomerFeedbackTabState extends State<_CustomerFeedbackTab> {
   static const Color _feedbackAmber = Color(0xFFB45309);
+
+  // Stream stored once in initState — prevents reconnection on every rebuild,
+  // which was causing the TextField to stutter/refocus on each keystroke.
+  StreamSubscription<QuerySnapshot>? _sub;
+  List<QueryDocumentSnapshot> _allDocs = [];
+  bool _loading = true;
+
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+  int? _ratingFilter; // null = all
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = FirebaseFirestore.instance
+        .collection('OrderReviews')
+        .orderBy('created_at', descending: true)
+        .limit(200)
+        .snapshots()
+        .listen((snap) {
+      setState(() {
+        _allDocs = snap.docs;
+        _loading = false;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<QueryDocumentSnapshot> _applyFilters(List<QueryDocumentSnapshot> docs) {
+    return docs.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+
+      if (_ratingFilter != null) {
+        if ((data['rating'] as num?)?.toInt() != _ratingFilter) return false;
+      }
+
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        final customer =
+            (data['customer_name']?.toString() ?? '').toLowerCase();
+        final orderId = (data['order_id']?.toString() ?? '').toLowerCase();
+        final customerId =
+            (data['customer_id']?.toString() ?? '').toLowerCase();
+        final rawNames = data['product_names'];
+        final productNames = rawNames is List
+            ? rawNames.map((e) => e.toString().toLowerCase()).toList()
+            : (data['product_name']?.toString() ?? '').isNotEmpty
+                ? [data['product_name'].toString().toLowerCase()]
+                : <String>[];
+        final matchesProduct = productNames.any((n) => n.contains(q));
+        if (!customer.contains(q) &&
+            !orderId.contains(q) &&
+            !customerId.contains(q) &&
+            !matchesProduct) {
+          return false;
+        }
+      }
+
+      return true;
+    }).toList();
+  }
+
+  Widget _searchField() {
+    return Container(
+      height: 46,
+      decoration: BoxDecoration(
+        color: _G.surfaceThin,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _G.borderDim, width: 0.8),
+      ),
+      child: TextField(
+        controller: _searchCtrl,
+        style: const TextStyle(color: _G.textPrimary, fontSize: 13),
+        onChanged: (v) => setState(() => _searchQuery = v.trim()),
+        decoration: InputDecoration(
+          hintText: 'Search by customer, ID, order, or product…',
+          hintStyle: const TextStyle(color: _G.textMuted, fontSize: 12),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            color: _G.textMuted,
+            size: 18,
+          ),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? GestureDetector(
+                  onTap: () {
+                    _searchCtrl.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: _G.textMuted,
+                    size: 16,
+                  ),
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+      ),
+    );
+  }
+
+  Widget _ratingDropdown() {
+    final value = _ratingFilter != null ? '$_ratingFilter' : null;
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: _G.surfaceThin,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: value != null
+              ? _feedbackAmber.withValues(alpha: 0.55)
+              : _G.borderDim,
+          width: 0.9,
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          hint: const Text(
+            'Rating',
+            style: TextStyle(color: _G.textMuted, fontSize: 12),
+          ),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: _G.textMuted,
+            size: 18,
+          ),
+          dropdownColor: Colors.white,
+          style: const TextStyle(color: Colors.black, fontSize: 12),
+          onChanged: (v) =>
+              setState(() => _ratingFilter = v != null ? int.parse(v) : null),
+          items: [
+            DropdownMenuItem<String>(
+              value: null,
+              child: Text(
+                'All',
+                style: TextStyle(
+                  color: value == null ? Colors.black : Colors.black54,
+                  fontSize: 12,
+                  fontWeight: value == null ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+            ...List.generate(5, (i) {
+              final star = '${i + 1}';
+              final stars = '★' * (i + 1);
+              final isSelected = value == star;
+              return DropdownMenuItem<String>(
+                value: star,
+                child: Text(
+                  stars,
+                  style: TextStyle(
+                    color: isSelected
+                        ? _feedbackAmber
+                        : _feedbackAmber.withValues(alpha: 0.65),
+                    fontSize: 14,
+                    letterSpacing: 2,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return Center(
+        child: CircularProgressIndicator(
+          color: _G.navyBlue.withValues(alpha: 0.5),
+          strokeWidth: 2,
+        ),
+      );
+    }
+
+    if (_allDocs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: _G.glass(radius: 22),
+              child: const Icon(
+                Icons.rate_review_outlined,
+                size: 32,
+                color: _G.textMuted,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'No customer feedback yet',
+              style: TextStyle(
+                color: _G.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Order reviews submitted by customers will appear here',
+              style: TextStyle(color: _G.textSecondary, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final docs = _applyFilters(_allDocs)
+      ..sort((a, b) {
+        final aRead = (a.data() as Map)['read'] == true;
+        final bRead = (b.data() as Map)['read'] == true;
+        if (aRead == bRead) return 0;
+        return aRead ? 1 : -1; // unread first
+      });
+
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('OrderReviews')
-            .orderBy('created_at', descending: true)
-            .limit(200)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
-              child: CircularProgressIndicator(
-                color: _G.navyBlue.withValues(alpha: 0.5),
-                strokeWidth: 2,
-              ),
-            );
-          }
-          final docs = snapshot.data?.docs ?? [];
-
-          if (docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: _G.glass(radius: 22),
-                    child: const Icon(
-                      Icons.rate_review_outlined,
-                      size: 32,
-                      color: _G.textMuted,
-                    ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ──────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: [
+                const Text(
+                  'Customer Feedback',
+                  style: TextStyle(
+                    color: _G.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
                   ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'No customer feedback yet',
-                    style: TextStyle(
-                      color: _G.textPrimary,
-                      fontSize: 16,
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 3,
+                  ),
+                  decoration: _G.pill(tint: _G.navyBlue),
+                  child: Text(
+                    '${docs.length}',
+                    style: const TextStyle(
+                      color: _G.navyBlue,
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Order reviews submitted by customers will appear here',
-                    style: TextStyle(color: _G.textSecondary, fontSize: 13),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    const Text(
-                      'Customer Feedback',
-                      style: TextStyle(
-                        color: _G.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 3,
-                      ),
-                      decoration: _G.pill(),
-                      child: Text(
-                        '${docs.length}',
-                        style: const TextStyle(
-                          color: _G.textSecondary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
-              ),
-              Expanded(
-                child: Scrollbar(
-                  thumbVisibility: true,
-                  trackVisibility: true,
-                  child: ListView.builder(
-                    itemCount: docs.length,
-                    itemBuilder: (_, i) {
-                      final data = docs[i].data() as Map<String, dynamic>;
-                      final customer = data['customer_name']?.toString() ?? '—';
-                      final message = data['message']?.toString() ?? '';
-                      final rating = (data['rating'] as num?)?.toInt();
-                      final orderId = data['order_id']?.toString() ?? '';
-                      final productName =
-                          data['product_name']?.toString() ?? '';
-                      final ts = data['created_at'] as Timestamp?;
-                      final timeStr = ts != null
-                          ? DateFormat(
-                              'MMM dd, yyyy hh:mm a',
-                            ).format(ts.toDate())
-                          : '—';
-                      final isRead = data['read'] == true;
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: _BlurCard(
-                          radius: 14,
-                          padding: const EdgeInsets.all(14),
-                          tintBorder: isRead
-                              ? _G.borderMid
-                              : _G.accentAmber.withValues(alpha: 0.45),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: _G.navyBlue.withValues(
-                                        alpha: 0.08,
-                                      ),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: _G.navyBlue.withValues(
-                                          alpha: 0.18,
-                                        ),
-                                        width: 0.9,
-                                      ),
-                                    ),
-                                    child: const Icon(
-                                      Icons.person_rounded,
-                                      color: _G.navyBlue,
-                                      size: 17,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          customer,
-                                          style: const TextStyle(
-                                            color: _G.textPrimary,
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        if (orderId.isNotEmpty ||
-                                            productName.isNotEmpty)
-                                          Text(
-                                            [
-                                              if (orderId.isNotEmpty) orderId,
-                                              if (productName.isNotEmpty)
-                                                productName,
-                                            ].join(' · '),
-                                            style: const TextStyle(
-                                              color: _feedbackAmber,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        _CustomerIdText(data: data),
-                                      ],
-                                    ),
-                                  ),
-                                  if (rating != null) ...[
-                                    Row(
-                                      children: List.generate(
-                                        5,
-                                        (s) => Icon(
-                                          s < rating
-                                              ? Icons.star_rounded
-                                              : Icons.star_outline_rounded,
-                                          color: _feedbackAmber,
-                                          size: 14,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                  if (!isRead)
-                                    GestureDetector(
-                                      onTap: () => FirebaseFirestore.instance
-                                          .collection('OrderReviews')
-                                          .doc(docs[i].id)
-                                          .update({'read': true}),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 5,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: _G.accentEmerald.withValues(
-                                            alpha: 0.10,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            99,
-                                          ),
-                                          border: Border.all(
-                                            color: _G.accentEmerald.withValues(
-                                              alpha: 0.35,
-                                            ),
-                                            width: 0.8,
-                                          ),
-                                        ),
-                                        child: const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.check_rounded,
-                                              color: _G.accentEmerald,
-                                              size: 12,
-                                            ),
-                                            SizedBox(width: 4),
-                                            Text(
-                                              'Mark read',
-                                              style: TextStyle(
-                                                color: _G.accentEmerald,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                timeStr,
-                                style: const TextStyle(
-                                  color: _G.textMuted,
-                                  fontSize: 11,
-                                ),
-                              ),
-                              if (message.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: _G.surfaceThin,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: _G.borderDim,
-                                      width: 0.8,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    message,
-                                    style: const TextStyle(
-                                      color: _G.textSecondary,
-                                      fontSize: 13,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
+              ],
+            ),
+          ),
+          // ── Search + Rating row ─────────────────────────────────────────
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 360;
+              return isNarrow
+                  ? Column(
+                      children: [
+                        _searchField(),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: _ratingDropdown(),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(child: _searchField()),
+                        const SizedBox(width: 8),
+                        _ratingDropdown(),
+                      ],
+                    );
+            },
+          ),
+          const SizedBox(height: 10),
+          // ── List ────────────────────────────────────────────────────────
+          Expanded(
+            child: docs.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.search_off_rounded,
+                          color: _G.textMuted,
+                          size: 32,
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'No results found',
+                          style: TextStyle(
+                            color: _G.textMuted,
+                            fontSize: 13,
                           ),
                         ),
-                      );
-                    },
+                      ],
+                    ),
+                  )
+                : Scrollbar(
+                    thumbVisibility: true,
+                    trackVisibility: true,
+                    child: ListView.builder(
+                      itemCount: docs.length,
+                      itemBuilder: (_, i) {
+                        final data =
+                            docs[i].data() as Map<String, dynamic>;
+                        final customer =
+                            data['customer_name']?.toString() ?? '—';
+                        final message =
+                            data['message']?.toString() ?? '';
+                        final rating =
+                            (data['rating'] as num?)?.toInt();
+                        final orderId =
+                            data['order_id']?.toString() ?? '';
+                        final rawNames = data['product_names'];
+                        final docProductNames = rawNames is List
+                            ? rawNames
+                                .map((e) => e.toString())
+                                .where((n) => n.isNotEmpty)
+                                .toList()
+                            : (data['product_name']?.toString() ?? '')
+                                    .isNotEmpty
+                                ? [data['product_name'].toString()]
+                                : <String>[];
+                        final productNamesStr =
+                            docProductNames.join(', ');
+                        final ts = data['created_at'] as Timestamp?;
+                        final timeStr = ts != null
+                            ? DateFormat(
+                                'MMM dd, yyyy hh:mm a',
+                              ).format(ts.toDate())
+                            : '—';
+                        final isRead = data['read'] == true;
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: _BlurCard(
+                            radius: 14,
+                            padding: const EdgeInsets.all(14),
+                            tintBorder: isRead
+                                ? _G.borderMid
+                                : _G.accentAmber.withValues(alpha: 0.45),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: _G.navyBlue.withValues(
+                                          alpha: 0.08,
+                                        ),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: _G.navyBlue.withValues(
+                                            alpha: 0.18,
+                                          ),
+                                          width: 0.9,
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        Icons.person_rounded,
+                                        color: _G.navyBlue,
+                                        size: 17,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            customer,
+                                            style: const TextStyle(
+                                              color: _G.textPrimary,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          if (orderId.isNotEmpty ||
+                                              productNamesStr.isNotEmpty)
+                                            Text(
+                                              [
+                                                if (orderId.isNotEmpty)
+                                                  orderId,
+                                                if (productNamesStr.isNotEmpty)
+                                                  productNamesStr,
+                                              ].join(' · '),
+                                              style: const TextStyle(
+                                                color: _feedbackAmber,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          _CustomerIdText(data: data),
+                                        ],
+                                      ),
+                                    ),
+                                    if (rating != null)
+                                      Row(
+                                        children: List.generate(
+                                          5,
+                                          (s) => Icon(
+                                            s < rating
+                                                ? Icons.star_rounded
+                                                : Icons.star_outline_rounded,
+                                            color: _feedbackAmber,
+                                            size: 14,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                if (message.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: _G.surfaceThin,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: _G.borderDim,
+                                        width: 0.8,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      message,
+                                      style: const TextStyle(
+                                        color: _G.textSecondary,
+                                        fontSize: 13,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      timeStr,
+                                      style: const TextStyle(
+                                        color: _G.textMuted,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    if (!isRead)
+                                      GestureDetector(
+                                        onTap: () =>
+                                            FirebaseFirestore.instance
+                                                .collection('OrderReviews')
+                                                .doc(docs[i].id)
+                                                .update({'read': true}),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 13,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _G.accentEmerald,
+                                            borderRadius:
+                                                BorderRadius.circular(99),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.check_rounded,
+                                                color: Colors.white,
+                                                size: 13,
+                                              ),
+                                              SizedBox(width: 5),
+                                              Text(
+                                                'Mark read',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ),
-            ],
-          );
-        },
+          ),
+        ],
       ),
     );
   }
@@ -3687,7 +3992,6 @@ class _LogRow extends StatelessWidget {
     final timeStr = ts != null ? dateFmt.format(ts.toDate()) : '—';
     final employee = data['updated_by_name']?.toString() ?? '—';
     final employeeDisplayId = data['updated_by_display_id']?.toString() ?? '';
-    final employeeUid = data['updated_by_uid']?.toString() ?? '';
     final materialName = data['material_name']?.toString() ?? '—';
     final materialId = data['material_id']?.toString() ?? '';
     final qtyAdded = (data['quantity_added'] as num?) ?? 0;
@@ -3726,18 +4030,24 @@ class _LogRow extends StatelessWidget {
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             flex: 2,
-            child: Text(
-              timeStr,
-              style: const TextStyle(color: _G.textMuted, fontSize: 11),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Text(
+                timeStr,
+                style: const TextStyle(color: _G.textMuted, fontSize: 11),
+              ),
             ),
           ),
+          const SizedBox(width: 8),
           Expanded(
             flex: 2,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   isOrderDeduction
@@ -3751,31 +4061,24 @@ class _LogRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (!isOrderDeduction)
-                  Builder(builder: (_) {
-                    final id = employeeDisplayId.isNotEmpty
-                        ? employeeDisplayId
-                        : (employeeUid.length > 10
-                            ? '${employeeUid.substring(0, 10)}…'
-                            : employeeUid);
-                    return id.isEmpty
-                        ? const SizedBox.shrink()
-                        : Text(
-                            id,
-                            style: const TextStyle(
-                              color: _G.textMuted,
-                              fontSize: 10,
-                              fontFamily: 'monospace',
-                            ),
-                          );
-                  }),
+                if (!isOrderDeduction && employeeDisplayId.isNotEmpty)
+                  Text(
+                    'ID: $employeeDisplayId',
+                    style: const TextStyle(
+                      color: _G.textMuted,
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
           Expanded(
-            flex: 3,
+            flex: 2,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   materialName,
@@ -3808,32 +4111,41 @@ class _LogRow extends StatelessWidget {
               ],
             ),
           ),
-          SizedBox(
-            width: 70,
-            child: Text(
-              qtyDisplay,
-              style: TextStyle(
-                color: qtyColor,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 1,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Text(
+                qtyDisplay,
+                style: TextStyle(
+                  color: qtyColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+                textAlign: TextAlign.right,
               ),
-              textAlign: TextAlign.right,
             ),
           ),
-          SizedBox(
-            width: 70,
-            child: Text(
-              fmt(newStock),
-              style: const TextStyle(
-                color: _G.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 1,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Text(
+                fmt(newStock),
+                style: const TextStyle(
+                  color: _G.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.right,
               ),
-              textAlign: TextAlign.right,
             ),
           ),
-          SizedBox(
-            width: 64,
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 1,
             child: Center(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -4347,6 +4659,7 @@ class _AdminOrderHistoryState extends State<AdminOrderHistory> {
                             cancelReason:
                                 data['cancel_reason']?.toString() ?? '',
                             notes: data['notes']?.toString() ?? '',
+                            walkIn: data['walk_in'] == true,
                           );
                         },
                       ),
@@ -4378,6 +4691,7 @@ class _OrderHistoryCard extends StatelessWidget {
   final String? invoiceId;
   final String cancelReason;
   final String notes;
+  final bool walkIn;
 
   const _OrderHistoryCard({
     required this.docId,
@@ -4394,6 +4708,7 @@ class _OrderHistoryCard extends StatelessWidget {
     this.invoiceId,
     this.cancelReason = '',
     this.notes = '',
+    this.walkIn = false,
   });
 
   @override
@@ -4414,14 +4729,44 @@ class _OrderHistoryCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      orderId,
-                      style: const TextStyle(
-                        color: _G.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          orderId,
+                          style: const TextStyle(
+                            color: _G.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        if (walkIn) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _G.accentAmber.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: _G.accentAmber.withValues(alpha: 0.40),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: const Text(
+                              'Walk-in',
+                              style: TextStyle(
+                                color: _G.accentAmber,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -4601,63 +4946,70 @@ class _OrderHistoryCard extends StatelessWidget {
           ),
 
           const SizedBox(height: 10),
-          Builder(
-            builder: (ctx) => GestureDetector(
-              onTap: () async {
-                String? invId = invoiceId;
-                if (invId == null) {
-                  final orderSnap = await FirebaseFirestore.instance
-                      .collection('Orders')
-                      .doc(docId)
-                      .get();
-                  invId = orderSnap.data()?['invoice_id']?.toString();
-                }
-                if (invId != null && ctx.mounted) {
-                  Navigator.of(ctx).push(
-                    MaterialPageRoute(
-                      builder: (_) => InvoiceScreen(invoiceId: invId!),
+          Divider(height: 0.8, color: _G.borderDim),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Builder(
+                builder: (ctx) => GestureDetector(
+                  onTap: () async {
+                    String? invId = invoiceId;
+                    if (invId == null) {
+                      final orderSnap = await FirebaseFirestore.instance
+                          .collection('Orders')
+                          .doc(docId)
+                          .get();
+                      invId = orderSnap.data()?['invoice_id']?.toString();
+                    }
+                    if (invId != null && ctx.mounted) {
+                      Navigator.of(ctx).push(
+                        MaterialPageRoute(
+                          builder: (_) => InvoiceScreen(invoiceId: invId!),
+                        ),
+                      );
+                    } else if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('No invoice for this order')),
+                      );
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
                     ),
-                  );
-                } else if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('No invoice for this order')),
-                  );
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: _G.accentViolet.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(99),
-                  border: Border.all(
-                    color: _G.accentViolet.withValues(alpha: 0.35),
-                    width: 0.8,
-                  ),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.receipt_long_rounded,
-                      size: 14,
-                      color: _G.accentViolet,
-                    ),
-                    SizedBox(width: 6),
-                    Text(
-                      'View Invoice',
-                      style: TextStyle(
-                        color: _G.accentViolet,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                    decoration: BoxDecoration(
+                      color: _G.accentViolet.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(99),
+                      border: Border.all(
+                        color: _G.accentViolet.withValues(alpha: 0.35),
+                        width: 0.8,
                       ),
                     ),
-                  ],
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.receipt_long_rounded,
+                          size: 14,
+                          color: _G.accentViolet,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'View Invoice',
+                          style: TextStyle(
+                            color: _G.accentViolet,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ],
       ),
