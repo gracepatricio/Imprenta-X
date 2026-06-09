@@ -12,7 +12,8 @@ const _kExpectedHeaders = [
   'invoice_number', 'sale_date',    'order_date',     'customer_name',
   'product_name',   'type',         'size',            'quantity',
   'unit_price',     'item_total',   'total_amount',    'order_status',
-  'payment_status', 'source',       'is_historical',
+  'payment_status', 'source',       'is_historical',  'width_ft',
+  'height_ft',
 ];
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -418,13 +419,19 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
       rowCount     : rows.length,
       headerIdx    : headerIdx,
       getInvoiceNo : (r) => _cellStr(rows[r], colMap['invoice_number']),
-      makeProduct  : (r) => {
-        'name'      : _cellStr(rows[r], colMap['product_name']),
-        'type'      : _cellStr(rows[r], colMap['type']),
-        'size'      : _cellStr(rows[r], colMap['size']),
-        'qty'       : _cellNum(rows[r], colMap['quantity']).toInt(),
-        'unit_price': _cellNum(rows[r], colMap['unit_price']),
-        'item_total': _cellNum(rows[r], colMap['item_total']),
+      makeProduct  : (r) {
+        final wft = _cellNum(rows[r], colMap['width_ft']);
+        final hft = _cellNum(rows[r], colMap['height_ft']);
+        return {
+          'name'      : _cellStr(rows[r], colMap['product_name']),
+          'type'      : _cellStr(rows[r], colMap['type']),
+          'size'      : _cellStr(rows[r], colMap['size']),
+          'qty'       : _cellNum(rows[r], colMap['quantity']).toInt(),
+          'unit_price': _cellNum(rows[r], colMap['unit_price']),
+          'item_total': _cellNum(rows[r], colMap['item_total']),
+          if (wft > 0 && hft > 0) 'width_ft':  wft,
+          if (wft > 0 && hft > 0) 'height_ft': hft,
+        };
       },
       makeInvoice  : (r, orderId, inv, prod) => _InvoiceData(
         orderId      : orderId,
@@ -480,7 +487,9 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
       headerIdx    : 0,
       getInvoiceNo : (r) => cs(dataRows[r - 1], 'invoice_number'),
       makeProduct  : (r) {
-        final c = dataRows[r - 1];
+        final c   = dataRows[r - 1];
+        final wft = cd(c, 'width_ft');
+        final hft = cd(c, 'height_ft');
         return {
           'name'      : cs(c, 'product_name'),
           'type'      : cs(c, 'type'),
@@ -488,6 +497,8 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
           'qty'       : int.tryParse(cs(c, 'quantity')) ?? 1,
           'unit_price': cd(c, 'unit_price'),
           'item_total': cd(c, 'item_total'),
+          if (wft > 0 && hft > 0) 'width_ft':  wft,
+          if (wft > 0 && hft > 0) 'height_ft': hft,
         };
       },
       makeInvoice  : (r, orderId, inv, prod) {
@@ -737,7 +748,8 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
         Expanded(
           child: Text(
             'Accepted: .xlsx or .csv\n'
-            'Required columns: invoice_number · sale_date · customer_name · product_name · total_amount\n'
+            'Required: invoice_number · sale_date · customer_name · product_name · quantity · total_amount\n'
+            'Optional: width_ft · height_ft  (improves forecast accuracy for size-based products)\n'
             'Multiple product rows per invoice are grouped automatically.',
             style: TextStyle(color: _G.amber, fontSize: 11, height: 1.5),
           ),

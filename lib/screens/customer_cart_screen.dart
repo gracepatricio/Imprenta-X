@@ -13,6 +13,7 @@ import 'app_theme.dart';
 import 'payment_webview_screen.dart';
 import 'invoice_screen.dart';
 import 'customer_order_screen.dart';
+import '../services/inventory_service.dart';
 
 class CustomerCartScreen extends StatefulWidget {
   final VoidCallback? onOrderPlaced;
@@ -957,6 +958,15 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     });
 
     await batch.commit();
+
+    // Soft-reserve raw materials so customers browsing see accurate availability.
+    // Best-effort: a reservation failure must not block a completed order.
+    try {
+      await InventoryService.reserveForOrder(
+        orderId: orderId,
+        products: products,
+      );
+    } catch (_) {}
 
     await FirebaseFirestore.instance.collection('Sales_Records').add({
       'order_id': orderId,

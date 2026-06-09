@@ -143,6 +143,10 @@ class _Material {
   final bool synthetic;
   // Raw Holt trend component from the material-level DES (per period).
   final double trendSlope;
+  // In-sample 1-step-ahead forecast vs actual for up to 6 recent periods.
+  // Both in stocking units, oldest-first. Aligned: accActuals[i] ↔ accFitted[i].
+  final List<double> accActuals;
+  final List<double> accFitted;
 
   const _Material({
     required this.id, required this.name, required this.unit,
@@ -154,6 +158,8 @@ class _Material {
     required this.weightedMape, required this.sources, required this.periods,
     this.synthetic = false,
     this.trendSlope = 0.0,
+    this.accActuals = const [],
+    this.accFitted  = const [],
   });
 
   // Convenience alias used in legacy call-sites.
@@ -233,7 +239,6 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
   String? _error;
   List<_Material> _all = [];
   String _filter = 'All';
-  String _sort   = 'Days Left';
   String _search = '';
   final _searchCtrl = TextEditingController();
 
@@ -290,16 +295,37 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         nameById[d.id]               = name;
       }
 
-      final sales   = <String, List<double>>{};
-      final display = <String, String>{};
-      final bomKey  = <String, List<Map<String, dynamic>>>{};
+      final sales      = <String, List<double>>{};
+      final display    = <String, String>{};
+      final bomKey     = <String, List<Map<String, dynamic>>>{};
+      // Material consumption history built directly from actual order dimensions
+      // (width_ft × height_ft × qty) when available, falling back to qty × BOM qpu.
+      final periodSqft = <String, List<double>>{
+        for (final id in mats.keys) id: List.filled(_nPeriods, 0.0),
+      };
+      // Tracks total actual sqft and total units per product across all orders
+      // that had real dimensions — used to compute average sqft per unit for
+      // the sources table instead of the fixed BOM qpu.
+      final productSqftTotal  = <String, double>{};
+      final productUnitsTotal = <String, double>{};
 
       void addSale(String key, String label,
-                   List<Map<String, dynamic>> bom, int idx, double qty) {
+                   List<Map<String, dynamic>> bom, int idx, double qty,
+                   {double? actualSqft}) {
         sales.putIfAbsent(key, () => List.filled(_nPeriods, 0.0));
         display.putIfAbsent(key, () => label);
         bomKey.putIfAbsent(key, () => bom);
         sales[key]![idx] += qty;
+        if (actualSqft != null) {
+          productSqftTotal[key]  = (productSqftTotal[key]  ?? 0) + actualSqft;
+          productUnitsTotal[key] = (productUnitsTotal[key] ?? 0) + qty;
+        }
+        for (final b in bom) {
+          final mid = b['material_id']?.toString() ?? '';
+          final qpu = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+          if (mid.isEmpty || !periodSqft.containsKey(mid)) continue;
+          periodSqft[mid]![idx] += actualSqft ?? (qty * qpu);
+        }
       }
 
       final seen   = <String>{};
@@ -312,16 +338,20 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         final idx = periodOf(ts); if (idx == null) continue;
         for (final p in (doc.data()['products'] as List? ?? [])
             .cast<Map<String, dynamic>>()) {
-          final name = (p['name']?.toString() ?? '').trim();
-          final pid  = p['product_id']?.toString() ?? '';
-          final qty  = (p['qty'] as num?)?.toDouble() ?? 1.0;
+          final name     = (p['name']?.toString() ?? '').trim();
+          final pid      = p['product_id']?.toString() ?? '';
+          final qty      = (p['qty'] as num?)?.toDouble() ?? 1.0;
+          final widthFt  = (p['width_ft']  as num?)?.toDouble();
+          final heightFt = (p['height_ft'] as num?)?.toDouble();
           if (qty <= 0) continue;
           final bom = bomById[pid] ?? bomByName[name.toLowerCase()] ?? [];
           if (bom.isEmpty) continue;
           final key   = pid.isNotEmpty && bomById.containsKey(pid)
               ? pid : name.toLowerCase();
           final label = nameById[pid] ?? name;
-          addSale(key, label, bom, idx, qty);
+          final actualSqft = (widthFt != null && heightFt != null)
+              ? widthFt * heightFt * qty : null;
+          addSale(key, label, bom, idx, qty, actualSqft: actualSqft);
         }
       }
 
@@ -331,12 +361,16 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         final idx = periodOf(ts); if (idx == null) continue;
         for (final p in (doc.data()['products'] as List? ?? [])
             .cast<Map<String, dynamic>>()) {
-          final name = (p['name']?.toString() ?? '').trim();
-          final qty  = (p['qty'] as num?)?.toDouble() ?? 1.0;
+          final name     = (p['name']?.toString() ?? '').trim();
+          final qty      = (p['qty'] as num?)?.toDouble() ?? 1.0;
+          final widthFt  = (p['width_ft']  as num?)?.toDouble();
+          final heightFt = (p['height_ft'] as num?)?.toDouble();
           if (name.isEmpty || qty <= 0) continue;
           final bom = bomByName[name.toLowerCase()] ?? [];
           if (bom.isEmpty) continue;
-          addSale(name.toLowerCase(), name, bom, idx, qty);
+          final actualSqft = (widthFt != null && heightFt != null)
+              ? widthFt * heightFt * qty : null;
+          addSale(name.toLowerCase(), name, bom, idx, qty, actualSqft: actualSqft);
         }
       }
 
@@ -344,10 +378,10 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
       final holt = <String, _DES>{};
       for (final e in sales.entries) { holt[e.key] = _bestFit(e.value); }
 
-      // Phase 2: BOM explosion.
-      final periodSqft = <String, List<double>>{
-        for (final id in mats.keys) id: List.filled(_nPeriods, 0.0),
-      };
+      // Phase 2: Sources display — which products drive demand for each material.
+      // periodSqft is already populated from actual order dimensions in addSale above.
+      // effectiveQpu: average actual sqft/unit from real orders when available,
+      // falls back to the BOM qpu for products without dimension data.
       final sourcesMap = <String, List<_Source>>{};
 
       for (final e in sales.entries) {
@@ -356,20 +390,23 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         final fQty = des.forecast(1);
         final bom  = bomKey[key] ?? [];
 
+        final totalSqft  = productSqftTotal[key]  ?? 0.0;
+        final totalUnits = productUnitsTotal[key] ?? 0.0;
+        final avgSqftPerUnit = (totalUnits > 0) ? totalSqft / totalUnits : null;
+
         for (final b in bom) {
-          final mid = b['material_id']?.toString() ?? '';
-          final qpu = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
+          final mid      = b['material_id']?.toString() ?? '';
+          final bomQpu   = (b['quantity_per_unit'] as num?)?.toDouble() ?? 1.0;
           if (mid.isEmpty || !periodSqft.containsKey(mid)) continue;
 
-          for (int p = 0; p < _nPeriods; p++) {
-            periodSqft[mid]![p] += e.value[p] * qpu;
-          }
+          // Use the average real sqft/unit if available; otherwise fall back to BOM qpu.
+          final effectiveQpu = avgSqftPerUnit ?? bomQpu;
 
           if (fQty >= 0.001) {
-            final contrib = fQty * qpu;
+            final contrib = fQty * effectiveQpu;
             sourcesMap.putIfAbsent(mid, () => []).add(_Source(
               name: display[key] ?? key,
-              forecastQty: fQty, qpu: qpu,
+              forecastQty: fQty, qpu: effectiveQpu,
               mape: des.mape, alpha: des.alpha, beta: des.beta,
               contribution: contrib,
             ));
@@ -450,6 +487,16 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         final ps = (periodSqft[id] ?? List.filled(_nPeriods, 0.0))
             .map(toSU).toList();
 
+        // Build Forecast vs Actual history from material DES in-sample fits.
+        // mDes.fits[i] is the 1-step-ahead forecast for the (i+1)th non-zero period.
+        // Take up to 6 most recent pairs.
+        final rawAccActuals = mDes.actuals.map(toSU).toList();
+        final rawAccFitted  = mDes.fits.map(toSU).toList();
+        final accStart = rawAccActuals.length > 6
+            ? rawAccActuals.length - 6 : 0;
+        final accActuals = rawAccActuals.sublist(accStart);
+        final accFitted  = rawAccFitted.sublist(accStart);
+
         result.add(_Material(
           id: id, name: name, unit: unit,
           stock: stock, restock: restock,
@@ -463,6 +510,8 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
           sources: srcs, periods: ps,
           synthetic: isSynthetic,
           trendSlope: toSU(mDes.T),
+          accActuals: accActuals,
+          accFitted:  accFitted,
         ));
       }
 
@@ -492,18 +541,9 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
       return true;
     }).toList();
     list.sort((a, b) {
-      switch (_sort) {
-        case 'Name':     return a.name.compareTo(b.name);
-        case 'Forecast': return b.forecast30d.compareTo(a.forecast30d);
-        case 'MAPE':
-          final ma = a.weightedMape ?? double.infinity;
-          final mb = b.weightedMape ?? double.infinity;
-          return ma.compareTo(mb);
-        default:
-          final da = a.daysLeft.isInfinite ? 99999.0 : a.daysLeft;
-          final db = b.daysLeft.isInfinite ? 99999.0 : b.daysLeft;
-          return da.compareTo(db);
-      }
+      final da = a.daysLeft.isInfinite ? 99999.0 : a.daysLeft;
+      final db = b.daysLeft.isInfinite ? 99999.0 : b.daysLeft;
+      return da.compareTo(db);
     });
     return list;
   }
@@ -617,33 +657,6 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
                 () => _setFilter('No Demand')),
           ]),
         ),
-        const SizedBox(height: 8),
-
-        // Sort row
-        SingleChildScrollView(scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            const Text('Sort: ', style: TextStyle(color: _muted, fontSize: 11)),
-            ...['Days Left', 'Name', 'Forecast', 'MAPE'].map((s) =>
-              Padding(padding: const EdgeInsets.only(right: 6),
-                child: GestureDetector(onTap: () => setState(() => _sort = s),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _sort == s ? _navy : Colors.transparent,
-                      borderRadius: BorderRadius.circular(99),
-                      border: Border.all(
-                          color: _sort == s ? _navy : _border)),
-                    child: Text(s, style: TextStyle(
-                      color: _sort == s ? Colors.white : _slate,
-                      fontSize: 11,
-                      fontWeight: _sort == s
-                          ? FontWeight.w700 : FontWeight.w500)),
-                  ),
-                )),
-            ),
-          ]),
-        ),
       ]),
     );
   }
@@ -708,11 +721,6 @@ class _MatCardState extends State<_MatCard> {
   Widget build(BuildContext context) {
     final m     = widget.mat;
     final color = m.statusColor;
-    final dLabel = m.daysLeft.isInfinite ? '∞' : m.daysLeft.toStringAsFixed(0);
-
-    final sPct = m.restock > 0
-        ? (m.stock / (m.restock * 3)).clamp(0.0, 1.0)
-        : (m.stock > 0 ? 1.0 : 0.0);
 
     return GestureDetector(
       onTap: () => setState(() => _open = !_open),
@@ -732,26 +740,6 @@ class _MatCardState extends State<_MatCard> {
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // Days badge
-              Container(
-                width: 46, height: 46,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color.withValues(alpha: 0.10),
-                  border: Border.all(color: color.withValues(alpha: 0.4))),
-                child: Center(child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(dLabel, style: TextStyle(color: color,
-                        fontSize: dLabel.length > 3 ? 9 : 14,
-                        fontWeight: FontWeight.w800)),
-                    Text('days', style: TextStyle(
-                        color: color.withValues(alpha: 0.6), fontSize: 7)),
-                  ],
-                )),
-              ),
-              const SizedBox(width: 10),
-
               // Main info
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -776,14 +764,6 @@ class _MatCardState extends State<_MatCard> {
                   ]),
                   const SizedBox(height: 5),
 
-                  // Stock bar
-                  ClipRRect(borderRadius: BorderRadius.circular(3),
-                    child: LinearProgressIndicator(
-                      value: sPct, minHeight: 5,
-                      backgroundColor: const Color(0xFFE2E8F0),
-                      valueColor: AlwaysStoppedAnimation(color))),
-                  const SizedBox(height: 4),
-
                   // Stock numbers + MAPE badge
                   Row(children: [
                     Text(
@@ -792,22 +772,23 @@ class _MatCardState extends State<_MatCard> {
                           : 'Stock: ${_fmt(m.stock)} ${m.unit}',
                       style: const TextStyle(color: _slate, fontSize: 11)),
                     const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: m.mapeColor.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                            color: m.mapeColor.withValues(alpha: 0.35),
-                            width: 0.7)),
-                      child: Text('MAPE ${m.mapeText}',
-                          style: TextStyle(color: m.mapeColor,
-                              fontSize: 10, fontWeight: FontWeight.w700)),
-                    ),
+                    if (m.status != _Status.noDemand && m.weightedMape != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: m.mapeColor.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                              color: m.mapeColor.withValues(alpha: 0.35),
+                              width: 0.7)),
+                        child: Text('MAPE ${m.mapeText}',
+                            style: TextStyle(color: m.mapeColor,
+                                fontSize: 10, fontWeight: FontWeight.w700)),
+                      ),
                   ]),
 
-                  // Forecast pill + mini sparkline
+                  // Forecast next 30d
                   if (m.forecast30d > 0.001) ...[
                     const SizedBox(height: 4),
                     Text(
@@ -819,8 +800,6 @@ class _MatCardState extends State<_MatCard> {
                               ? _slate.withValues(alpha: 0.7)
                               : _navy.withValues(alpha: 0.65),
                           fontSize: 11, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 6),
-                    _MiniSparkline(periods: m.periods, color: color),
                   ],
                 ],
               )),
@@ -861,18 +840,11 @@ class _MatCardState extends State<_MatCard> {
 
                 // ── Key stats grid ─────────────────────────────────────────
                 Wrap(spacing: 8, runSpacing: 8, children: [
-                  _StatBox('Days to Stockout',
-                    m.daysLeft.isInfinite ? '∞'
-                        : '~${m.daysLeft.toStringAsFixed(0)} d', color),
-                  _StatBox('Days to Restock Lvl',
-                    m.daysToRestock <= 0 ? 'Already below!'
-                        : m.daysToRestock.isInfinite ? '∞'
-                        : '~${m.daysToRestock.toStringAsFixed(0)} d',
-                    _amber),
                   _StatBox('Restock Level',
                     '${_fmt(m.restock)} ${m.unit}', _slate),
-                  _StatBox('MAPE', '${m.mapeText}  ${m.mapeGrade}',
-                    m.mapeColor),
+                  if (m.status != _Status.noDemand && m.weightedMape != null)
+                    _StatBox('MAPE', '${m.mapeText}  ${m.mapeGrade}',
+                      m.mapeColor),
                   _StatBox('Suggest Reorder',
                     m.reorderQty < 0.001
                         ? 'None' : '${_fmt(m.reorderQty)} ${m.unit}',
@@ -920,14 +892,20 @@ class _MatCardState extends State<_MatCard> {
                   _sourcesTable(m),
                 const SizedBox(height: 12),
 
+                // ── Forecast vs Actual ────────────────────────────────────
+                if (m.accActuals.isNotEmpty) ...[
+                  sectionLabel('Forecast vs Actual  (last ${m.accActuals.length} periods)'),
+                  const SizedBox(height: 6),
+                  _accuracyTable(m),
+                  const SizedBox(height: 12),
+                ],
+
                 // ── Period history table ───────────────────────────────────
                 sectionLabel('Consumption History  (last 12 of 36 periods)'),
                 const SizedBox(height: 6),
                 _periodTable(m),
                 const SizedBox(height: 8),
 
-                // ── Recommendation ─────────────────────────────────────────
-                _recoBox(m, color),
               ]),
             ),
           ],
@@ -937,6 +915,91 @@ class _MatCardState extends State<_MatCard> {
   }
 
   // ── Sub-widgets ─────────────────────────────────────────────────────────────
+
+  Widget _accuracyTable(_Material m) {
+    final actuals = m.accActuals;
+    final fitted  = m.accFitted;
+    final n       = actuals.length;
+    final unit    = m.unit.isNotEmpty ? ' ${m.unit}' : '';
+
+    return Container(
+      decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          borderRadius: BorderRadius.circular(8)),
+      child: Column(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: const BoxDecoration(
+              color: Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
+          child: Row(children: [
+            _th('Period',   flex: 3),
+            _th('Actual',   flex: 3, right: true),
+            _th('Forecast', flex: 3, right: true),
+            _th('Error',    flex: 2, right: true),
+          ]),
+        ),
+        const Divider(height: 1, color: Color(0xFFE2E8F0)),
+        for (int i = 0; i < n; i++) ...[
+          Builder(builder: (_) {
+            final fromEnd = n - 1 - i; // 0 = most recent period with a fit
+            final actual  = actuals[i];
+            final fcast   = fitted[i];
+            final errPct  = actual > 0.001
+                ? ((actual - fcast) / actual * 100).abs() : null;
+            final label = fromEnd == 0 ? 'Last 30d'
+                : fromEnd == 1 ? '30–60d ago'
+                : fromEnd == 2 ? '60–90d ago'
+                : '${(fromEnd + 1) * 30}d+ ago';
+            final errColor = errPct == null ? _muted
+                : errPct < 10  ? _emerald
+                : errPct < 25  ? _lime
+                : errPct < 50  ? _amber : _rose;
+            final isRecent = fromEnd <= 1;
+            return Container(
+              color: isRecent ? _navy.withValues(alpha: 0.02) : null,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              child: Row(children: [
+                Expanded(flex: 3, child: Text(label,
+                    style: TextStyle(
+                        color: isRecent ? _navy.withValues(alpha: 0.75) : _slate,
+                        fontSize: 10,
+                        fontWeight: isRecent ? FontWeight.w700 : FontWeight.w400))),
+                Expanded(flex: 3, child: Text(
+                    actual < 0.001 ? '—' : '${_fmt(actual)}$unit',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                        color: actual > 0.001 ? _navy : _muted,
+                        fontSize: 10, fontWeight: FontWeight.w600))),
+                Expanded(flex: 3, child: Text(
+                    '${_fmt(fcast)}$unit',
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(color: _slate, fontSize: 10))),
+                Expanded(flex: 2, child: Text(
+                    errPct == null ? '—'
+                        : '${errPct.toStringAsFixed(1)}%',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(color: errColor,
+                        fontSize: 10, fontWeight: FontWeight.w700))),
+              ]),
+            );
+          }),
+          if (i < n - 1) const Divider(height: 1, color: Color(0xFFF1F5F9)),
+        ],
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: const BoxDecoration(
+              color: Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(8))),
+          child: Text(
+            'Forecast = 1-step-ahead in-sample fit using only data before that period.',
+            style: TextStyle(color: _slate.withValues(alpha: 0.6),
+                fontSize: 9, fontStyle: FontStyle.italic),
+          ),
+        ),
+      ]),
+    );
+  }
 
   Widget _sourcesTable(_Material m) {
     return Container(
@@ -952,8 +1015,8 @@ class _MatCardState extends State<_MatCard> {
           child: Row(children: [
             _th('Product', flex: 4),
             _th('α / β',   flex: 2),
-            _th('F(t+1)',  flex: 2, right: true),
-            _th('× qpu',   flex: 2, right: true),
+            _th('F(t+1)',     flex: 2, right: true),
+            _th('× sqft/u',  flex: 2, right: true),
             _th('Demand',  flex: 2, right: true),
             _th('MAPE',    flex: 2, right: true),
           ]),
@@ -1108,72 +1171,6 @@ class _MatCardState extends State<_MatCard> {
             const Expanded(flex: 3, child: SizedBox()),
           ]),
         ),
-      ]),
-    );
-  }
-
-  Widget _recoBox(_Material m, Color color) {
-    String text;
-    final u    = m.unit.isNotEmpty ? m.unit : 'units';
-    final need = m.reorderQty;
-
-    if (m.status == _Status.overstock) {
-      text = 'Overstocked — stock covers ~${m.daysLeft.toStringAsFixed(0)} days of demand '
-          '(${_fmt(m.stock)} $u on hand vs. ${_fmt(m.forecast30d)} $u/30d forecast). '
-          'No reorder needed; consider redistributing excess inventory.';
-    } else if (m.dailyRate < 0.001) {
-      text = m.sources.isEmpty
-          ? 'No BOM-linked product sales found. Add bill_of_materials in '
-            'Admin → Products, then Import sales data to get a demand forecast.'
-          : 'Demand is present but too low to forecast meaningful consumption. '
-            'Stock should be sufficient unless demand spikes unexpectedly.';
-    } else if (m.synthetic) {
-      final dStr = m.daysLeft.isInfinite
-          ? 'no foreseeable stockout'
-          : '~${m.daysLeft.toStringAsFixed(0)} days until stockout (estimated)';
-      if (m.status == _Status.critical) {
-        text = 'URGENT — $dStr. Estimated reorder: ${_fmt(need)} $u '
-            '(covers next 30d + safety stock). '
-            '(Baseline forecast — import real sales to improve accuracy.)';
-      } else if (m.status == _Status.atRisk) {
-        text = 'Reorder soon — $dStr. Recommended: ${_fmt(need)} $u '
-            '(covers next 30d + safety stock). '
-            '(Baseline forecast — import real sales to improve accuracy.)';
-      } else {
-        text = 'Stock OK ($dStr). '
-            '${need < 0.001 ? 'No top-up needed.' : 'Top-up if needed: ${_fmt(need)} $u.'} '
-            '(Baseline forecast — import real sales to improve accuracy.)';
-      }
-    } else {
-      final dStr = m.daysLeft.isInfinite
-          ? 'no foreseeable stockout'
-          : '~${m.daysLeft.toStringAsFixed(0)} days until stockout';
-      final mNote = m.weightedMape != null
-          ? ' · MAPE ${m.mapeText} (${m.mapeGrade})' : '';
-      if (m.status == _Status.critical) {
-        text = 'URGENT — $dStr$mNote. Order ≥${_fmt(need)} $u now '
-            '(covers next 30d demand + restores safety stock buffer).';
-      } else if (m.status == _Status.atRisk) {
-        text = 'Reorder soon — $dStr$mNote. Recommended: ${_fmt(need)} $u '
-            '(covers next 30d demand + safety stock).';
-      } else {
-        text = 'Stock OK ($dStr)$mNote. '
-            '${need < 0.001 ? 'No top-up needed.' : 'Top-up if needed: ${_fmt(need)} $u (30d demand + safety stock).'}';
-      }
-    }
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.25))),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(Icons.lightbulb_outline, color: color, size: 14),
-        const SizedBox(width: 7),
-        Expanded(child: Text(text,
-            style: TextStyle(color: color.withValues(alpha: 0.85),
-                fontSize: 11, height: 1.4))),
       ]),
     );
   }

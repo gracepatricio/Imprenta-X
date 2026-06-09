@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'app_theme.dart';
 import 'employee_inventory_forecast_screen.dart';
+import '../services/inventory_service.dart';
 
 // â”€â”€ Breakpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const double _kTableMinWidth = 628.0;
@@ -87,6 +88,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
   bool _seeding = false;
   bool _seedingHistory = false;
   bool _clearingHistory = false;
+  bool _syncingAvailability = false;
 
   @override
   void initState() {
@@ -225,6 +227,36 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
           margin: const EdgeInsets.all(16),
         ),
       );
+
+  // ── Availability sync ─────────────────────────────────────────────────────
+
+  Future<void> _syncAvailability() async {
+    setState(() => _syncingAvailability = true);
+    try {
+      await InventoryService.refreshAllProductAvailability();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Product availability synced.'),
+            backgroundColor: Color(0xFF10B981),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sync failed: $e'),
+            backgroundColor: Color(0xFFEF4444),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _syncingAvailability = false);
+    }
+  }
 
   // ── Historical data seeder ─────────────────────────────────────────────────
 
@@ -518,6 +550,50 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                                           color: _Glass.textSecondary),
                                   const SizedBox(width: 6),
                                   const Text('Re-seed',
+                                      style: TextStyle(
+                                          color: _Glass.textSecondary,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Sync Availability pill
+                        GestureDetector(
+                          onTap: (_syncingAvailability || _seeding)
+                              ? null
+                              : _syncAvailability,
+                          child: AnimatedOpacity(
+                            opacity: _syncingAvailability ? 0.5 : 1.0,
+                            duration: const Duration(milliseconds: 150),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 9),
+                              decoration: BoxDecoration(
+                                color: _Glass.surfaceThin,
+                                borderRadius: BorderRadius.circular(99),
+                                border: Border.all(
+                                    color: _Glass.borderMid, width: 0.9),
+                                boxShadow: const [_Glass.rowShadow],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _syncingAvailability
+                                      ? const SizedBox(
+                                          width: 13,
+                                          height: 13,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: _Glass.textSecondary),
+                                        )
+                                      : const Icon(Icons.sync_rounded,
+                                          size: 14,
+                                          color: _Glass.textSecondary),
+                                  const SizedBox(width: 6),
+                                  const Text('Sync Availability',
                                       style: TextStyle(
                                           color: _Glass.textSecondary,
                                           fontSize: 13,

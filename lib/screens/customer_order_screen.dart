@@ -287,7 +287,9 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
             .doc(matId)
             .get();
         if (doc.exists) {
-          stockMap[matId] = (doc.data()?['current_stock'] as num?)?.toDouble() ?? 0.0;
+          final current = (doc.data()?['current_stock'] as num?)?.toDouble() ?? 0.0;
+          final reserved = (doc.data()?['reserved_stock'] as num?)?.toDouble() ?? 0.0;
+          stockMap[matId] = (current - reserved).clamp(0.0, double.infinity);
         }
       }
     } catch (_) {}

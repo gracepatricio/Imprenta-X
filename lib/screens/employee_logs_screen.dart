@@ -1941,6 +1941,15 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
 
       await batch.commit();
 
+      // Soft-reserve raw materials so other orders see accurate availability.
+      // Best-effort: a reservation failure must not block a completed order.
+      try {
+        await InventoryService.reserveForOrder(
+          orderId: orderId,
+          products: products,
+        );
+      } catch (_) {}
+
       if (paidAmount > 0) {
         await db.collection('Sales_Records').add({
           'order_id': orderId,
@@ -5848,6 +5857,20 @@ class _QueueCard extends StatelessWidget {
     }
 
     await batch.commit();
+
+    // Release the soft-reservation so other orders can use the freed stock.
+    // Best-effort: a release failure must not block a completed cancellation.
+    try {
+      final cancelledProducts = List<Map<String, dynamic>>.from(
+        ((orderSnap.data()?['products'] as List?) ?? [])
+            .map((e) => Map<String, dynamic>.from(e as Map)),
+      );
+      await InventoryService.releaseReservationForOrder(
+        orderId: orderId,
+        products: cancelledProducts,
+      );
+    } catch (_) {}
+
     await _logJobQueueActivity(
       orderId: orderId,
       action: 'cancelled',
@@ -6029,7 +6052,7 @@ class _QueueCard extends StatelessWidget {
           }
         }
 
-        if (deductionErrors.isEmpty && allDeductionLines.isNotEmpty) {
+        if (deductionErrors.isEmpty) {
           await db.collection('Orders').doc(orderId).update({
             'bom_deducted': true,
           });

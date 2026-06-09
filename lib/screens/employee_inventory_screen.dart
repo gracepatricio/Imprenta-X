@@ -875,8 +875,10 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
               .collection('RawMaterials')
               .doc(matId)
               .get();
-          final stock = (matDoc.data()?['current_stock'] as num?) ?? 0;
-          if (stock <= 0) {
+          final matData = matDoc.data() ?? {};
+          final stock = (matData['current_stock'] as num?)?.toDouble() ?? 0.0;
+          final reserved = (matData['reserved_stock'] as num?)?.toDouble() ?? 0.0;
+          if (stock - reserved <= 0) {
             available = false;
             break;
           }

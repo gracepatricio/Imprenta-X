@@ -1,0 +1,21 @@
+invoice_number,sale_date,order_date,customer_name,product_name,type,size,quantity,width_ft,height_ft,unit_price,item_total,total_amount,order_status,payment_status,source,is_historical
+INV-2023-0001,2023-01-05,2023-01-05,Juan dela Cruz,Tarpaulin,13oz,4x6 ft,1,4,6,25.00,600.00,600.00,completed,paid,walk-in,true
+INV-2023-0002,2023-01-07,2023-01-07,Maria Santos,Tarpaulin,10oz,3x4 ft,2,3,4,20.00,240.00,480.00,completed,paid,walk-in,true
+INV-2023-0003,2023-01-10,2023-01-10,Pedro Reyes,Tarpaulin,13oz,10x20 ft,1,10,20,25.00,5000.00,5000.00,completed,paid,walk-in,true
+INV-2023-0004,2023-01-12,2023-01-12,Ana Lim,Panaflex,Flex,5x10 ft,1,5,10,60.00,3000.00,3000.00,completed,paid,walk-in,true
+INV-2023-0005,2023-01-12,2023-01-12,Ana Lim,Tarpaulin,13oz,5x10 ft,1,5,10,25.00,1250.00,4250.00,completed,paid,walk-in,true
+INV-2023-0006,2023-01-15,2023-01-15,Jose Garcia,Calling Card,Matte,,100,,,,1.50,150.00,150.00,completed,paid,walk-in,true
+INV-2023-0007,2023-01-15,2023-01-15,Jose Garcia,Calling Card,Glossy,,50,,,,1.80,90.00,90.00,completed,paid,walk-in,true
+INV-2023-0008,2023-01-18,2023-01-18,Rosa Cruz,Sticker,Vinyl Matte,2x2 in,20,,,,5.00,100.00,100.00,completed,paid,walk-in,true
+INV-2023-0009,2023-01-20,2023-01-20,Luis Torres,X-banner,Standard,2x5 ft,2,2,5,350.00,700.00,700.00,completed,paid,walk-in,true
+INV-2023-0010,2023-01-22,2023-01-22,Carmen Flores,Photo Print,4R,,30,,,,10.00,300.00,300.00,completed,paid,walk-in,true
+INV-2023-0011,2023-02-03,2023-02-03,Roberto Mendez,Tarpaulin,13oz,4x8 ft,3,4,8,25.00,2400.00,2400.00,completed,paid,walk-in,true
+INV-2023-0012,2023-02-05,2023-02-05,Gloria Aquino,Panaflex,Flex,8x12 ft,1,8,12,60.00,5760.00,5760.00,completed,paid,walk-in,true
+INV-2023-0013,2023-02-10,2023-02-10,Fernando Ramos,Calling Card,Matte,,200,,,,1.50,300.00,300.00,completed,paid,walk-in,true
+INV-2023-0014,2023-02-12,2023-02-12,Sophia Villanueva,Tarpaulin,10oz,6x10 ft,2,6,10,20.00,2400.00,2400.00,completed,paid,walk-in,true
+INV-2023-0015,2023-02-15,2023-02-15,Miguel Castro,Sticker,Vinyl Glossy,3x3 in,50,,,,7.00,350.00,350.00,completed,paid,walk-in,true
+INV-2023-0016,2023-02-18,2023-02-18,Elena Morales,Roll-up Banner,Standard,2x5 ft,1,2,5,850.00,850.00,850.00,completed,paid,walk-in,true
+INV-2023-0017,2023-02-20,2023-02-20,Antonio Navarro,Photo Print,3R,,20,,,,8.00,160.00,160.00,completed,paid,walk-in,true
+INV-2023-0018,2023-03-02,2023-03-02,Isabel Romero,Tarpaulin,13oz,8x12 ft,1,8,12,25.00,2400.00,2400.00,completed,paid,walk-in,true
+INV-2023-0019,2023-03-05,2023-03-05,Carlos Jimenez,Panaflex,Flex,10x20 ft,1,10,20,60.00,12000.00,12000.00,completed,paid,walk-in,true
+INV-2023-0020,2023-03-08,2023-03-08,Patricia Herrera,Tarpaulin,13oz,4x6 ft,5,4,6,25.00,3000.00,3000.00,completed,paid,walk-in,true
