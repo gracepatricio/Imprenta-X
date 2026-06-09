@@ -104,7 +104,7 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
                             onChanged: (v) =>
                                 setState(() => _searchQuery = v),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 8),
                           _CategoryGrid(
                             categories: _categories,
                             selected: _selectedCategory,
@@ -183,7 +183,7 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
                                       crossAxisCount: cols,
                                       mainAxisSpacing: 14,
                                       crossAxisSpacing: 14,
-                                      childAspectRatio: isWide ? 0.60 : 0.55,
+                                      mainAxisExtent: constraints.maxWidth >= 900 ? 400 : isWide ? 360 : 340,
                                     ),
                                     itemCount: products.length,
                                     itemBuilder: (_, i) => _ProductCard(
@@ -553,53 +553,49 @@ class _SearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1B30),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.30),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(30),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1040).withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.22),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          BoxShadow(
-            color: const Color(0xFF6C3FD4).withValues(alpha: 0.06),
-            blurRadius: 24,
-          ),
-        ],
-      ),
-      child: TextField(
-        controller: controller,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          hintText: 'Search products...',
-          hintStyle: TextStyle(
-            color: Colors.white.withValues(alpha: 0.35),
-            fontSize: 14,
-          ),
-          prefixIcon: Padding(
-            padding: const EdgeInsets.only(left: 14, right: 10),
-            child: Icon(
-              Icons.search_rounded,
-              color: AppTheme.gold.withValues(alpha: 0.75),
-              size: 20,
+          child: TextField(
+            controller: controller,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
-          ),
-          prefixIconConstraints: const BoxConstraints(
-            minWidth: 0,
-            minHeight: 0,
-          ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
+            onChanged: onChanged,
+            decoration: InputDecoration(
+              hintText: 'Search products...',
+              hintStyle: TextStyle(
+                color: Colors.white.withValues(alpha: 0.45),
+                fontSize: 14,
+              ),
+              prefixIcon: Padding(
+                padding: const EdgeInsets.only(left: 18, right: 10),
+                child: Icon(
+                  Icons.search_rounded,
+                  color: AppTheme.gold.withValues(alpha: 0.85),
+                  size: 20,
+                ),
+              ),
+              prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
           ),
         ),
       ),
@@ -625,6 +621,8 @@ class _CategoryGrid extends StatelessWidget {
     final all = ['All', ...categories];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.none,
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: all.asMap().entries.map((entry) {
           final i = entry.key;
@@ -666,42 +664,52 @@ class _CategoryChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      // Shadow lives outside ClipRRect so it isn't clipped
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.gold : const Color(0xFF1F1B30),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected
-                ? AppTheme.gold
-                : Colors.white.withValues(alpha: 0.13),
-            width: 1.5,
-          ),
+          borderRadius: BorderRadius.circular(30),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: AppTheme.gold.withValues(alpha: 0.45),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
-                  ),
-                  BoxShadow(
-                    color: AppTheme.gold.withValues(alpha: 0.20),
-                    blurRadius: 28,
-                    spreadRadius: 2,
+                    color: AppTheme.gold.withValues(alpha: 0.50),
+                    blurRadius: 12,
+                    offset: const Offset(0, 0),
                   ),
                 ]
               : [],
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected
-                ? const Color(0xFF1A0A00)
-                : Colors.white.withValues(alpha: 0.70),
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-            letterSpacing: isSelected ? 0.1 : 0,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(30),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppTheme.gold.withValues(alpha: 0.92)
+                    : const Color(0xFF1C1040).withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(
+                  color: isSelected
+                      ? AppTheme.gold
+                      : Colors.white.withValues(alpha: 0.22),
+                  width: 1.5,
+                ),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isSelected
+                      ? const Color(0xFF1A0A00)
+                      : Colors.white.withValues(alpha: 0.88),
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                  letterSpacing: isSelected ? 0.1 : 0,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -791,11 +799,6 @@ class _ProductCardState extends State<_ProductCard> {
   @override
   Widget build(BuildContext context) {
     final name = widget.data['product_name']?.toString() ?? 'Product';
-    // Use short_description on the card; fall back to description for old products.
-    final cardDesc = (widget.data['short_description']?.toString().isNotEmpty == true
-            ? widget.data['short_description']
-            : widget.data['description'])
-        ?.toString() ?? '';
     final price = widget.data['price'];
     final rawUnit = widget.data['pricing_unit']?.toString() ?? '';
     final pricingQty = widget.data['pricing_qty'];
@@ -849,44 +852,25 @@ class _ProductCardState extends State<_ProductCard> {
           duration: const Duration(milliseconds: 200),
           transform: Matrix4.translationValues(0, _hovered ? -4 : 0, 0),
           decoration: BoxDecoration(
-            color: _hovered
-                ? Colors.white.withValues(alpha: 0.20)
-                : Colors.white.withValues(alpha: 0.12),
+            color: const Color(0xFF0C0920),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: _hovered
-                  ? AppTheme.gold.withValues(alpha: 0.70)
-                  : Colors.white.withValues(alpha: 0.30),
-              width: _hovered ? 1.5 : 1.2,
-            ),
-            boxShadow: _hovered
-                ? [
-                    BoxShadow(
-                      color: AppTheme.gold.withValues(alpha: 0.22),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.20),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.22),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: _hovered ? 0.30 : 0.20),
+                blurRadius: _hovered ? 14 : 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
             children: [
-              // ── Image ──
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+              // ── Image (60 %) ──
               Expanded(
-                flex: 5,
+                flex: 3,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -899,20 +883,23 @@ class _ProductCardState extends State<_ProductCard> {
                             errorBuilder: (_, __, ___) => _placeholder(),
                           )
                         : _placeholder(),
+                    // Gradient fade into info section
                     Positioned(
                       bottom: 0,
                       left: 0,
                       right: 0,
                       child: Container(
-                        height: 48,
-                        decoration: BoxDecoration(
+                        height: 90,
+                        decoration: const BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
                               Colors.transparent,
-                              Colors.black.withValues(alpha: 0.55),
+                              Color(0x330C0920),
+                              Color(0xE00C0920),
                             ],
+                            stops: [0.0, 0.45, 1.0],
                           ),
                         ),
                       ),
@@ -927,18 +914,18 @@ class _ProductCardState extends State<_ProductCard> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.60),
-                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.12),
+                              color: Colors.white.withValues(alpha: 0.14),
                             ),
                           ),
                           child: Text(
                             category,
-                            style: const TextStyle(
-                              color: Color(0xFFBBB8CC),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.75),
                               fontSize: 9,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
@@ -947,16 +934,17 @@ class _ProductCardState extends State<_ProductCard> {
                 ),
               ),
 
-              // ── Info ──
-              SizedBox(
-                height: 130,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              // ── Info (40 %) ──
+              Expanded(
+                flex: 2,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(11, 8, 11, 9),
+                  color: const Color(0xFF0C0920).withValues(alpha: 0.88),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Top: name + optional variants row
+                      // Name + variants
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -967,32 +955,30 @@ class _ProductCardState extends State<_ProductCard> {
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
                               fontSize: 17,
-                              height: 1.3,
+                              height: 1.25,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                           if (variants.isNotEmpty) ...[
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 5),
                             SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: Row(
-                                children: variants.map((v) => Padding(
-                                  padding: const EdgeInsets.only(right: 4),
+                                children: variants.map<Widget>((v) => Padding(
+                                  padding: const EdgeInsets.only(right: 5),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 7, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.10),
+                                      color: Colors.white.withValues(alpha: 0.08),
                                       borderRadius: BorderRadius.circular(99),
-                                      border: Border.all(
-                                          color: Colors.white.withValues(alpha: 0.22)),
+                                      border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
                                     ),
                                     child: Text(
                                       v.toString(),
                                       style: TextStyle(
                                         color: Colors.white.withValues(alpha: 0.75),
-                                        fontSize: 9,
+                                        fontSize: 10,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -1000,22 +986,10 @@ class _ProductCardState extends State<_ProductCard> {
                                 )).toList(),
                               ),
                             ),
-                          ] else if (cardDesc.isNotEmpty) ...[
-                            const SizedBox(height: 3),
-                            Text(
-                              cardDesc,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.45),
-                                fontSize: 12,
-                                height: 1.35,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
                           ],
                         ],
                       ),
-                      // Bottom: price + button
+                      // Price + button
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -1025,69 +999,73 @@ class _ProductCardState extends State<_ProductCard> {
                             style: TextStyle(
                               color: AppTheme.gold,
                               fontWeight: FontWeight.w800,
-                              fontSize: 15,
+                              fontSize: 12,
                               shadows: [
                                 Shadow(
-                                  color: AppTheme.gold.withValues(alpha: 0.35),
+                                  color: AppTheme.gold.withValues(alpha: 0.40),
                                   blurRadius: 6,
                                 ),
                               ],
                             ),
                           ),
                           const SizedBox(height: 5),
-                      SizedBox(
-                        width: double.infinity,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _hovered
-                                ? AppTheme.gold
-                                : AppTheme.gold.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: AppTheme.gold.withValues(alpha: 0.55),
-                            ),
-                            boxShadow: _hovered
-                                ? [
-                                    BoxShadow(
-                                      color: AppTheme.gold.withValues(
-                                        alpha: 0.30,
-                                      ),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
+                          SizedBox(
+                            width: double.infinity,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 9),
+                              decoration: BoxDecoration(
+                                color: AppTheme.gold.withValues(alpha: _hovered ? 1.0 : 0.92),
+                                borderRadius: BorderRadius.circular(30),
+                                border: Border.all(color: AppTheme.gold, width: 1.5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.gold.withValues(alpha: _hovered ? 0.65 : 0.45),
+                                    blurRadius: _hovered ? 16 : 10,
+                                    offset: const Offset(0, 0),
+                                  ),
+                                ],
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.shopping_cart_rounded,
+                                      size: 14, color: Color(0xFF1A0A00)),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Add to Cart',
+                                    style: TextStyle(
+                                      color: Color(0xFF1A0A00),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
                                     ),
-                                  ]
-                                : [],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.shopping_cart_outlined,
-                                size: 13,
-                                color: _hovered
-                                    ? const Color(0xFF1A0A00)
-                                    : AppTheme.gold,
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Add to Cart',
-                                style: TextStyle(
-                                  color: _hovered
-                                      ? const Color(0xFF1A0A00)
-                                      : AppTheme.gold,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
                         ],
                       ),
                     ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+              // Border overlay — paints over image and info so corners are complete
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: _hovered
+                            ? AppTheme.gold.withValues(alpha: 0.45)
+                            : Colors.white.withValues(alpha: 0.16),
+                        width: 0.8,
+                      ),
+                    ),
                   ),
                 ),
               ),

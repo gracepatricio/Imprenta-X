@@ -758,37 +758,26 @@ class _ProductTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    color: _Glass.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  cat,
-                  style: const TextStyle(color: _Glass.textMuted, fontSize: 12),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                // Chips row — wrap so narrow screens don't overflow
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                Row(
                   children: [
-                    if (isFeatured)
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: const TextStyle(
+                          color: _Glass.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isFeatured) ...[
+                      const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
+                            horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: _amber.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(99),
@@ -813,6 +802,23 @@ class _ProductTile extends StatelessWidget {
                           ],
                         ),
                       ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  cat,
+                  style: const TextStyle(color: _Glass.textMuted, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                // Chips row — wrap so narrow screens don't overflow
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
                     if (price != null)
                       Text(
                         '₱$price${unitDisplay.isNotEmpty ? ' $unitDisplay' : ''}',
@@ -1062,7 +1068,6 @@ class _ProductFormDialog extends StatefulWidget {
 class _ProductFormDialogState extends State<_ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
-  late final TextEditingController _shortDescCtrl;
   late final TextEditingController _descCtrl;
   late final TextEditingController _priceCtrl;
   late final TextEditingController _minQtyCtrl;
@@ -1102,14 +1107,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     super.initState();
     final e = widget.existing;
     _nameCtrl = TextEditingController(text: e?['product_name'] ?? '');
-    // Pre-fill short_description from the existing description when editing
-    // an old product that has no short_description yet.
-    final existingShort = e?['short_description']?.toString() ?? '';
-    _shortDescCtrl = TextEditingController(
-      text: existingShort.isNotEmpty
-          ? existingShort
-          : (e?['description']?.toString() ?? ''),
-    );
     _descCtrl = TextEditingController(text: e?['description'] ?? '');
     _priceCtrl = TextEditingController(text: e?['price']?.toString() ?? '');
     _minQtyCtrl = TextEditingController(
@@ -1196,7 +1193,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _shortDescCtrl.dispose();
     _descCtrl.dispose();
     _priceCtrl.dispose();
     _minQtyCtrl.dispose();
@@ -1293,7 +1289,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       final data = <String, dynamic>{
         'product_name': _nameCtrl.text.trim(),
         'category': _selectedCategory,
-        'short_description': _shortDescCtrl.text.trim(),
         'description': _descCtrl.text.trim(),
         'price': basePrice,
         'pricing_unit': _pricingUnit,
@@ -1561,34 +1556,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Short Description
-                      _SectionLabel('Short Description'),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Shown on the product card — keep it to one line.',
-                        style: TextStyle(color: _Glass.textMuted, fontSize: 11),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _shortDescCtrl,
-                        maxLines: 1,
-                        style: const TextStyle(
-                          color: _Glass.textPrimary,
-                          fontSize: 13,
-                        ),
-                        decoration: _Glass.field(
-                          'e.g. UV-resistant, waterproof tarpaulin',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Full Description
-                      _SectionLabel('Full Description'),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Detailed info shown on the order/product page.',
-                        style: TextStyle(color: _Glass.textMuted, fontSize: 11),
-                      ),
+                      // Description
+                      _SectionLabel('Description'),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _descCtrl,
@@ -1598,7 +1567,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           fontSize: 13,
                         ),
                         decoration: _Glass.field(
-                          'Detailed description, specs, notes…',
+                          'e.g. UV-resistant, waterproof tarpaulin — specs, notes…',
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -2120,87 +2089,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           onRemove: () =>
                               setState(() => _bulkPricing.removeAt(e.key)),
                         ),
-                      ),
-                      const SizedBox(height: 18),
-
-                      // ── Turnaround Config ────────────────────────────────
-                      _SectionLabel('Turnaround Settings (Optional)'),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Leave blank to use smart defaults based on pricing unit. '
-                        'Set these to override for this specific product.',
-                        style: TextStyle(color: _Glass.textMuted, fontSize: 11),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Base days',
-                                    style: TextStyle(
-                                        color: _Glass.textMuted,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600)),
-                                const SizedBox(height: 4),
-                                TextField(
-                                  controller: _taBaseCtrl,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
-                                  decoration: _Glass.field('e.g. 0.5'),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _pricingUnit == 'per_sqft'
-                                      ? 'Rate (days / sq ft ordered)'
-                                      : _pricingUnit == 'per_sqin'
-                                      ? 'Rate (days / sq in ordered)'
-                                      : 'Rate (days / piece)',
-                                  style: const TextStyle(
-                                      color: _Glass.textMuted,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 4),
-                                TextField(
-                                  controller: _taRateCtrl,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
-                                  decoration: _Glass.field('e.g. 0.005'),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 90,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Max days',
-                                    style: TextStyle(
-                                        color: _Glass.textMuted,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600)),
-                                const SizedBox(height: 4),
-                                TextField(
-                                  controller: _taMaxCtrl,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
-                                  decoration: _Glass.field('e.g. 7'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
                       ),
                       const SizedBox(height: 18),
 

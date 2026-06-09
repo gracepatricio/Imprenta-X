@@ -567,7 +567,7 @@ class _AdminHomeContentState extends State<_AdminHomeContent> {
                                   ],
                                 ),
 
-                                const SizedBox(width: 14),
+                                const Spacer(),
 
                                 // Admin badge — light purple to match the dark/violet system palette
                                 Container(

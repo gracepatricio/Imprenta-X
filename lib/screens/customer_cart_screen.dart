@@ -706,8 +706,20 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                 const SizedBox(height: 20),
 
                                 // Pay button
-                                SizedBox(
+                                Container(
                                   width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(30),
+                                    boxShadow: payAmount < minPay - 0.009
+                                        ? null
+                                        : [
+                                            BoxShadow(
+                                              color: const Color(0xFFFFE9AD).withValues(alpha: 0.50),
+                                              blurRadius: 20,
+                                              offset: const Offset(0, 0),
+                                            ),
+                                          ],
+                                  ),
                                   child: ElevatedButton.icon(
                                     onPressed: payAmount < minPay - 0.009
                                         ? null
@@ -733,12 +745,18 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                     label: Text(
                                       'Pay ₱${payAmount.toStringAsFixed(2)} via PayMongo',
                                       style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
+                                        fontFamily: 'Spartan',
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 16,
+                                        letterSpacing: 0.4,
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
-                                    style: AppTheme.primaryButton(),
+                                    style: AppTheme.primaryButton().copyWith(
+                                      minimumSize: WidgetStateProperty.all(
+                                        const Size(double.infinity, 54),
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -1179,7 +1197,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                               'price': items[i].unitPrice,
                                               'pricing_unit': items[i].pricingUnit,
                                               'min_quantity': 1,
-                                              'description': '',
+                                              'description': items[i].description,
                                             },
                                             initialItem: items[i],
                                             editIndex: i,
@@ -1281,13 +1299,29 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                               ],
                             ),
                             const SizedBox(height: 14),
-                            SizedBox(
+                            Container(
                               width: double.infinity,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(30),
+                                boxShadow: (_selected.isEmpty || _checkingOut)
+                                    ? null
+                                    : [
+                                        BoxShadow(
+                                          color: const Color(0xFFFFE9AD).withValues(alpha: 0.50),
+                                          blurRadius: 20,
+                                          offset: const Offset(0, 0),
+                                        ),
+                                      ],
+                              ),
                               child: ElevatedButton(
                                 onPressed: _selected.isEmpty || _checkingOut
                                     ? null
                                     : _showCheckoutSheet,
-                                style: AppTheme.primaryButton(),
+                                style: AppTheme.primaryButton().copyWith(
+                                  minimumSize: WidgetStateProperty.all(
+                                    const Size(double.infinity, 54),
+                                  ),
+                                ),
                                 child: _checkingOut
                                     ? const SizedBox(
                                         width: 20,
@@ -1300,8 +1334,10 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                     : const Text(
                                         'Checkout',
                                         style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 15,
+                                          fontFamily: 'Spartan',
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16,
+                                          letterSpacing: 0.4,
                                         ),
                                       ),
                               ),
@@ -1557,8 +1593,8 @@ class _CartItemTileState extends State<_CartItemTile> {
 
             // Thumbnail
             Container(
-              width: 54,
-              height: 54,
+              width: 66,
+              height: 66,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
                 color: Colors.white.withValues(alpha: 0.07),
@@ -1586,7 +1622,7 @@ class _CartItemTileState extends State<_CartItemTile> {
             // Info
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1594,14 +1630,14 @@ class _CartItemTileState extends State<_CartItemTile> {
                       item.productName,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 13,
+                        fontSize: 15,
                         fontWeight: FontWeight.w600,
                         height: 1.3,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
                     Text(
                       [
                         if (item.hasSizeInput) item.sizeLabel,
@@ -1610,24 +1646,24 @@ class _CartItemTileState extends State<_CartItemTile> {
                       ].join(' · '),
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.45),
-                        fontSize: 11,
+                        fontSize: 12,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     if (item.files.isNotEmpty)
                       Row(
                         children: [
                           const Icon(
                             Icons.attach_file_rounded,
                             color: AppTheme.gold,
-                            size: 11,
+                            size: 12,
                           ),
                           const SizedBox(width: 3),
                           Text(
                             '${item.files.length} file${item.files.length != 1 ? 's' : ''} attached',
                             style: const TextStyle(
                               color: AppTheme.gold,
-                              fontSize: 10,
+                              fontSize: 11,
                             ),
                           ),
                         ],
@@ -1638,7 +1674,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                           const Icon(
                             Icons.warning_amber_rounded,
                             color: Colors.orangeAccent,
-                            size: 11,
+                            size: 12,
                           ),
                           const SizedBox(width: 3),
                           Text(
@@ -1647,7 +1683,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                               color: Colors.orangeAccent.withValues(
                                 alpha: 0.85,
                               ),
-                              fontSize: 10,
+                              fontSize: 11,
                             ),
                           ),
                         ],
@@ -1669,7 +1705,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                     style: const TextStyle(
                       color: AppTheme.gold,
                       fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                      fontSize: 15,
                     ),
                   ),
                   const SizedBox(height: 8),
