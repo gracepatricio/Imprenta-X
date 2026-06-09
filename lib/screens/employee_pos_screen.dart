@@ -1,8 +1,101 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'app_theme.dart';
 import 'invoice_screen.dart';
+
+// ── Design tokens (aligned with employee-side Liquid Glass system) ─────────────
+const Color _navyBlue = Color(0xFF0F1A2E);
+const Color _amber = Color(0xFFB45309);
+
+class _Glass {
+  static const Color surface = Color(0xF8FFFFFF);
+  static const Color surfaceMid = Color(0xF0FFFFFF);
+  static const Color surfaceThin = Color(0xA0FFFFFF);
+
+  static const Color borderMid = Color(0x70FFFFFF);
+  static const Color borderDim = Color(0x30FFFFFF);
+
+  static const Color textPrimary = Color(0xFF0F172A);
+  static const Color textSecondary = Color(0xCC0F172A);
+  static const Color textMuted = Color(0x880F172A);
+
+  static const Color accentEmerald = Color(0xFF10B981);
+  static const Color accentRose = Color(0xFFEF4444);
+  static const Color accentAmber = Color(0xFFF59E0B);
+  static const Color accentOrange = Color(0xFFF97316);
+
+  static const BoxShadow elevatedShadow = BoxShadow(
+    color: Color(0x22000000),
+    blurRadius: 32,
+    spreadRadius: -4,
+    offset: Offset(0, 8),
+  );
+  static const BoxShadow rowShadow = BoxShadow(
+    color: Color(0x10000000),
+    blurRadius: 10,
+    offset: Offset(0, 3),
+  );
+
+  static BoxDecoration glass({
+    double radius = 16,
+    bool elevated = false,
+    Color? tintBorder,
+  }) =>
+      BoxDecoration(
+        color: surfaceMid,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: tintBorder ?? borderMid, width: 0.9),
+        boxShadow: [elevated ? elevatedShadow : rowShadow],
+      );
+
+  static BoxDecoration solidPill(Color color, {bool glow = false}) =>
+      BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(99),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: glow ? 0.38 : 0.22),
+            blurRadius: glow ? 16 : 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      );
+}
+
+final _blurFilter = ImageFilter.blur(sigmaX: 14, sigmaY: 14);
+
+// ── Reusable frosted-glass card ────────────────────────────────────────────────
+class _BlurCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final double radius;
+  final bool elevated;
+
+  const _BlurCard({
+    required this.child,
+    this.padding,
+    this.radius = 20,
+    this.elevated = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: BackdropFilter(
+          filter: _blurFilter,
+          child: Container(
+            decoration: _Glass.glass(radius: radius, elevated: elevated),
+            padding: padding,
+            child: child,
+          ),
+        ),
+      );
+}
+
+// =============================================================================
+// EmployeePosScreen
+// =============================================================================
 
 class EmployeePosScreen extends StatefulWidget {
   const EmployeePosScreen({super.key});
@@ -18,9 +111,15 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
   // All orders with remaining balance
   List<Map<String, dynamic>> _allOrders = [];
   List<Map<String, dynamic>> get _displayOrders {
-    if (_searchQuery.isEmpty) return _allOrders;
+    var orders = _allOrders;
+    if (_statusFilter != 'all') {
+      orders = orders
+          .where((o) => o['status']?.toString() == _statusFilter)
+          .toList();
+    }
+    if (_searchQuery.isEmpty) return orders;
     final q = _searchQuery.toLowerCase();
-    return _allOrders.where((o) {
+    return orders.where((o) {
       final orderId  = (o['order_id']?.toString() ?? '').toLowerCase();
       final custName = (o['customer_name']?.toString() ?? '').toLowerCase();
       final custId   = (o['customer_id']?.toString() ?? '').toLowerCase();
@@ -31,6 +130,7 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
   Map<String, dynamic>? _selectedCustomer; // kept for payment refresh
   bool _loading = false;
   String _searchQuery = '';
+  String _statusFilter = 'all';
 
   @override
   void initState() {
@@ -254,61 +354,111 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header ──
-          Row(
-            children: [
-              Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                decoration: BoxDecoration(
-                  color: AppTheme.gold.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(
-                      color: AppTheme.gold.withValues(alpha: 0.40), width: 1),
-                ),
-                child: Row(
-                  children: const [
-                    Icon(Icons.point_of_sale_rounded,
-                        color: AppTheme.gold, size: 16),
-                    SizedBox(width: 6),
-                    Text('Point of Sale',
-                        style: TextStyle(
-                            color: AppTheme.gold,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13)),
-                  ],
+    return _BlurCard(
+        radius: 20,
+        elevated: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Header + controls ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Title row ──
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: _navyBlue,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.point_of_sale_rounded,
+                            color: Colors.white, size: 16),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Point of Sale',
+                              style: TextStyle(
+                                color: _Glass.textPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            SizedBox(height: 1),
+                            Text(
+                              'Collect payments for outstanding orders',
+                              style: TextStyle(
+                                color: _Glass.textMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_loading)
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _navyBlue.withValues(alpha: 0.6)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Divider(height: 1, thickness: 0.5, color: _Glass.borderDim),
+                  const SizedBox(height: 12),
+
+                  // ── Search + filter row ──
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SearchBar(
+                            controller: _searchCtrl, loading: _loading),
+                      ),
+                      const SizedBox(width: 8),
+                      _StatusDropdown(
+                        value: _statusFilter,
+                        onChanged: (v) =>
+                            setState(() => _statusFilter = v ?? 'all'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Order list ──
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                child: _OrderWithBalanceList(
+                  orders: _displayOrders,
+                  loading: _loading,
+                  onRefresh: _loadOrdersWithBalance,
+                  onSelectOrder: _openPaymentSheet,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // ── Search bar ──
-          _SearchBar(controller: _searchCtrl, loading: _loading),
-          const SizedBox(height: 12),
-
-          Expanded(
-            child: _OrderWithBalanceList(
-              orders: _displayOrders,
-              loading: _loading,
-              onRefresh: _loadOrdersWithBalance,
-              onSelectOrder: _openPaymentSheet,
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Search bar
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Search bar
+// =============================================================================
 
 class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
@@ -318,50 +468,115 @@ class _SearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
-      ),
-      child: TextField(
-        controller: controller,
-        style: const TextStyle(color: Colors.white, fontSize: 14),
-        decoration: InputDecoration(
-          hintText: 'Search by order ID, customer name or ID…',
-          hintStyle: TextStyle(
-              color: Colors.white.withValues(alpha: 0.4), fontSize: 14),
-          prefixIcon:
-          Icon(Icons.search, color: Colors.white.withValues(alpha: 0.5)),
-          suffixIcon: loading
-              ? Padding(
-            padding: const EdgeInsets.all(14),
-            child: SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppTheme.gold.withValues(alpha: 0.7))),
-          )
-              : controller.text.isNotEmpty
-              ? IconButton(
-            icon: Icon(Icons.close,
-                color: Colors.white.withValues(alpha: 0.5), size: 18),
-            onPressed: () => controller.clear(),
-          )
-              : null,
-          border: InputBorder.none,
-          contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: _blurFilter,
+        child: Container(
+          decoration: _Glass.glass(radius: 14),
+          child: TextField(
+            controller: controller,
+            style: const TextStyle(color: _Glass.textPrimary, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Search by order ID, customer name or ID…',
+              hintStyle:
+                  const TextStyle(color: _Glass.textMuted, fontSize: 14),
+              prefixIcon:
+                  const Icon(Icons.search, color: _Glass.textMuted),
+              suffixIcon: loading
+                  ? Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _navyBlue.withValues(alpha: 0.5))),
+                    )
+                  : controller.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close,
+                              color: _Glass.textMuted, size: 18),
+                          onPressed: () => controller.clear(),
+                        )
+                      : null,
+              border: InputBorder.none,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Customer search results
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Status filter dropdown
+// =============================================================================
+
+class _StatusDropdown extends StatelessWidget {
+  final String value;
+  final ValueChanged<String?> onChanged;
+
+  const _StatusDropdown({required this.value, required this.onChanged});
+
+  static const _values = ['all', 'pending', 'in_production', 'ready'];
+  static const _labels = ['All', 'Pending', 'In Production', 'Ready'];
+  static const _icons = [
+    Icons.list_rounded,
+    Icons.hourglass_empty_rounded,
+    Icons.precision_manufacturing_outlined,
+    Icons.check_circle_outline_rounded,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: _blurFilter,
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: _Glass.glass(radius: 14),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              onChanged: onChanged,
+              isDense: true,
+              dropdownColor: _Glass.surface,
+              borderRadius: BorderRadius.circular(14),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                  color: _Glass.textMuted, size: 18),
+              style: const TextStyle(
+                  color: _Glass.textPrimary, fontSize: 13),
+              items: List.generate(_values.length, (i) {
+                return DropdownMenuItem<String>(
+                  value: _values[i],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_icons[i], size: 14, color: _Glass.textMuted),
+                      const SizedBox(width: 6),
+                      Text(_labels[i],
+                          style: const TextStyle(
+                              color: _Glass.textPrimary, fontSize: 13)),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Customer search results (legacy — kept for completeness)
+// =============================================================================
 
 class _CustomerResultsList extends StatelessWidget {
   final List<Map<String, dynamic>> customers;
@@ -379,7 +594,8 @@ class _CustomerResultsList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading && customers.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+          child: CircularProgressIndicator(color: _navyBlue));
     }
     if (query.isEmpty && customers.isEmpty) {
       return _EmptyHint(
@@ -396,40 +612,41 @@ class _CustomerResultsList extends StatelessWidget {
       );
     }
 
-    return Container(
-      decoration: AppTheme.glassCard(opacity: 0.13, radius: 18),
+    return _BlurCard(
+      radius: 18,
       child: ListView.separated(
         padding: const EdgeInsets.all(8),
         itemCount: customers.length,
         separatorBuilder: (_, __) =>
-            Divider(color: Colors.white.withValues(alpha: 0.07), height: 1),
+            const Divider(color: _Glass.borderDim, height: 1),
         itemBuilder: (_, i) {
-          final c        = customers[i];
-          final name     = c['full_name'] ?? 'Unknown';
-          final cid      = c['customer_id']?.toString() ?? '—';
-          final email    = c['email'] ?? '';
+          final c     = customers[i];
+          final name  = c['full_name'] ?? 'Unknown';
+          final cid   = c['customer_id']?.toString() ?? '—';
+          final email = c['email'] ?? '';
           return ListTile(
             onTap: () => onSelect(c),
             contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             leading: CircleAvatar(
-              backgroundColor: AppTheme.gold.withValues(alpha: 0.18),
+              backgroundColor: _navyBlue.withValues(alpha: 0.10),
               child: Text(
                 name.isNotEmpty ? name[0].toUpperCase() : '?',
                 style: const TextStyle(
-                    color: AppTheme.gold, fontWeight: FontWeight.bold),
+                    color: _navyBlue, fontWeight: FontWeight.bold),
               ),
             ),
             title: Text(name,
                 style: const TextStyle(
-                    color: Colors.white,
+                    color: _Glass.textPrimary,
                     fontWeight: FontWeight.w600,
                     fontSize: 14)),
-            subtitle: Text('ID: $cid${email.isNotEmpty ? '  •  $email' : ''}',
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
-            trailing: Icon(Icons.chevron_right,
-                color: Colors.white.withValues(alpha: 0.3)),
+            subtitle: Text(
+                'ID: $cid${email.isNotEmpty ? '  •  $email' : ''}',
+                style:
+                    const TextStyle(color: _Glass.textMuted, fontSize: 12)),
+            trailing: const Icon(Icons.chevron_right,
+                color: _Glass.textMuted),
           );
         },
       ),
@@ -437,9 +654,9 @@ class _CustomerResultsList extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Customer orders view
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Customer orders view (legacy — kept for completeness)
+// =============================================================================
 
 class _CustomerOrdersView extends StatelessWidget {
   final Map<String, dynamic> customer;
@@ -465,14 +682,9 @@ class _CustomerOrdersView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ── Customer card ──
-        Container(
+        _BlurCard(
+          radius: 14,
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.gold.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-                color: AppTheme.gold.withValues(alpha: 0.25), width: 1),
-          ),
           child: Row(
             children: [
               GestureDetector(
@@ -480,21 +692,21 @@ class _CustomerOrdersView extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
+                    color: _navyBlue.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(Icons.arrow_back_ios_new_rounded,
-                      color: Colors.white70, size: 14),
+                      color: _navyBlue, size: 14),
                 ),
               ),
               const SizedBox(width: 12),
               CircleAvatar(
                 radius: 22,
-                backgroundColor: AppTheme.gold.withValues(alpha: 0.2),
+                backgroundColor: _navyBlue.withValues(alpha: 0.10),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : '?',
                   style: const TextStyle(
-                      color: AppTheme.gold,
+                      color: _navyBlue,
                       fontWeight: FontWeight.bold,
                       fontSize: 18),
                 ),
@@ -506,28 +718,27 @@ class _CustomerOrdersView extends StatelessWidget {
                   children: [
                     Text(name,
                         style: const TextStyle(
-                            color: Colors.white,
+                            color: _Glass.textPrimary,
                             fontWeight: FontWeight.w700,
                             fontSize: 15)),
                     const SizedBox(height: 2),
                     Text('Customer ID: $cid',
-                        style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.55),
-                            fontSize: 12)),
+                        style: const TextStyle(
+                            color: _Glass.textMuted, fontSize: 12)),
                   ],
                 ),
               ),
               Container(
                 padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: _navyBlue.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   '${orders.length} unpaid order${orders.length == 1 ? '' : 's'}',
                   style: const TextStyle(
-                      color: Colors.white70,
+                      color: _Glass.textSecondary,
                       fontSize: 11,
                       fontWeight: FontWeight.w500),
                 ),
@@ -538,9 +749,9 @@ class _CustomerOrdersView extends StatelessWidget {
         const SizedBox(height: 14),
 
         // ── Label ──
-        Text('Active Orders',
+        const Text('Active Orders',
             style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
+                color: _Glass.textMuted,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8)),
@@ -549,30 +760,31 @@ class _CustomerOrdersView extends StatelessWidget {
         // ── Orders list ──
         Expanded(
           child: loading
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(
+                  child: CircularProgressIndicator(color: _navyBlue))
               : orders.isEmpty
-              ? _EmptyHint(
-            icon: Icons.check_circle_outline_rounded,
-            title: 'All settled up',
-            subtitle:
-            'This customer has no outstanding balance',
-          )
-              : ListView.builder(
-            itemCount: orders.length,
-            itemBuilder: (_, i) => _OrderCard(
-              order: orders[i],
-              onTap: () => onSelectOrder(orders[i]),
-            ),
-          ),
+                  ? _EmptyHint(
+                      icon: Icons.check_circle_outline_rounded,
+                      title: 'All settled up',
+                      subtitle:
+                          'This customer has no outstanding balance',
+                    )
+                  : ListView.builder(
+                      itemCount: orders.length,
+                      itemBuilder: (_, i) => _OrderCard(
+                        order: orders[i],
+                        onTap: () => onSelectOrder(orders[i]),
+                      ),
+                    ),
         ),
       ],
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Order card
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Order card
+// =============================================================================
 
 class _OrderCard extends StatelessWidget {
   final Map<String, dynamic> order;
@@ -622,139 +834,162 @@ class _OrderCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(16),
-        decoration: AppTheme.glassCard(opacity: 0.13, radius: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Top row ──
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: _BlurCard(
+          radius: 16,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Top row ──
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _navyBlue.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text('# $orderId',
+                        style: const TextStyle(
+                            color: _Glass.textSecondary,
+                            fontSize: 11,
+                            fontFamily: 'monospace')),
                   ),
-                  child: Text('# $orderId',
+                  const SizedBox(width: 8),
+                  Text(date,
                       style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
-                          fontFamily: 'monospace')),
-                ),
-                const SizedBox(width: 8),
-                Text(date,
-                    style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.4),
-                        fontSize: 11)),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: needsDownpayment
-                        ? Colors.red.withValues(alpha: 0.18)
-                        : remaining > 0
-                        ? Colors.orange.withValues(alpha: 0.18)
-                        : Colors.green.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    needsDownpayment
-                        ? '↓ Downpayment Required'
-                        : remaining > 0
-                        ? 'Unpaid'
-                        : 'Paid',
-                    style: TextStyle(
+                          color: _Glass.textMuted, fontSize: 11)),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
                       color: needsDownpayment
-                          ? Colors.red.shade300
+                          ? _Glass.accentRose.withValues(alpha: 0.12)
                           : remaining > 0
-                          ? Colors.orange
-                          : Colors.green,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                              ? _Glass.accentAmber.withValues(alpha: 0.12)
+                              : _Glass.accentEmerald.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: needsDownpayment
+                            ? _Glass.accentRose.withValues(alpha: 0.35)
+                            : remaining > 0
+                                ? _Glass.accentAmber.withValues(alpha: 0.35)
+                                : _Glass.accentEmerald.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Text(
+                      needsDownpayment
+                          ? '↓ Downpayment Required'
+                          : remaining > 0
+                              ? 'Unpaid'
+                              : 'Paid',
+                      style: TextStyle(
+                        color: needsDownpayment
+                            ? _Glass.accentRose
+                            : remaining > 0
+                                ? _Glass.accentAmber
+                                : _Glass.accentEmerald,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // ── Amounts ──
-            Row(
-              children: [
-                _AmountChip(
-                    label: 'Total', value: total, color: Colors.white70),
-                const SizedBox(width: 12),
-                _AmountChip(
-                    label: 'Paid',
-                    value: paid,
-                    color: Colors.green.shade300),
-                const SizedBox(width: 12),
-                _AmountChip(
-                    label: 'Remaining',
-                    value: remaining,
-                    color: AppTheme.gold,
-                    bold: true),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // ── Progress bar ──
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: pct,
-                backgroundColor: Colors.white.withValues(alpha: 0.1),
-                valueColor: AlwaysStoppedAnimation<Color>(
-                    pct >= 1.0 ? Colors.green : AppTheme.gold),
-                minHeight: 5,
+                ],
               ),
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 12),
 
-            // ── Tap hint + invoice ──
-            Row(
-              children: [
-                Builder(builder: (ctx) => GestureDetector(
-                  onTap: () async {
-                    final rawId = order['order_id']?.toString()
-                        ?? (order['orderId'] as String? ?? '');
-                    final orderSnap = await FirebaseFirestore.instance
-                        .collection('Orders').doc(rawId).get();
-                    final invId = orderSnap.data()?['invoice_id']?.toString();
-                    if (invId != null && ctx.mounted) {
-                      Navigator.of(ctx).push(MaterialPageRoute(
-                        builder: (_) => InvoiceScreen(invoiceId: invId),
-                      ));
-                    } else if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(content: Text('No invoice for this order')),
-                      );
-                    }
-                  },
-                  child: Row(
-                    children: [
-                      Icon(Icons.receipt_long_outlined,
-                          color: Colors.white.withValues(alpha: 0.4), size: 14),
-                      const SizedBox(width: 4),
-                      Text('Invoice',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
-                    ],
-                  ),
-                )),
-                const Spacer(),
-                Text('Tap to collect payment',
-                    style: TextStyle(color: AppTheme.gold.withValues(alpha: 0.7), fontSize: 11)),
-                const SizedBox(width: 4),
-                Icon(Icons.arrow_forward_ios_rounded,
-                    color: AppTheme.gold.withValues(alpha: 0.7), size: 10),
-              ],
-            ),
-          ],
+              // ── Amounts ──
+              Row(
+                children: [
+                  _AmountChip(
+                      label: 'Total',
+                      value: total,
+                      color: _Glass.textSecondary),
+                  const SizedBox(width: 12),
+                  _AmountChip(
+                      label: 'Paid',
+                      value: paid,
+                      color: _Glass.accentEmerald),
+                  const SizedBox(width: 12),
+                  _AmountChip(
+                      label: 'Remaining',
+                      value: remaining,
+                      color: _amber,
+                      bold: true),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // ── Progress bar ──
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: pct,
+                  backgroundColor: _Glass.borderDim,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      pct >= 1.0 ? _Glass.accentEmerald : _amber),
+                  minHeight: 5,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // ── Tap hint + invoice ──
+              Row(
+                children: [
+                  Builder(
+                      builder: (ctx) => GestureDetector(
+                            onTap: () async {
+                              final rawId = order['order_id']?.toString() ??
+                                  (order['orderId'] as String? ?? '');
+                              final orderSnap =
+                                  await FirebaseFirestore.instance
+                                      .collection('Orders')
+                                      .doc(rawId)
+                                      .get();
+                              final invId = orderSnap
+                                  .data()?['invoice_id']
+                                  ?.toString();
+                              if (invId != null && ctx.mounted) {
+                                Navigator.of(ctx).push(MaterialPageRoute(
+                                  builder: (_) =>
+                                      InvoiceScreen(invoiceId: invId),
+                                ));
+                              } else if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'No invoice for this order')),
+                                );
+                              }
+                            },
+                            child: Row(
+                              children: const [
+                                Icon(Icons.receipt_long_outlined,
+                                    color: _Glass.textMuted, size: 14),
+                                SizedBox(width: 4),
+                                Text('Invoice',
+                                    style: TextStyle(
+                                        color: _Glass.textMuted,
+                                        fontSize: 11)),
+                              ],
+                            ),
+                          )),
+                  const Spacer(),
+                  Text('Tap to collect payment',
+                      style: TextStyle(
+                          color: _amber.withValues(alpha: 0.8),
+                          fontSize: 11)),
+                  const SizedBox(width: 4),
+                  Icon(Icons.arrow_forward_ios_rounded,
+                      color: _amber.withValues(alpha: 0.8), size: 10),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -780,28 +1015,27 @@ class _AmountChip extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4), fontSize: 10)),
+            style: const TextStyle(color: _Glass.textMuted, fontSize: 10)),
         const SizedBox(height: 2),
         Text('₱${value.toStringAsFixed(2)}',
             style: TextStyle(
                 color: color,
                 fontSize: bold ? 15 : 13,
                 fontWeight:
-                bold ? FontWeight.w700 : FontWeight.w500)),
+                    bold ? FontWeight.w700 : FontWeight.w500)),
       ],
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Payment bottom-sheet
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Payment bottom-sheet
+// =============================================================================
 
 class _PaymentSheet extends StatefulWidget {
   final Map<String, dynamic> order;
   final Future<void> Function(String orderId, double newPaid, bool wasFullyPaid)
-  onPaymentRecorded;
+      onPaymentRecorded;
 
   const _PaymentSheet(
       {required this.order, required this.onPaymentRecorded});
@@ -845,8 +1079,8 @@ class _PaymentSheetState extends State<_PaymentSheet> {
           SnackBar(
             content: Text(
               'A minimum downpayment of ₱${minimumDown.toStringAsFixed(2)} '
-                  '(50% of ₱${_total.toStringAsFixed(2)}) is required '
-                  'to process this order.',
+              '(50% of ₱${_total.toStringAsFixed(2)}) is required '
+              'to process this order.',
             ),
             backgroundColor: Colors.red.shade700,
             duration: const Duration(seconds: 4),
@@ -893,200 +1127,206 @@ class _PaymentSheetState extends State<_PaymentSheet> {
           .take(3),
     ];
 
-    return Container(
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
-      decoration: const BoxDecoration(
-        color: Color(0xFF16162A),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-          child: _change != null
-              ? _SuccessView(
-            change: _change!,
-            onDone: () => Navigator.pop(context),
-          )
-              : Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Handle ──
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              const Text('Collect Payment',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              Text(
-                'Order #${_orderId.substring(0, 8)}',
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
-                    fontSize: 12),
-              ),
-
-              if (_requiresDownpayment) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: Colors.orange.withValues(alpha: 0.35)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline_rounded,
-                          color: Colors.orange, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Minimum 50% downpayment required '
-                              '(₱${(_total * 0.5).toStringAsFixed(2)})',
-                          style: const TextStyle(
-                              color: Colors.orange,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500),
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: BackdropFilter(
+        filter: _blurFilter,
+        child: Container(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom),
+          decoration: BoxDecoration(
+            color: _Glass.surface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border(
+                top: BorderSide(color: _Glass.borderMid, width: 0.9)),
+            boxShadow: const [_Glass.elevatedShadow],
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              child: _change != null
+                  ? _SuccessView(
+                      change: _change!,
+                      onDone: () => Navigator.pop(context),
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── Handle ──
+                        Center(
+                          child: Container(
+                            width: 36,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: _Glass.textMuted
+                                  .withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                        const SizedBox(height: 16),
 
-              const SizedBox(height: 20),
+                        const Text('Collect Payment',
+                            style: TextStyle(
+                                color: _Glass.textPrimary,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Order #${_orderId.substring(0, 8)}',
+                          style: const TextStyle(
+                              color: _Glass.textMuted, fontSize: 12),
+                        ),
 
-              // ── Balance summary ──
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.gold.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                      color: AppTheme.gold.withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _BalanceRow('Total', _total),
-                    _BalanceRow('Paid', _paid,
-                        color: Colors.green.shade300),
-                    _BalanceRow('Remaining', _remaining,
-                        color: AppTheme.gold, large: true),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
+                        if (_requiresDownpayment) ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: _Glass.accentAmber
+                                  .withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color: _Glass.accentAmber
+                                      .withValues(alpha: 0.35)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.info_outline_rounded,
+                                    color: _Glass.accentAmber, size: 16),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Minimum 50% downpayment required '
+                                    '(₱${(_total * 0.5).toStringAsFixed(2)})',
+                                    style: const TextStyle(
+                                        color: _Glass.accentAmber,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
 
-              // ── Quick-amount chips ──
-              Wrap(
-                spacing: 8,
-                children: quickAmounts
-                    .map((a) => GestureDetector(
-                  onTap: () => _setQuickAmount(a),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: Colors.white
-                              .withValues(alpha: 0.15)),
+                        const SizedBox(height: 20),
+
+                        // ── Balance summary ──
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: _Glass.glass(radius: 14),
+                          child: Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
+                            children: [
+                              _BalanceRow('Total', _total),
+                              _BalanceRow('Paid', _paid,
+                                  color: _Glass.accentEmerald),
+                              _BalanceRow('Remaining', _remaining,
+                                  color: _amber, large: true),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // ── Quick-amount chips ──
+                        Wrap(
+                          spacing: 8,
+                          children: quickAmounts
+                              .map((a) => GestureDetector(
+                                    onTap: () => _setQuickAmount(a),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 14, vertical: 7),
+                                      decoration: a == _remaining
+                                          ? _Glass.solidPill(_navyBlue)
+                                          : BoxDecoration(
+                                              color: _Glass.surfaceThin,
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                      20),
+                                              border: Border.all(
+                                                  color: _Glass.borderMid),
+                                            ),
+                                      child: Text(
+                                        '₱${a.toStringAsFixed(a == _remaining ? 2 : 0)}',
+                                        style: TextStyle(
+                                            color: a == _remaining
+                                                ? Colors.white
+                                                : _Glass.textSecondary,
+                                            fontSize: 13,
+                                            fontWeight: a == _remaining
+                                                ? FontWeight.w700
+                                                : FontWeight.w400),
+                                      ),
+                                    ),
+                                  ))
+                              .toList(),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // ── Amount field ──
+                        Container(
+                          decoration: _Glass.glass(radius: 14),
+                          child: TextField(
+                            controller: _ctrl,
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
+                                    decimal: true),
+                            style: const TextStyle(
+                                color: _Glass.textPrimary,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700),
+                            decoration: const InputDecoration(
+                              prefixText: '₱  ',
+                              prefixStyle: TextStyle(
+                                  color: _Glass.textMuted, fontSize: 22),
+                              hintText: '0.00',
+                              hintStyle: TextStyle(
+                                  color: _Glass.textMuted, fontSize: 22),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 18, vertical: 16),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // ── Confirm button ──
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _processing ? null : _confirm,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _navyBlue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(14)),
+                              elevation: 0,
+                            ),
+                            child: _processing
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white))
+                                : const Text('Confirm Payment',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 15)),
+                          ),
+                        ),
+                      ],
                     ),
-                    child: Text(
-                      '₱${a.toStringAsFixed(a == _remaining ? 2 : 0)}',
-                      style: TextStyle(
-                          color: a == _remaining
-                              ? AppTheme.gold
-                              : Colors.white70,
-                          fontSize: 13,
-                          fontWeight: a == _remaining
-                              ? FontWeight.w700
-                              : FontWeight.w400),
-                    ),
-                  ),
-                ))
-                    .toList(),
-              ),
-              const SizedBox(height: 14),
-
-              // ── Amount field ──
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.12)),
-                ),
-                child: TextField(
-                  controller: _ctrl,
-                  keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true),
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700),
-                  decoration: InputDecoration(
-                    prefixText: '₱  ',
-                    prefixStyle: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 22),
-                    hintText: '0.00',
-                    hintStyle: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        fontSize: 22),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 16),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // ── Confirm button ──
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _processing ? null : _confirm,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.gold,
-                    foregroundColor: Colors.black,
-                    padding:
-                    const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                    elevation: 0,
-                  ),
-                  child: _processing
-                      ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.black))
-                      : const Text('Confirm Payment',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15)),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1101,22 +1341,22 @@ class _BalanceRow extends StatelessWidget {
   final bool large;
 
   const _BalanceRow(this.label, this.value,
-      {this.color = Colors.white70, this.large = false});
+      {this.color = _Glass.textSecondary, this.large = false});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         Text(label,
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
+            style: const TextStyle(
+                color: _Glass.textMuted, fontSize: 11)),
         const SizedBox(height: 4),
         Text('₱${value.toStringAsFixed(2)}',
             style: TextStyle(
                 color: color,
                 fontSize: large ? 18 : 14,
                 fontWeight:
-                large ? FontWeight.w800 : FontWeight.w500)),
+                    large ? FontWeight.w800 : FontWeight.w500)),
       ],
     );
   }
@@ -1139,40 +1379,38 @@ class _SuccessView extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Colors.green.withValues(alpha: 0.15),
+            color: _Glass.accentEmerald.withValues(alpha: 0.12),
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.check_circle_rounded,
-              color: Colors.green, size: 48),
+              color: _Glass.accentEmerald, size: 48),
         ),
         const SizedBox(height: 16),
         const Text('Payment Recorded',
             style: TextStyle(
-                color: Colors.white,
+                color: _Glass.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         if (change > 0) ...[
-          Text('Change',
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5), fontSize: 13)),
+          const Text('Change',
+              style: TextStyle(color: _Glass.textMuted, fontSize: 13)),
           const SizedBox(height: 4),
           Text('₱${change.toStringAsFixed(2)}',
               style: const TextStyle(
-                  color: AppTheme.gold,
+                  color: _amber,
                   fontSize: 36,
                   fontWeight: FontWeight.w800)),
         ] else
-          Text('No change due',
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5), fontSize: 14)),
+          const Text('No change due',
+              style: TextStyle(color: _Glass.textMuted, fontSize: 14)),
         const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
             onPressed: onDone,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.12),
+              backgroundColor: _navyBlue,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
@@ -1187,13 +1425,9 @@ class _SuccessView extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Empty state helper
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Orders with balance list (new default POS view)
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Orders with balance list
+// =============================================================================
 
 class _OrderWithBalanceList extends StatelessWidget {
   final List<Map<String, dynamic>> orders;
@@ -1207,6 +1441,19 @@ class _OrderWithBalanceList extends StatelessWidget {
     required this.onRefresh,
     required this.onSelectOrder,
   });
+
+  String _statusLabel(String s) {
+    switch (s) {
+      case 'pending':       return 'Pending';
+      case 'in_production': return 'In Production';
+      case 'ready':         return 'Ready';
+      case 'cancelled':     return 'Cancelled';
+      default:
+        return s.isNotEmpty
+            ? '${s[0].toUpperCase()}${s.substring(1)}'
+            : s;
+    }
+  }
 
   String _fmtDate(dynamic ts) {
     if (ts == null) return '';
@@ -1222,7 +1469,8 @@ class _OrderWithBalanceList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading && orders.isEmpty) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.gold));
+      return const Center(
+          child: CircularProgressIndicator(color: _navyBlue));
     }
     if (orders.isEmpty) {
       return _EmptyHint(
@@ -1231,70 +1479,109 @@ class _OrderWithBalanceList extends StatelessWidget {
         subtitle: 'All orders are fully paid',
       );
     }
-    return Container(
-      decoration: AppTheme.glassCard(opacity: 0.13, radius: 18),
-      child: ListView.separated(
+    return ListView.separated(
         padding: const EdgeInsets.all(8),
         itemCount: orders.length,
         separatorBuilder: (_, __) =>
-            Divider(color: Colors.white.withValues(alpha: 0.07), height: 1),
+            const Divider(color: _Glass.borderDim, height: 1),
         itemBuilder: (_, i) {
           final o         = orders[i];
-          final orderId   = o['order_id']?.toString() ?? o['orderId']?.toString() ?? '—';
-          final custName  = o['customer_name']?.toString() ?? 'Walk-in';
-          final custId    = o['customer_id']?.toString() ?? '';
-          final remaining = (o['remaining'] as num?)?.toDouble() ?? 0.0;
-          final total     = (o['total_amount'] as num?)?.toDouble() ?? 0.0;
-          final dateStr   = _fmtDate(o['created_at']);
-          final statusStr = o['status']?.toString() ?? 'pending';
+          final orderId    = o['order_id']?.toString() ?? o['orderId']?.toString() ?? '—';
+          final custName   = o['customer_name']?.toString() ?? 'Walk-in';
+          final custId     = o['customer_id']?.toString() ?? '';
+          final remaining  = (o['remaining'] as num?)?.toDouble() ?? 0.0;
+          final total      = (o['total_amount'] as num?)?.toDouble() ?? 0.0;
+          final dateStr    = _fmtDate(o['created_at']);
+          final rawStatus  = o['status']?.toString() ?? 'pending';
+          final statusStr  = _statusLabel(rawStatus);
+          final isWalkIn = o['walk_in'] == true;
 
           return ListTile(
             onTap: () => onSelectOrder(o),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             leading: Container(
-              width: 42, height: 42,
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
-                color: AppTheme.gold.withValues(alpha: 0.14),
+                color: _navyBlue.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.gold.withValues(alpha: 0.35)),
+                border: Border.all(
+                    color: _navyBlue.withValues(alpha: 0.20)),
               ),
-              child: const Icon(Icons.receipt_outlined, color: AppTheme.gold, size: 18),
+              child: Icon(Icons.receipt_outlined,
+                  color: _navyBlue, size: 18),
             ),
             title: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
               children: [
-                Expanded(
-                  child: Text(
-                    orderId,
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
-                  ),
+                Text(
+                  orderId,
+                  style: const TextStyle(
+                      color: _Glass.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13),
                 ),
+                if (isWalkIn) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _Glass.accentAmber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: _Glass.accentAmber.withValues(alpha: 0.40),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: const Text(
+                      'Walk-in',
+                      style: TextStyle(
+                          color: _Glass.accentAmber,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+                const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.15),
+                    color: _Glass.accentOrange.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(99),
-                    border: Border.all(color: Colors.orange.withValues(alpha: 0.35)),
+                    border: Border.all(
+                        color: _Glass.accentOrange
+                            .withValues(alpha: 0.35)),
                   ),
                   child: Text(
                     '₱${remaining.toStringAsFixed(2)} due',
                     style: const TextStyle(
-                        color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.w700),
+                        color: _Glass.accentOrange,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
             ),
             subtitle: Text(
               '$custName${custId.isNotEmpty ? '  ·  ID: $custId' : ''}${dateStr.isNotEmpty ? '  •  $dateStr' : ''}  •  $statusStr',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11),
+              style:
+                  const TextStyle(color: _Glass.textMuted, fontSize: 11),
             ),
-            trailing: Icon(Icons.chevron_right, color: Colors.white.withValues(alpha: 0.3)),
+            trailing: const Icon(Icons.chevron_right,
+                color: _Glass.textMuted),
           );
         },
-      ),
     );
   }
 }
+
+// =============================================================================
+// Empty state helper
+// =============================================================================
 
 class _EmptyHint extends StatelessWidget {
   final IconData icon;
@@ -1310,16 +1597,17 @@ class _EmptyHint extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 52, color: Colors.white24),
+          Icon(icon, size: 52, color: _Glass.textMuted),
           const SizedBox(height: 14),
           Text(title,
               style: const TextStyle(
-                  color: Colors.white,
+                  color: _Glass.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           Text(subtitle,
-              style: const TextStyle(color: Colors.white38, fontSize: 13)),
+              style: const TextStyle(
+                  color: _Glass.textMuted, fontSize: 13)),
         ],
       ),
     );

@@ -1080,6 +1080,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   bool _saving = false;
 
   List<Map<String, dynamic>> _bom = [];
+  final List<int> _bomKeys = []; // stable unique keys per BOM entry
+  int _bomKeyCounter = 0;
   List<Map<String, dynamic>> _bulkPricing = [];
   List<Map<String, dynamic>> _allMaterials = [];
   bool _materialsLoaded = false;
@@ -1158,6 +1160,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
           ) ??
           [],
     );
+    _bomKeyCounter = _bom.length;
+    for (int i = 0; i < _bom.length; i++) _bomKeys.add(i);
     _bulkPricing = List<Map<String, dynamic>>.from(
       (e?['bulk_pricing'] as List?)?.map(
             (x) => Map<String, dynamic>.from(x as Map),
@@ -1376,7 +1380,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     final isEdit = widget.existing != null;
 
     return Dialog(
-      backgroundColor: _Glass.surface,
+      backgroundColor: Colors.white,
       elevation: 32,
       shadowColor: Colors.black.withValues(alpha: 0.3),
       shape: RoundedRectangleBorder(
@@ -2063,13 +2067,16 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                         ),
                       ..._bom.asMap().entries.map(
                         (e) => _BomEditRow(
-                          key: ValueKey('bom_${e.key}'),
+                          key: ValueKey(_bomKeys[e.key]),
                           item: e.value,
                           allMaterials: _allMaterials,
                           materialOptions: _materialOptions,
                           onChanged: (updated) =>
                               setState(() => _bom[e.key] = updated),
-                          onRemove: () => setState(() => _bom.removeAt(e.key)),
+                          onRemove: () => setState(() {
+                            _bom.removeAt(e.key);
+                            _bomKeys.removeAt(e.key);
+                          }),
                         ),
                       ),
                       const SizedBox(height: 18),
@@ -2424,6 +2431,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         'unit': (su == 'sqft' || su == 'roll' || su == 'sheet') ? 'sqft' : 'pc',
         'for_material_option': '',
       });
+      _bomKeys.add(_bomKeyCounter++);
     });
   }
 }

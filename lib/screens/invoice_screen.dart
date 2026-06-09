@@ -57,7 +57,9 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       // Resolve missing customer_id via order → user chain, then backfill
       if ((data['customer_id']?.toString() ?? '').isEmpty && orderDoc != null) {
         final custUid = orderDoc.data() != null
-            ? (orderDoc.data() as Map<String, dynamic>)['customer_uid']?.toString() ?? ''
+            ? (orderDoc.data() as Map<String, dynamic>)['customer_uid']
+                      ?.toString() ??
+                  ''
             : '';
         if (custUid.isNotEmpty) {
           final userDoc = await db.collection('User').doc(custUid).get();
@@ -75,8 +77,12 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
       // Merge order-level notes if invoice doesn't already have them
       // (walk-in orders store notes on the Order doc, not the Invoice doc)
-      if ((data['notes']?.toString() ?? '').isEmpty && orderDoc != null && orderDoc.exists) {
-        final orderNotes = (orderDoc.data() as Map<String, dynamic>?)?['notes']?.toString() ?? '';
+      if ((data['notes']?.toString() ?? '').isEmpty &&
+          orderDoc != null &&
+          orderDoc.exists) {
+        final orderNotes =
+            (orderDoc.data() as Map<String, dynamic>?)?['notes']?.toString() ??
+            '';
         if (orderNotes.isNotEmpty) {
           data = {...data, 'notes': orderNotes};
         }
@@ -867,9 +873,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
               ),
             ),
             Text(
-              widget.fromPayment
-                  ? 'Payment Confirmed ✓'
-                  : 'Official Sales Invoice',
+              widget.fromPayment ? 'Payment Confirmed ✓' : 'Sales Invoice',
               style: const TextStyle(color: Color(0xFF334155), fontSize: 11),
             ),
           ],
@@ -999,7 +1003,7 @@ class _InvoiceView extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               const Text(
-                                'OFFICIAL INVOICE',
+                                'SALES INVOICE',
                                 style: TextStyle(
                                   color: Color(0xFF475569),
                                   fontSize: 9,
@@ -1386,27 +1390,44 @@ class _InvoiceView extends StatelessWidget {
                                           fontSize: 11,
                                         ),
                                       ),
-                                    Builder(builder: (_) {
-                                      final urls = List<String>.from(p['file_urls'] as List? ?? []);
-                                      final fnames = List<String>.from(p['file_names'] as List? ?? []);
-                                      if (urls.isEmpty) return const SizedBox.shrink();
-                                      return Padding(
-                                        padding: const EdgeInsets.only(top: 6),
-                                        child: Wrap(
-                                          spacing: 6,
-                                          runSpacing: 4,
-                                          children: urls.asMap().entries.map((en) {
-                                            final i = en.key;
-                                            final u = en.value;
-                                            if (u.isEmpty) return const SizedBox.shrink();
-                                            final fn = i < fnames.length && fnames[i].isNotEmpty
-                                                ? fnames[i]
-                                                : 'File ${i + 1}';
-                                            return DesignFileChip(name: fn, url: u);
-                                          }).toList(),
-                                        ),
-                                      );
-                                    }),
+                                    Builder(
+                                      builder: (_) {
+                                        final urls = List<String>.from(
+                                          p['file_urls'] as List? ?? [],
+                                        );
+                                        final fnames = List<String>.from(
+                                          p['file_names'] as List? ?? [],
+                                        );
+                                        if (urls.isEmpty)
+                                          return const SizedBox.shrink();
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 6,
+                                          ),
+                                          child: Wrap(
+                                            spacing: 6,
+                                            runSpacing: 4,
+                                            children: urls.asMap().entries.map((
+                                              en,
+                                            ) {
+                                              final i = en.key;
+                                              final u = en.value;
+                                              if (u.isEmpty)
+                                                return const SizedBox.shrink();
+                                              final fn =
+                                                  i < fnames.length &&
+                                                      fnames[i].isNotEmpty
+                                                  ? fnames[i]
+                                                  : 'File ${i + 1}';
+                                              return DesignFileChip(
+                                                name: fn,
+                                                url: u,
+                                              );
+                                            }).toList(),
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ],
                                 ),
                               ),
@@ -1732,7 +1753,7 @@ class _InvoiceView extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'This is an official electronic invoice issued by Imprenta Inc.',
+                        'This is a sales electronic invoice issued by Imprenta Inc.',
                         style: TextStyle(
                           color: Color(0xFF94A3B8),
                           fontSize: 10,

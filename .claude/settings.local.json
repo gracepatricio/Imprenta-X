@@ -76,7 +76,8 @@
       "Bash(findstr /i \"product\\\\|home\\\\|service\\\\|category\\\\|card\")",
       "mcp__ide__getDiagnostics",
       "Bash(dir *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Grace\\\\Documents\\\\Flutter Projects\\\\imprentax\" -Recurse -Directory)"
     ]
   }
 }
