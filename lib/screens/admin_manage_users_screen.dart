@@ -1839,20 +1839,20 @@ class _CreateButtonState extends State<_CreateButton>
                               widget.onCreateEmployee();
                             },
                           ),
-                          // After the existing Create Employee option:
-                          const SizedBox(height: 4),
-                          _dropdownOption(
-                            icon: Icons.person_add_rounded,
-                            label: 'Create Customer',
-                            subtitle: 'Manual customer account',
-                            color: _G.accentBlue,
-                            bg: const Color(0xFFDBEAFE),
-                            onTap: () {
-                              _removeOverlay();
-                              widget
-                                  .onCreateCustomer(); // we'll add this callback below
-                            },
-                          ),
+                          if (false) ...[
+                            const SizedBox(height: 4),
+                            _dropdownOption(
+                              icon: Icons.person_add_rounded,
+                              label: 'Create Customer',
+                              subtitle: 'Manual customer account',
+                              color: _G.accentBlue,
+                              bg: const Color(0xFFDBEAFE),
+                              onTap: () {
+                                _removeOverlay();
+                                widget.onCreateCustomer();
+                              },
+                            ),
+                          ],
                         ],
                       ),
                     ),
