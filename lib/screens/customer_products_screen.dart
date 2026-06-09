@@ -957,7 +957,7 @@ class _ProductCardState extends State<_ProductCard> {
                               fontSize: 17,
                               height: 1.25,
                             ),
-                            maxLines: 2,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           if (variants.isNotEmpty) ...[

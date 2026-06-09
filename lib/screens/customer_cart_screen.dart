@@ -870,9 +870,12 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       if (paid == true) {
         final total = _subtotal;
         CartManager.removeIndices(selectedList);
-        widget.onOrderPlaced?.call();
-        // Pass messenger captured before async so it works after widget unmounts.
-        await _onPaymentConfirmed(
+        // Navigate to Account immediately — don't make the user wait for
+        // Firestore writes. The order appears in Account via real-time
+        // listener within seconds of the background write completing.
+        if (mounted) widget.onOrderPlaced?.call();
+        // Write to Firestore in background after navigating away.
+        _onPaymentConfirmed(
           orderId: orderId,
           customerName: customerName,
           customerEmail: customerEmail,
@@ -885,7 +888,12 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
           linkId: link.id,
           uid: user.uid,
           messenger: messenger,
-        );
+        ).catchError((e) {
+          messenger.showSnackBar(SnackBar(
+            content: Text('Order write failed: $e'),
+            backgroundColor: Colors.red.shade700,
+          ));
+        });
       }
     } catch (e) {
       messenger.showSnackBar(

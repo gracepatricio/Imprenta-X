@@ -655,6 +655,15 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
     _subscribeCount(_QueueSubTab.cancelled, 'cancelled');
   }
 
+  @override
+  void didUpdateWidget(_JobQueueSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTab != oldWidget.initialTab) {
+      final idx = widget.initialTab.clamp(0, 4);
+      setState(() => _sub = _QueueSubTab.values[idx]);
+    }
+  }
+
   void _subscribeCount(_QueueSubTab tab, String status) {
     final sub = FirebaseFirestore.instance
         .collection('Orders')

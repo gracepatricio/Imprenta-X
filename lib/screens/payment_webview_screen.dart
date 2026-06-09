@@ -46,11 +46,9 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startPolling();
-    // On web: auto-open the payment page in a new tab immediately so the user
-    // doesn't need to manually click the button.
-    if (kIsWeb) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _openPaymentUrl());
-    }
+    // Auto-open the payment page immediately on all platforms so the user
+    // doesn't need to manually tap the button.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openPaymentUrl());
   }
 
   @override

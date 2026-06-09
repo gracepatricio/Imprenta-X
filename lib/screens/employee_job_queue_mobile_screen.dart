@@ -106,7 +106,8 @@ class _BlurCard extends StatelessWidget {
 }
 
 class EmployeeMobileJobQueueScreen extends StatefulWidget {
-  const EmployeeMobileJobQueueScreen({super.key});
+  const EmployeeMobileJobQueueScreen({super.key, this.initialTab = 0});
+  final int initialTab;
 
   @override
   State<EmployeeMobileJobQueueScreen> createState() =>
@@ -125,7 +126,11 @@ class _EmployeeMobileJobQueueScreenState
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(
+      length: 5,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 4),
+    );
     _tabs.addListener(() => setState(() {}));
     _subscribeCount(0, 'pending');
     _subscribeCount(1, 'in_production');

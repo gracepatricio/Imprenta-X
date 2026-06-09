@@ -236,7 +236,11 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     switch (_menu) {
       case 'orders':
-        return _OrdersContent(uid: uid, initialFilter: _ordersFilter);
+        return _OrdersContent(
+          key: ValueKey(_ordersFilter),
+          uid: uid,
+          initialFilter: _ordersFilter,
+        );
       case 'messages':
         return _MessagesContent(uid: uid);
       case 'manage':
@@ -1180,7 +1184,7 @@ class _UnreadMessageCard extends StatelessWidget {
 class _OrdersContent extends StatefulWidget {
   final String uid;
   final String initialFilter;
-  const _OrdersContent({required this.uid, this.initialFilter = 'all'});
+  const _OrdersContent({super.key, required this.uid, this.initialFilter = 'all'});
 
   @override
   State<_OrdersContent> createState() => _OrdersContentState();

@@ -52,6 +52,7 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
 
   late String _active;
   int _initialJobTab = 0;
+  int _jobQueueNavVersion = 0;
 
   StreamSubscription<DocumentSnapshot>? _deletionSub;
 
@@ -109,10 +110,14 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
             onNavigateToLogs: (tab) => setState(() {
               _active = 'Job Queue';
               _initialJobTab = tab;
+              _jobQueueNavVersion++;
             }),
           );
         case 'Job Queue':
-          return const EmployeeMobileJobQueueScreen();
+          return EmployeeMobileJobQueueScreen(
+            key: ValueKey(_jobQueueNavVersion),
+            initialTab: _initialJobTab,
+          );
         default:
           return const EmployeeHomeScreen();
       }
@@ -123,7 +128,10 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
       case 'Inventory':
         return const EmployeeInventoryScreen();
       case 'Job Queue':
-        return EmployeeJobQueueScreen(initialTab: _initialJobTab);
+        return EmployeeJobQueueScreen(
+          key: ValueKey(_jobQueueNavVersion),
+          initialTab: _initialJobTab,
+        );
       case 'Accounting':
         return const EmployeeLogsScreen();
       case 'Account':
@@ -131,6 +139,7 @@ class _EmployeeHomepageState extends State<EmployeeHomepage> {
           onNavigateToLogs: (tab) => setState(() {
             _active = 'Job Queue';
             _initialJobTab = tab;
+            _jobQueueNavVersion++;
           }),
         );
       default:

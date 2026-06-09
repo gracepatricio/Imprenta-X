@@ -30,6 +30,7 @@ class _AdminHomepageState extends State<AdminHomepage> {
 
   late String _active;
   String? _initialJobStatus;
+  int _logsNavVersion = 0;
   StreamSubscription<DocumentSnapshot>? _deletionSub;
   String _adminName = '';
 
@@ -95,7 +96,12 @@ class _AdminHomepageState extends State<AdminHomepage> {
       case 'Logs & History':
         return Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-          child: AdminLogsScreen(initialJobStatus: _initialJobStatus),
+          child: AdminLogsScreen(
+            key: _initialJobStatus != null
+                ? ValueKey(_logsNavVersion)
+                : const ValueKey('logs_normal'),
+            initialJobStatus: _initialJobStatus,
+          ),
         );
       default:
         return Padding(
@@ -124,6 +130,7 @@ class _AdminHomepageState extends State<AdminHomepage> {
                         onNavigateToTab: (tab, [status]) => setState(() {
                           _active = tab;
                           _initialJobStatus = status;
+                          if (status != null) _logsNavVersion++;
                         }),
                       ),
                     ),

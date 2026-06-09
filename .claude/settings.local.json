@@ -77,7 +77,13 @@
       "mcp__ide__getDiagnostics",
       "Bash(dir *)",
       "Bash(git stash *)",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Grace\\\\Documents\\\\Flutter Projects\\\\imprentax\" -Recurse -Directory)"
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Grace\\\\Documents\\\\Flutter Projects\\\\imprentax\" -Recurse -Directory)",
+      "Bash(firebase --project imprenta-x-system firestore:get RawMaterials/RM-009)",
+      "Read(//c/Users/ADMIN/.config/firebase/**)",
+      "Read(//c/Users/ADMIN/.config/**)",
+      "Read(//c/Users/ADMIN/**)",
+      "PowerShell(ls \"$env:USERPROFILE\\\\.config\\\\configstore\\\\\" | Select-Object Name)",
+      "PowerShell($json = Get-Content \"$env:USERPROFILE\\\\.config\\\\configstore\\\\firebase-tools.json\" -Raw | ConvertFrom-Json; $tokens = $json.tokens; if \\($tokens\\) { $tokens.PSObject.Properties.Name } else { \"no tokens\" }; $json.PSObject.Properties.Name)"
     ]
   }
 }

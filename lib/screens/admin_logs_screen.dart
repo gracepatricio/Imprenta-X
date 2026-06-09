@@ -2105,7 +2105,7 @@ class _SalesRecordSubTabState extends State<_SalesRecordSubTab> {
                 ),
               ),
               const Spacer(),
-              if (_sub == _SalesSubTab.record) const SalesImportButton(),
+              // TEMP_HIDDEN: if (_sub == _SalesSubTab.record) const SalesImportButton(),
             ],
           ),
         ),

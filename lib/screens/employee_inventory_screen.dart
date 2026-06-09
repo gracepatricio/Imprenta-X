@@ -1281,72 +1281,66 @@ class _EmployeeInventoryScreenState extends State<EmployeeInventoryScreen> {
             ? materials
             : materials.where((m) => m['_status'] == _statusFilter).toList();
 
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: BackdropFilter(
-            filter: _blurFilter,
-            child: Container(
-              decoration: _Glass.glass(radius: 20, elevated: true),
-              child: LayoutBuilder(
-                builder: (_, c) {
-                  if (filtered.isEmpty) {
-                    return Center(
-                      child: Text(
-                        _statusFilter != null
-                            ? 'No "$_statusFilter" materials'
-                            : 'No materials found',
-                        style: const TextStyle(
-                          color: _Glass.textMuted,
-                          fontSize: 13,
-                        ),
-                      ),
-                    );
-                  }
-                  Widget buildTable() => ListView.builder(
-                    padding: EdgeInsets.zero,
-                    itemCount: filtered.length + 1,
-                    itemBuilder: (_, i) {
-                      if (i == 0) {
-                        return Container(
-                          decoration: const BoxDecoration(
-                            color: Color(0xF2F4F6F8),
-                            border: Border(
-                              bottom: BorderSide(color: _Glass.borderDim, width: 0.8),
-                            ),
-                          ),
-                          child: const _TableHeader(),
-                        );
-                      }
-                      final idx = i - 1;
-                      return _TableRow(
-                        data: filtered[idx],
-                        isLast: idx == filtered.length - 1,
-                        statusColor: _statusColor(
-                          filtered[idx]['_status'] as String,
-                        ),
-                        onEdit: () => _showReplenishDialog(
-                          filtered[idx]['doc_id'] as String,
-                          filtered[idx],
-                          method: 'manual',
-                        ),
-                        onQrTap: () => _showQr(context, filtered[idx]),
-                      );
-                    },
-                  );
-                  if (c.maxWidth < _kTableMinWidth) {
-                    return SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: _kTableMinWidth,
-                        child: buildTable(),
-                      ),
-                    );
-                  }
-                  return buildTable();
-                },
+        if (filtered.isEmpty) {
+          return Center(
+            child: Text(
+              _statusFilter != null
+                  ? 'No "$_statusFilter" materials'
+                  : 'No materials found',
+              style: const TextStyle(
+                color: _Glass.textMuted,
+                fontSize: 13,
               ),
             ),
-          ),
+          );
+        }
+
+        return LayoutBuilder(
+          builder: (_, constraints) {
+            final compact = constraints.maxWidth < 540;
+
+            Widget buildTable() => ListView.builder(
+              padding: EdgeInsets.zero,
+              itemCount: filtered.length + 1,
+              itemBuilder: (_, i) {
+                if (i == 0) {
+                  return Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xF2F4F6F8),
+                      border: Border(
+                        bottom: BorderSide(color: _Glass.borderDim, width: 0.8),
+                      ),
+                    ),
+                    child: _TableHeader(compact: compact),
+                  );
+                }
+                final idx = i - 1;
+                return _TableRow(
+                  data: filtered[idx],
+                  isLast: idx == filtered.length - 1,
+                  statusColor: _statusColor(filtered[idx]['_status'] as String),
+                  compact: compact,
+                  onEdit: () => _showReplenishDialog(
+                    filtered[idx]['doc_id'] as String,
+                    filtered[idx],
+                    method: 'manual',
+                  ),
+                  onQrTap: () => _showQr(context, filtered[idx]),
+                );
+              },
+            );
+
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: _blurFilter,
+                child: Container(
+                  decoration: _Glass.glass(radius: 20, elevated: true),
+                  child: buildTable(),
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -1533,10 +1527,11 @@ class _FilterPill extends StatelessWidget {
 }
 
 // =============================================================================
-// _TableHeader (unchanged)
+// _TableHeader
 // =============================================================================
 class _TableHeader extends StatelessWidget {
-  const _TableHeader();
+  final bool compact;
+  const _TableHeader({this.compact = false});
 
   static const _h = TextStyle(
     color: _Glass.textSecondary,
@@ -1546,37 +1541,52 @@ class _TableHeader extends StatelessWidget {
   );
 
   @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-    child: Row(
-      children: [
-        SizedBox(width: 74, child: Text('Code', style: _h)),
-        Expanded(child: Text('Material', style: _h)),
-        SizedBox(
-          width: 120,
-          child: Text('Available Stock', style: _h, textAlign: TextAlign.center),
-        ),
-        SizedBox(
-          width: 110,
-          child: Text('Restock Level', style: _h, textAlign: TextAlign.center),
-        ),
-        SizedBox(
-          width: 90,
-          child: Text('Status', style: _h, textAlign: TextAlign.center),
-        ),
-        SizedBox(width: 96),
-      ],
-    ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    child: compact
+        ? const Row(
+            children: [
+              SizedBox(width: 12),
+              SizedBox(width: 56, child: Text('Code', style: _h)),
+              SizedBox(width: 4),
+              Expanded(child: Text('Material', style: _h)),
+              SizedBox(
+                width: 72,
+                child: Text('Stock', style: _h, textAlign: TextAlign.center),
+              ),
+              SizedBox(width: 82),
+            ],
+          )
+        : const Row(
+            children: [
+              SizedBox(width: 74, child: Text('Code', style: _h)),
+              Expanded(child: Text('Material', style: _h)),
+              SizedBox(
+                width: 120,
+                child: Text('Available Stock', style: _h, textAlign: TextAlign.center),
+              ),
+              SizedBox(
+                width: 110,
+                child: Text('Restock Level', style: _h, textAlign: TextAlign.center),
+              ),
+              SizedBox(
+                width: 90,
+                child: Text('Status', style: _h, textAlign: TextAlign.center),
+              ),
+              SizedBox(width: 96),
+            ],
+          ),
   );
 }
 
 // =============================================================================
-// _TableRow (unchanged)
+// _TableRow
 // =============================================================================
 class _TableRow extends StatelessWidget {
   final Map<String, dynamic> data;
   final Color statusColor;
   final bool isLast;
+  final bool compact;
   final VoidCallback onEdit;
   final VoidCallback onQrTap;
 
@@ -1586,6 +1596,7 @@ class _TableRow extends StatelessWidget {
     required this.onEdit,
     required this.onQrTap,
     this.isLast = false,
+    this.compact = false,
   });
 
   @override
@@ -1665,6 +1676,157 @@ class _TableRow extends StatelessWidget {
       );
     }
 
+    final actionButtons = Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        GestureDetector(
+          onTap: onQrTap,
+          child: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: _navyBlue,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.20), width: 0.8),
+            ),
+            child: const Icon(Icons.qr_code_rounded, color: Colors.white, size: 13),
+          ),
+        ),
+        const SizedBox(width: 4),
+        GestureDetector(
+          onTap: onEdit,
+          child: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: const Color(0xFFB45309).withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFB45309).withValues(alpha: 0.35), width: 0.8),
+            ),
+            child: const Icon(Icons.edit_outlined, color: Color(0xFFB45309), size: 13),
+          ),
+        ),
+      ],
+    );
+
+    if (compact) {
+      // Compact mobile layout.
+      // Main content area (code + material + stock) is tappable → replenish.
+      // QR button sits separately on the right.
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          border: isLast
+              ? null
+              : Border(bottom: BorderSide(color: _Glass.borderDim, width: 0.8)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // ── Tappable area: code + material + stock ──────────────────────
+            Expanded(
+              child: GestureDetector(
+                onTap: onEdit,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 56,
+                        child: Text(id,
+                            style: const TextStyle(
+                                color: _Glass.textMuted, fontSize: 11,
+                                fontFamily: 'monospace', fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  margin: const EdgeInsets.only(right: 5),
+                                  decoration: BoxDecoration(
+                                    color: statusColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(name,
+                                      style: const TextStyle(
+                                          color: _Glass.textPrimary, fontSize: 12,
+                                          fontWeight: FontWeight.w700),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                ),
+                              ],
+                            ),
+                            if (subLine.isNotEmpty) ...[
+                              const SizedBox(height: 1),
+                              Text(subLine,
+                                  style: const TextStyle(color: _Glass.textMuted, fontSize: 10)),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      DefaultTextStyle(
+                        style: const TextStyle(fontSize: 11),
+                        child: stockCell,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // ── Edit → QR buttons (independent tap targets) ─────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: onEdit,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFB45309).withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFB45309).withValues(alpha: 0.45), width: 0.9),
+                      ),
+                      child: const Icon(Icons.edit_outlined, color: Color(0xFFB45309), size: 15),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: onQrTap,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: _navyBlue,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.20), width: 0.8),
+                      ),
+                      child: const Icon(Icons.qr_code_rounded, color: Colors.white, size: 15),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Wide layout (unchanged)
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -1730,47 +1892,7 @@ class _TableRow extends StatelessWidget {
               ),
             ),
           ),
-          SizedBox(
-            width: 96,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                GestureDetector(
-                  onTap: onQrTap,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: _navyBlue,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.20),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: const Icon(Icons.qr_code_rounded, color: Colors.white, size: 13),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                GestureDetector(
-                  onTap: onEdit,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFB45309).withValues(alpha: 0.10),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFFB45309).withValues(alpha: 0.35),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: const Icon(Icons.edit_outlined, color: Color(0xFFB45309), size: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          SizedBox(width: 96, child: actionButtons),
         ],
       ),
     );
