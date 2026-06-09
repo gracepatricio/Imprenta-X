@@ -9,11 +9,12 @@
 //     Pending | Active | Ready for Pickup | Cancelled | Order History
 // ---------------------------------------------------------------------------
 
+import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
 import 'design_file_viewer.dart';
-import 'dart:ui';
 
 // =============================================================================
 // Design Tokens — Liquid Glass
@@ -117,32 +118,35 @@ class _EmployeeMobileJobQueueScreenState
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
 
-  static const _tabLabels = [
-    'Pending',
-    'Active',
-    'Ready',
-    'Cancelled',
-    'History',
-  ];
-
-  // Firestore status values that map to each tab
-  static const _tabStatuses = [
-    'pending',
-    'in_production',
-    'ready',
-    'cancelled',
-    null, // History = all statuses
-  ];
+  // Live counts from Firestore — mirrors the web version's tab badges
+  final Map<int, int> _counts = {};
+  final List<StreamSubscription<QuerySnapshot>> _countSubs = [];
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 5, vsync: this);
     _tabs.addListener(() => setState(() {}));
+    _subscribeCount(0, 'pending');
+    _subscribeCount(1, 'in_production');
+    _subscribeCount(2, 'ready');
+    _subscribeCount(3, 'cancelled');
+  }
+
+  void _subscribeCount(int idx, String status) {
+    final sub = FirebaseFirestore.instance
+        .collection('Orders')
+        .where('status', isEqualTo: status)
+        .snapshots()
+        .listen((snap) {
+          if (mounted) setState(() => _counts[idx] = snap.size);
+        });
+    _countSubs.add(sub);
   }
 
   @override
   void dispose() {
+    for (final s in _countSubs) s.cancel();
     _tabs.dispose();
     super.dispose();
   }
@@ -245,32 +249,36 @@ class _EmployeeMobileJobQueueScreenState
                       child: _PillSegmentControl<int>(
                         selected: _tabs.index,
                         onChanged: (i) => setState(() => _tabs.animateTo(i)),
-                        items: const [
+                        items: [
                           _PillSegmentItem(
                             value: 0,
                             label: 'Pending',
                             icon: Icons.hourglass_empty_rounded,
                             accent: _Glass.accentAmber,
+                            count: _counts[0],
                           ),
                           _PillSegmentItem(
                             value: 1,
                             label: 'Active',
                             icon: Icons.play_circle_outline_rounded,
                             accent: _Glass.accentBlue,
+                            count: _counts[1],
                           ),
                           _PillSegmentItem(
                             value: 2,
                             label: 'Ready',
                             icon: Icons.check_circle_outline_rounded,
                             accent: _Glass.accentEmerald,
+                            count: _counts[2],
                           ),
                           _PillSegmentItem(
                             value: 3,
                             label: 'Cancelled',
                             icon: Icons.cancel_outlined,
                             accent: _Glass.accentRose,
+                            count: _counts[3],
                           ),
-                          _PillSegmentItem(
+                          const _PillSegmentItem(
                             value: 4,
                             label: 'History',
                             icon: Icons.history_rounded,
@@ -478,76 +486,160 @@ class _PillSegmentControl<T> extends StatelessWidget {
 }
 // ── Single-status list (Pending / Active / Ready / Cancelled) ──────────────
 
-class _MobileQueueList extends StatelessWidget {
+class _MobileQueueList extends StatefulWidget {
   final String status;
   const _MobileQueueList({required this.status});
 
+  @override
+  State<_MobileQueueList> createState() => _MobileQueueListState();
+}
+
+class _MobileQueueListState extends State<_MobileQueueList> {
+  String _search = '';
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Stream<List<QueryDocumentSnapshot>> _stream() {
-    final q = FirebaseFirestore.instance
+    return FirebaseFirestore.instance
         .collection('Orders')
-        .where('status', isEqualTo: status);
-    return q.snapshots().map((s) {
+        .where('status', isEqualTo: widget.status)
+        .snapshots()
+        .map((s) {
       final docs = [...s.docs]..sort((a, b) {
-        final ta = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
-        final tb = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
-        if (ta == null && tb == null) return 0;
-        if (ta == null) return 1;
-        if (tb == null) return -1;
-        return tb.compareTo(ta);
-      });
+          final ta = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          final tb = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          if (ta == null && tb == null) return 0;
+          if (ta == null) return 1;
+          if (tb == null) return -1;
+          return tb.compareTo(ta);
+        });
       return docs;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<QueryDocumentSnapshot>>(
-      stream: _stream(),
-      builder: (ctx, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(
-              child: CircularProgressIndicator(color: AppTheme.gold));
-        }
-        if (snap.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                'Error loading orders: ${snap.error}',
-                style: TextStyle(
-                    color: Colors.redAccent.withValues(alpha: 0.8),
-                    fontSize: 12),
-                textAlign: TextAlign.center,
+    return Column(
+      children: [
+        // ── Search bar (mirrors web version) ─────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: BackdropFilter(
+              filter: _blurFilter,
+              child: Container(
+                height: 40,
+                decoration: _Glass.glass(radius: 12),
+                child: TextField(
+                  controller: _searchCtrl,
+                  style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Search order ID or customer…',
+                    hintStyle: const TextStyle(color: _Glass.textMuted, fontSize: 13),
+                    prefixIcon: const Icon(Icons.search_rounded,
+                        size: 16, color: _Glass.textMuted),
+                    suffixIcon: _search.isNotEmpty
+                        ? GestureDetector(
+                            onTap: () {
+                              _searchCtrl.clear();
+                              setState(() => _search = '');
+                            },
+                            child: const Icon(Icons.close_rounded,
+                                size: 16, color: _Glass.textMuted),
+                          )
+                        : null,
+                    filled: false,
+                    contentPadding: EdgeInsets.zero,
+                    border: InputBorder.none,
+                  ),
+                  onChanged: (v) => setState(() => _search = v.trim()),
+                ),
               ),
             ),
-          );
-        }
-        final docs = snap.data ?? [];
-        if (docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.inbox_rounded,
-                    size: 48, color: Colors.white.withValues(alpha: 0.2)),
-                const SizedBox(height: 12),
-                Text(
-                  'No ${_statusLabel(status).toLowerCase()} orders',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
-                      fontSize: 14),
-                ),
-              ],
-            ),
-          );
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-          itemCount: docs.length,
-          itemBuilder: (_, i) =>
-              _MobileOrderCard(doc: docs[i], showStatus: false),
-        );
-      },
+          ),
+        ),
+        // ── Card list ─────────────────────────────────────────────────────
+        Expanded(
+          child: StreamBuilder<List<QueryDocumentSnapshot>>(
+            stream: _stream(),
+            builder: (ctx, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(
+                    child: CircularProgressIndicator(color: AppTheme.gold));
+              }
+              if (snap.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'Error loading orders: ${snap.error}',
+                      style: TextStyle(
+                          color: Colors.redAccent.withValues(alpha: 0.8),
+                          fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                );
+              }
+              var docs = snap.data ?? [];
+              if (_search.isNotEmpty) {
+                final q = _search.toLowerCase();
+                docs = docs.where((d) {
+                  final data = d.data() as Map<String, dynamic>;
+                  return (data['order_id'] ?? '').toString().toLowerCase().contains(q) ||
+                      (data['customer_name'] ?? '').toString().toLowerCase().contains(q) ||
+                      (data['customer_id'] ?? '').toString().toLowerCase().contains(q);
+                }).toList();
+              }
+              if (docs.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.inbox_rounded,
+                          size: 48, color: Colors.white.withValues(alpha: 0.2)),
+                      const SizedBox(height: 12),
+                      Text(
+                        _search.isNotEmpty
+                            ? 'No results for "$_search"'
+                            : 'No ${_statusLabel(widget.status).toLowerCase()} orders',
+                        style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.4),
+                            fontSize: 14),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              // ── Responsive: constrained width on tablet/wide screens ────
+              return LayoutBuilder(
+                builder: (_, constraints) {
+                  final wide = constraints.maxWidth >= 600;
+                  final hPad = wide ? 32.0 : 16.0;
+                  return Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 720),
+                      child: ListView.builder(
+                        padding: EdgeInsets.fromLTRB(hPad, 8, hPad, 20),
+                        itemCount: docs.length,
+                        itemBuilder: (_, i) =>
+                            _MobileOrderCard(doc: docs[i], showStatus: false),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -731,11 +823,23 @@ class _MobileOrderHistoryState extends State<_MobileOrderHistory> {
                           fontSize: 14)),
                 );
               }
-              return ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-                itemCount: docs.length,
-                itemBuilder: (_, i) =>
-                    _MobileOrderCard(doc: docs[i], showStatus: true),
+              return LayoutBuilder(
+                builder: (_, constraints) {
+                  final wide = constraints.maxWidth >= 600;
+                  final hPad = wide ? 32.0 : 16.0;
+                  return Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 720),
+                      child: ListView.builder(
+                        padding: EdgeInsets.fromLTRB(hPad, 4, hPad, 20),
+                        itemCount: docs.length,
+                        itemBuilder: (_, i) =>
+                            _MobileOrderCard(doc: docs[i], showStatus: true),
+                      ),
+                    ),
+                  );
+                },
               );
             },
           ),

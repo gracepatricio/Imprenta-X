@@ -11,7 +11,6 @@ import '../services/paymongo_service.dart';
 import '../services/turnaround_service.dart';
 import 'app_theme.dart';
 import 'payment_webview_screen.dart';
-import 'invoice_screen.dart';
 import 'customer_order_screen.dart';
 import '../services/inventory_service.dart';
 
@@ -690,8 +689,8 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: Text(
-                                          'PayMongo opens a secure checkout with GCash, Maya, '
-                                          'and card options — including a scannable QR code.',
+                                          'QRPH / GCash / Maya and card — a secure '
+                                          'QR code checkout powered by PayMongo.',
                                           style: TextStyle(
                                             color: Colors.white.withValues(
                                               alpha: 0.6,
@@ -744,7 +743,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                       size: 18,
                                     ),
                                     label: Text(
-                                      'Pay ₱${payAmount.toStringAsFixed(2)} via PayMongo',
+                                      'Pay ₱${payAmount.toStringAsFixed(2)} via QRPH',
                                       style: const TextStyle(
                                         fontFamily: 'Spartan',
                                         fontWeight: FontWeight.w800,
@@ -872,6 +871,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
         final total = _subtotal;
         CartManager.removeIndices(selectedList);
         widget.onOrderPlaced?.call();
+        // Pass messenger captured before async so it works after widget unmounts.
         await _onPaymentConfirmed(
           orderId: orderId,
           customerName: customerName,
@@ -884,6 +884,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
           estimatedCompletion: estimatedCompletion,
           linkId: link.id,
           uid: user.uid,
+          messenger: messenger,
         );
       }
     } catch (e) {
@@ -909,6 +910,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     required DateTime estimatedCompletion,
     required String linkId,
     required String uid,
+    required ScaffoldMessengerState messenger,
   }) async {
     final remaining = (total - paidAmount).clamp(0.0, double.infinity);
     final isFullyPaid = remaining < 0.01;
@@ -1019,13 +1021,14 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       'timestamp': now,
     });
 
-    if (!mounted) return;
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => InvoiceScreen(invoiceId: invoiceId, fromPayment: true),
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Order $orderId placed! View your receipt in the Account tab.',
+        ),
+        backgroundColor: Colors.green.shade700,
+        duration: const Duration(seconds: 4),
       ),
-      (route) => route.isFirst,
     );
   }
 
@@ -1208,6 +1211,9 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                               'pricing_unit': items[i].pricingUnit,
                                               'min_quantity': 1,
                                               'description': items[i].description,
+                                              // Carry forward so edit preserves subtotal
+                                              'additional_services': items[i].selectedServices,
+                                              'discount_amount': items[i].discountAmount,
                                             },
                                             initialItem: items[i],
                                             editIndex: i,

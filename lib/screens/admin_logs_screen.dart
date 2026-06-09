@@ -386,8 +386,12 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
   Widget _buildContent() {
     switch (_activeTab) {
       case _LogsTab.jobQueue:
-        // Use the shared read-only queue widget — same data source as employee
-        return const AdminReadOnlyJobQueueTab();
+        // ValueKey ensures a fresh State (and correct initial tab) each time
+        // the dashboard navigates here with a specific status.
+        return AdminReadOnlyJobQueueTab(
+          key: ValueKey(widget.initialJobStatus ?? 'pending'),
+          initialStatus: widget.initialJobStatus,
+        );
       case _LogsTab.salesRecord:
         return const _SalesRecordSubTab();
       case _LogsTab.employeeActivity:
@@ -406,7 +410,10 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
 enum _AdminQueueSubTab { pending, active, ready, cancelled, history }
 
 class AdminReadOnlyJobQueueTab extends StatefulWidget {
-  const AdminReadOnlyJobQueueTab({super.key});
+  const AdminReadOnlyJobQueueTab({super.key, this.initialStatus});
+  /// Firestore status string from the dashboard ('pending', 'active', 'ready',
+  /// 'cancelled', 'in_production'). Determines the pre-selected queue tab.
+  final String? initialStatus;
 
   @override
   State<AdminReadOnlyJobQueueTab> createState() =>
@@ -461,10 +468,27 @@ class _AdminReadOnlyJobQueueTabState extends State<AdminReadOnlyJobQueueTab> {
   @override
   void initState() {
     super.initState();
+    // Jump to the tab the admin clicked on the dashboard.
+    _sub = _subFromStatus(widget.initialStatus);
     _subscribeCount(_AdminQueueSubTab.pending, 'pending');
     _subscribeCount(_AdminQueueSubTab.active, 'in_production');
     _subscribeCount(_AdminQueueSubTab.ready, 'ready');
     _subscribeCount(_AdminQueueSubTab.cancelled, 'cancelled');
+  }
+
+  static _AdminQueueSubTab _subFromStatus(String? s) {
+    switch (s) {
+      case 'active':
+      case 'in_production':
+        return _AdminQueueSubTab.active;
+      case 'ready':
+        return _AdminQueueSubTab.ready;
+      case 'cancelled':
+        return _AdminQueueSubTab.cancelled;
+      case 'pending':
+      default:
+        return _AdminQueueSubTab.pending;
+    }
   }
 
   void _subscribeCount(_AdminQueueSubTab tab, String status) {

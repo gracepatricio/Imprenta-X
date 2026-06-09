@@ -158,7 +158,11 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
   // Total discount amount for the current configuration.
   double get _discountAmount {
     final tier = _activeBulkTier;
-    if (tier == null) return 0;
+    if (tier == null) {
+      // In edit mode with no bulk-pricing tiers in the product map, preserve
+      // the discount that was originally computed when the item was added.
+      return (widget.product['discount_amount'] as num?)?.toDouble() ?? 0;
+    }
     final type  = tier['discount_type']?.toString() ?? 'rate';
     final value = (tier['discount_value'] as num?)?.toDouble() ?? 0;
     if (value <= 0) return 0;
@@ -236,6 +240,11 @@ class _CustomerOrderScreenState extends State<CustomerOrderScreen> {
           orElse: () => const MapEntry('Custom', (0.0, 0.0)),
         );
         _sizePreset = match.key;
+      }
+      // Restore previously-selected add-on services
+      for (final svc in edit.selectedServices) {
+        final name = svc['name']?.toString() ?? '';
+        if (name.isNotEmpty) _selectedServices.add(name);
       }
     } else {
       _quantity = _minQty;
