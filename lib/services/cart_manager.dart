@@ -16,6 +16,7 @@ class CartItem {
   final String productName;
   final String category;
   final String imageUrl;
+  final String description;
   final double unitPrice;
   final String pricingUnit;
   final int quantity;
@@ -34,6 +35,7 @@ class CartItem {
     required this.productName,
     required this.category,
     required this.imageUrl,
+    this.description = '',
     required this.unitPrice,
     required this.pricingUnit,
     required this.quantity,
@@ -113,6 +115,7 @@ class CartItem {
     'productName': productName,
     'category':    category,
     'imageUrl':    imageUrl,
+    if (description.isNotEmpty) 'description': description,
     'unitPrice':   unitPrice,
     'pricingUnit': pricingUnit,
     'quantity':    quantity,
@@ -134,6 +137,7 @@ class CartItem {
     productName: j['productName'] as String,
     category:    j['category']    as String,
     imageUrl:    j['imageUrl']    as String,
+    description: j['description'] as String? ?? '',
     unitPrice:   (j['unitPrice']  as num).toDouble(),
     pricingUnit: j['pricingUnit'] as String,
     quantity:    j['quantity']    as int,

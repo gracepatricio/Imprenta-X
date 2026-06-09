@@ -488,7 +488,7 @@ class _FeaturedSection extends StatelessWidget {
                         (box.maxWidth - gap * (visibleCount - 1)) /
                         visibleCount;
                     final imgH = cardW * 0.72;
-                    const textAreaH = 118.0;
+                    const textAreaH = 150.0;
                     final cardH = imgH + textAreaH;
 
                     final scrollCtrl = ScrollController();
@@ -577,6 +577,18 @@ class _FeaturedCardState extends State<_FeaturedCard> {
     final name = widget.data['product_name']?.toString() ?? 'Product';
     final price = widget.data['price'];
     final imageUrl = widget.data['image_url']?.toString() ?? '';
+    final category = widget.data['category']?.toString() ?? '';
+    final pricingUnit = widget.data['pricing_unit']?.toString() ?? '';
+    final variants = (widget.data['variants'] as List?)?.cast<String>() ?? [];
+
+    final unitLabel = pricingUnit == 'per_sqft'
+        ? '/sq ft'
+        : pricingUnit == 'per_sqin'
+            ? '/sq in'
+            : pricingUnit == 'per_piece'
+                ? '/pc'
+                : '';
+    final priceText = price != null ? '₱$price$unitLabel' : 'See pricing';
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -587,172 +599,227 @@ class _FeaturedCardState extends State<_FeaturedCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           height: widget.totalHeight,
-          transform: Matrix4.translationValues(0, _hovered ? -5 : 0, 0),
+          transform: Matrix4.translationValues(0, _hovered ? -4 : 0, 0),
           decoration: BoxDecoration(
+            color: const Color(0xFF0C0920),
             borderRadius: BorderRadius.circular(16),
-            color: _hovered
-                ? Colors.white.withValues(alpha: 0.20)
-                : Colors.white.withValues(alpha: 0.12),
-            border: Border.all(
-              color: _hovered
-                  ? AppTheme.gold.withValues(alpha: 0.75)
-                  : Colors.white.withValues(alpha: 0.30),
-              width: _hovered ? 1.5 : 1.2,
-            ),
-            boxShadow: _hovered
-                ? [
-                    BoxShadow(
-                      color: AppTheme.gold.withValues(alpha: 0.28),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.20),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.22),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+            boxShadow: [
+              BoxShadow(
+                color: _hovered
+                    ? AppTheme.gold.withValues(alpha: 0.22)
+                    : Colors.black.withValues(alpha: 0.28),
+                blurRadius: _hovered ? 18 : 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.max,
+          child: Stack(
             children: [
-              // ── Image ──
-              Stack(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(
-                    height: widget.imageHeight,
-                    width: double.infinity,
-                    child: imageUrl.isNotEmpty
-                        ? Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _imgPlaceholder(),
-                          )
-                        : _imgPlaceholder(),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      height: 36,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.55),
-                          ],
+                  // ── Image ──
+                  Stack(
+                    children: [
+                      SizedBox(
+                        height: widget.imageHeight,
+                        width: double.infinity,
+                        child: imageUrl.isNotEmpty
+                            ? Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => _imgPlaceholder(),
+                              )
+                            : _imgPlaceholder(),
+                      ),
+                      // 3-stop gradient fade
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          height: 80,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                const Color(0xFF0C0920).withValues(alpha: 0.20),
+                                const Color(0xFF0C0920),
+                              ],
+                              stops: const [0.0, 0.45, 1.0],
+                            ),
+                          ),
                         ),
+                      ),
+                      if (category.isNotEmpty)
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.55),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              category,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  // ── Info ──
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(11, 8, 11, 9),
+                      color:
+                          const Color(0xFF0C0920).withValues(alpha: 0.88),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 17,
+                                  height: 1.25,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (variants.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: variants
+                                        .map(
+                                          (v) => Container(
+                                            margin: const EdgeInsets.only(
+                                                right: 4),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 7, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(
+                                                  alpha: 0.10),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                              border: Border.all(
+                                                color: Colors.white.withValues(
+                                                    alpha: 0.20),
+                                                width: 0.8,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              v,
+                                              style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                priceText,
+                                style: TextStyle(
+                                  color: AppTheme.gold,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                  shadows: [
+                                    Shadow(
+                                      color:
+                                          AppTheme.gold.withValues(alpha: 0.40),
+                                      blurRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.gold
+                                      .withValues(alpha: _hovered ? 1.0 : 0.92),
+                                  borderRadius: BorderRadius.circular(30),
+                                  border: Border.all(
+                                      color: AppTheme.gold, width: 1.5),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppTheme.gold.withValues(
+                                          alpha: _hovered ? 0.55 : 0.40),
+                                      blurRadius: _hovered ? 14 : 8,
+                                      offset: const Offset(0, 0),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: const [
+                                    Icon(Icons.shopping_cart_rounded,
+                                        size: 14,
+                                        color: Color(0xFF1A0A00)),
+                                    SizedBox(width: 5),
+                                    Text(
+                                      'Add to Cart',
+                                      style: TextStyle(
+                                        color: Color(0xFF1A0A00),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ],
               ),
-              // ── Text + Button ──
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              height: 1.3,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            price != null ? '₱$price' : 'See pricing',
-                            style: TextStyle(
-                              color: AppTheme.gold,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              shadows: [
-                                Shadow(
-                                  color: AppTheme.gold.withValues(alpha: 0.4),
-                                  blurRadius: 6,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+              // Border overlay — painted on top of image and info
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: _hovered
+                            ? AppTheme.gold.withValues(alpha: 0.45)
+                            : Colors.white.withValues(alpha: 0.16),
+                        width: 0.8,
                       ),
-                      SizedBox(
-                        width: double.infinity,
-                        child: GestureDetector(
-                          onTap: () => _goToOrder(context),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: BoxDecoration(
-                              color: _hovered
-                                  ? AppTheme.gold
-                                  : AppTheme.gold.withValues(alpha: 0.18),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: AppTheme.gold.withValues(alpha: 0.65),
-                              ),
-                              boxShadow: _hovered
-                                  ? [
-                                      BoxShadow(
-                                        color: AppTheme.gold.withValues(
-                                          alpha: 0.3,
-                                        ),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 3),
-                                      ),
-                                    ]
-                                  : [],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.shopping_cart_outlined,
-                                  size: 13,
-                                  color: _hovered
-                                      ? const Color(0xFF1A0A00)
-                                      : AppTheme.gold,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Order',
-                                  style: TextStyle(
-                                    color: _hovered
-                                        ? const Color(0xFF1A0A00)
-                                        : AppTheme.gold,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -764,20 +831,11 @@ class _FeaturedCardState extends State<_FeaturedCard> {
   }
 
   Widget _imgPlaceholder() => Container(
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        colors: [
-          Colors.white.withValues(alpha: 0.08),
-          Colors.white.withValues(alpha: 0.04),
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-    ),
-    child: const Center(
-      child: Icon(Icons.image_outlined, color: Colors.white38, size: 30),
-    ),
-  );
+        color: const Color(0xFF0C0920),
+        child: const Center(
+          child: Icon(Icons.image_outlined, color: Colors.white24, size: 30),
+        ),
+      );
 }
 
 // ── Section Header ─────────────────────────────────────────────────────────────
