@@ -627,7 +627,97 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                           ),
                         ),
                       ] else ...[
-                        // TEMP_HIDDEN: Seed 12-mo History and Clear Seed buttons
+                        // Seed History pill
+                        GestureDetector(
+                          onTap: (_seedingHistory || _clearingHistory)
+                              ? null
+                              : _seedHistoricalData,
+                          child: AnimatedOpacity(
+                            opacity: _seedingHistory ? 0.5 : 1.0,
+                            duration: const Duration(milliseconds: 150),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 9),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981)
+                                    .withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(99),
+                                border: Border.all(
+                                    color: const Color(0xFF10B981)
+                                        .withValues(alpha: 0.35),
+                                    width: 0.9),
+                                boxShadow: const [_Glass.rowShadow],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _seedingHistory
+                                      ? const SizedBox(
+                                          width: 13,
+                                          height: 13,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Color(0xFF10B981)),
+                                        )
+                                      : const Icon(Icons.auto_graph_rounded,
+                                          size: 14,
+                                          color: Color(0xFF10B981)),
+                                  const SizedBox(width: 6),
+                                  const Text('Seed 12-mo History',
+                                      style: TextStyle(
+                                          color: Color(0xFF10B981),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Clear seeded history pill
+                        GestureDetector(
+                          onTap: (_seedingHistory || _clearingHistory)
+                              ? null
+                              : _clearHistoricalData,
+                          child: AnimatedOpacity(
+                            opacity: _clearingHistory ? 0.5 : 1.0,
+                            duration: const Duration(milliseconds: 150),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 9),
+                              decoration: BoxDecoration(
+                                color: _Glass.accentRose.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(99),
+                                border: Border.all(
+                                    color: _Glass.accentRose
+                                        .withValues(alpha: 0.30),
+                                    width: 0.9),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _clearingHistory
+                                      ? const SizedBox(
+                                          width: 13,
+                                          height: 13,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: _Glass.accentRose),
+                                        )
+                                      : const Icon(Icons.delete_sweep_rounded,
+                                          size: 14,
+                                          color: _Glass.accentRose),
+                                  const SizedBox(width: 6),
+                                  const Text('Clear Seed',
+                                      style: TextStyle(
+                                          color: _Glass.accentRose,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ],
                   ),

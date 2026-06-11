@@ -599,16 +599,15 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
                   style: TextStyle(color: _muted, fontSize: 10)),
             ],
           )),
-          // TEMP_HIDDEN: Import, Diagnose, Refresh buttons
-          // _HdrBtn('Import', Icons.upload_file_rounded, _navy, () async {
-          //   await showSalesImportSheet(context);
-          //   if (mounted) _load();
-          // }),
-          // const SizedBox(width: 6),
-          // _HdrBtn('Diagnose', Icons.troubleshoot_rounded, _amber, () =>
-          //     _openDiag(context)),
-          // const SizedBox(width: 6),
-          // _HdrBtn('Refresh', Icons.refresh_rounded, _slate, _load),
+          _HdrBtn('Import', Icons.upload_file_rounded, _navy, () async {
+            await showSalesImportSheet(context);
+            if (mounted) _load();
+          }),
+          const SizedBox(width: 6),
+          _HdrBtn('Diagnose', Icons.troubleshoot_rounded, _amber, () =>
+              _openDiag(context)),
+          const SizedBox(width: 6),
+          _HdrBtn('Refresh', Icons.refresh_rounded, _slate, _load),
         ]),
         const SizedBox(height: 10),
 

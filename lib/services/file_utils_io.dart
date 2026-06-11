@@ -13,9 +13,14 @@ Future<void> downloadBytes(Uint8List bytes, String mimeType, String filename) as
 
 void openUrlSync(String url) {
   final uri = Uri.parse(url);
-  launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
-    // Fallback to platform default if external browser launch fails
-    launchUrl(uri, mode: LaunchMode.platformDefault).catchError((_) {});
+  // inAppBrowserView = Chrome Custom Tabs (Android) / SFSafariViewController (iOS).
+  // Keeps the payment page visually inside the app while still supporting
+  // GCash/Maya deep-links (unlike a WebView, which PayMongo blocks).
+  launchUrl(uri, mode: LaunchMode.inAppBrowserView).catchError((_) {
+    launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
+      launchUrl(uri, mode: LaunchMode.platformDefault).catchError((_) {});
+      return false;
+    });
     return false;
   });
 }

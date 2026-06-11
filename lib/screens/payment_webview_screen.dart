@@ -38,6 +38,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
     with WidgetsBindingObserver {
   bool _opened    = false;
   bool _checking  = false;
+  bool _hasPopped = false;  // guards against double-pop race condition
   String? _message;
   Timer? _poll;
 
@@ -67,6 +68,15 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
     }
   }
 
+  /// Pops exactly once. Guards against the race where the polling timer and
+  /// didChangeAppLifecycleState both detect 'paid' and both try to pop.
+  void _popPaid() {
+    if (_hasPopped || !mounted) return;
+    _hasPopped = true;
+    _poll?.cancel();
+    Navigator.of(context).pop(true);
+  }
+
   /// Called directly from button onPressed — NO await before this call.
   /// Keeps the browser's user-gesture context alive so pm.link is treated
   /// as user-initiated (critical for Firefox bounce-tracker protection).
@@ -77,25 +87,23 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
 
   void _startPolling() {
     _poll = Timer.periodic(const Duration(seconds: 4), (_) async {
-      if (!mounted) return;
+      if (!mounted || _hasPopped) return;
       try {
         final status = await PayMongoService.getLinkStatus(widget.linkId);
-        if (status == 'paid' && mounted) {
-          _poll?.cancel();
-          Navigator.of(context).pop(true);
-        }
+        if (status == 'paid') _popPaid();
       } catch (_) {}
     });
   }
 
   Future<void> _checkPayment() async {
+    if (_hasPopped) return;
     _poll?.cancel();
     setState(() { _checking = true; _message = null; });
     try {
       final status = await PayMongoService.getLinkStatus(widget.linkId);
       if (!mounted) return;
       if (status == 'paid') {
-        Navigator.of(context).pop(true);
+        _popPaid();
       } else {
         _startPolling(); // resume polling
         setState(() {
@@ -218,7 +226,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
                         text: _opened
                             ? kIsWeb
                                 ? 'Payment page opened in a new tab'
-                                : 'PayMongo checkout opened in your browser'
+                                : 'PayMongo checkout opened'
                             : kIsWeb
                                 ? 'Opening payment page in a new tab…'
                                 : 'Tap "Open Payment Page" below to start',
@@ -236,7 +244,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
                         text: kIsWeb
                             ? 'After paying, come back to this tab — '
                                 'your order confirms automatically'
-                            : 'After paying, return to this screen — '
+                            : 'After paying, close the payment page — '
                                 'your order will be confirmed automatically',
                       ),
                     ],

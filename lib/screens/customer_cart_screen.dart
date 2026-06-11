@@ -870,6 +870,12 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       if (paid == true) {
         final total = _subtotal;
         CartManager.removeIndices(selectedList);
+        // Show confirmation immediately — no need to wait for background writes.
+        messenger.showSnackBar(SnackBar(
+          content: Text('Order $orderId placed! View your receipt in the Account tab.'),
+          backgroundColor: Colors.green.shade700,
+          duration: const Duration(seconds: 4),
+        ));
         // Navigate to Account immediately — don't make the user wait for
         // Firestore writes. The order appears in Account via real-time
         // listener within seconds of the background write completing.
@@ -1029,15 +1035,6 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       'timestamp': now,
     });
 
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          'Order $orderId placed! View your receipt in the Account tab.',
-        ),
-        backgroundColor: Colors.green.shade700,
-        duration: const Duration(seconds: 4),
-      ),
-    );
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
