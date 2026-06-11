@@ -112,13 +112,15 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       final role = (data['user_role'] as String? ?? '').toLowerCase();
       final cusId = (data['customer_id'] as String? ?? '').toLowerCase();
       final empId = (data['employee_id'] as String? ?? '').toLowerCase();
+      final admId = (data['admin_id'] as String? ?? '').toLowerCase();
       final q = _searchQuery.toLowerCase();
       final matchesSearch =
           q.isEmpty ||
           name.contains(q) ||
           email.contains(q) ||
           cusId.contains(q) ||
-          empId.contains(q);
+          empId.contains(q) ||
+          admId.contains(q);
       final matchesRole =
           _roleFilter == 'All' || role == _roleFilter.toLowerCase();
       return matchesSearch && matchesRole;

@@ -240,6 +240,7 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
   List<_Material> _all = [];
   String _filter = 'All';
   String _search = '';
+  bool   _filtersVisible = true;
   final _searchCtrl = TextEditingController();
 
   static const _nPeriods   = 36;
@@ -558,25 +559,41 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
     if (_error != null) return _errView();
     if (_all.isEmpty) return _splash('No raw materials found.');
 
-    return Column(children: [
-      _header(),
-      Expanded(
-        child: _visible.isEmpty
-            ? Center(child: Text(
-                _search.isNotEmpty
-                    ? 'No materials matching "$_search".'
-                    : 'No "$_filter" materials.',
-                style: const TextStyle(color: _muted)))
-            : RefreshIndicator(
-                onRefresh: _load, color: _navy,
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                  itemCount: _visible.length,
-                  separatorBuilder: (ctx, idx) => const SizedBox(height: 8),
-                  itemBuilder: (ctx, i) => _MatCard(mat: _visible[i]),
-                )),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE2E8F0), width: 0.9),
+          boxShadow: const [BoxShadow(
+            color: Color(0x22000000),
+            blurRadius: 32,
+            spreadRadius: -4,
+            offset: Offset(0, 8),
+          )],
+        ),
+        child: Column(children: [
+          _header(),
+          Expanded(
+            child: _visible.isEmpty
+                ? Center(child: Text(
+                    _search.isNotEmpty
+                        ? 'No materials matching "$_search".'
+                        : 'No "$_filter" materials.',
+                    style: const TextStyle(color: _muted)))
+                : RefreshIndicator(
+                    onRefresh: _load, color: _navy,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                      itemCount: _visible.length,
+                      separatorBuilder: (ctx, idx) => const SizedBox(height: 8),
+                      itemBuilder: (ctx, i) => _MatCard(mat: _visible[i]),
+                    )),
+          ),
+        ]),
       ),
-    ]);
+    );
   }
 
   // ── Header ──────────────────────────────────────────────────────────────────
@@ -586,7 +603,7 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
       color: const Color(0xFFF8FAFC),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Title + action buttons
+        // Title + action buttons + collapse toggle
         Row(children: [
           const Expanded(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -608,54 +625,87 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
               _openDiag(context)),
           const SizedBox(width: 6),
           _HdrBtn('Refresh', Icons.refresh_rounded, _slate, _load),
-        ]),
-        const SizedBox(height: 10),
-
-        // Search bar
-        Container(
-          height: 36,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: TextField(
-            controller: _searchCtrl,
-            style: const TextStyle(color: _navy, fontSize: 12),
-            onChanged: (v) => setState(() => _search = v),
-            decoration: InputDecoration(
-              hintText: 'Search materials…',
-              hintStyle: TextStyle(color: _slate.withValues(alpha: 0.5), fontSize: 12),
-              prefixIcon: const Icon(Icons.search_rounded, size: 16, color: _slate),
-              suffixIcon: _search.isNotEmpty
-                  ? GestureDetector(
-                      onTap: () { _searchCtrl.clear(); setState(() => _search = ''); },
-                      child: const Icon(Icons.close_rounded, size: 14, color: _slate))
-                  : null,
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              isDense: true,
+          const SizedBox(width: 6),
+          // Collapse / expand search + filter
+          GestureDetector(
+            onTap: () => setState(() => _filtersVisible = !_filtersVisible),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: _filtersVisible
+                    ? _navy.withValues(alpha: 0.08)
+                    : _navy.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(color: _navy.withValues(alpha: 0.25)),
+              ),
+              child: AnimatedRotation(
+                turns: _filtersVisible ? 0.5 : 0.0,
+                duration: const Duration(milliseconds: 220),
+                child: Icon(Icons.expand_more_rounded, size: 14,
+                    color: _navy.withValues(alpha: 0.85)),
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 8),
+        ]),
 
-        // Status summary chips (All + each status)
-        SingleChildScrollView(scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            _SChip('All',       _all.length,              _navy,    _filter == 'All',
-                () => _setFilter('All')),
-            _SChip('Critical',  _cnt(_Status.critical),   _rose,    _filter == 'Critical',
-                () => _setFilter('Critical')),
-            _SChip('At Risk',   _cnt(_Status.atRisk),     _amber,   _filter == 'At Risk',
-                () => _setFilter('At Risk')),
-            _SChip('Healthy',   _cnt(_Status.healthy),    _emerald, _filter == 'Healthy',
-                () => _setFilter('Healthy')),
-            _SChip('Overstock', _cnt(_Status.overstock),  _indigo,  _filter == 'Overstock',
-                () => _setFilter('Overstock')),
-            _SChip('No Demand', _cnt(_Status.noDemand),   _slate,   _filter == 'No Demand',
-                () => _setFilter('No Demand')),
-          ]),
+        // Collapsible search bar + status chips
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          child: _filtersVisible
+              ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const SizedBox(height: 10),
+
+                  // Search bar
+                  Container(
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      style: const TextStyle(color: _navy, fontSize: 12),
+                      textAlignVertical: TextAlignVertical.center,
+                      onChanged: (v) => setState(() => _search = v),
+                      decoration: InputDecoration(
+                        hintText: 'Search materials…',
+                        hintStyle: TextStyle(color: _slate.withValues(alpha: 0.5), fontSize: 12),
+                        prefixIcon: const Icon(Icons.search_rounded, size: 16, color: _slate),
+                        suffixIcon: _search.isNotEmpty
+                            ? GestureDetector(
+                                onTap: () { _searchCtrl.clear(); setState(() => _search = ''); },
+                                child: const Icon(Icons.close_rounded, size: 14, color: _slate))
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Status summary chips (All + each status)
+                  SingleChildScrollView(scrollDirection: Axis.horizontal,
+                    child: Row(children: [
+                      _SChip('All',       _all.length,              _navy,    _filter == 'All',
+                          () => _setFilter('All')),
+                      _SChip('Critical',  _cnt(_Status.critical),   _rose,    _filter == 'Critical',
+                          () => _setFilter('Critical')),
+                      _SChip('At Risk',   _cnt(_Status.atRisk),     _amber,   _filter == 'At Risk',
+                          () => _setFilter('At Risk')),
+                      _SChip('Healthy',   _cnt(_Status.healthy),    _emerald, _filter == 'Healthy',
+                          () => _setFilter('Healthy')),
+                      _SChip('Overstock', _cnt(_Status.overstock),  _indigo,  _filter == 'Overstock',
+                          () => _setFilter('Overstock')),
+                      _SChip('No Demand', _cnt(_Status.noDemand),   _slate,   _filter == 'No Demand',
+                          () => _setFilter('No Demand')),
+                    ]),
+                  ),
+                ])
+              : const SizedBox.shrink(),
         ),
       ]),
     );
@@ -669,33 +719,65 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
     builder: (_) => const _DiagSheet(),
   );
 
-  Widget _splash(String msg) => Center(child: Column(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      if (_loading)
-        const CircularProgressIndicator(color: _navy, strokeWidth: 2),
-      if (!_loading)
-        const Icon(Icons.inventory_2_outlined, size: 40, color: _muted),
-      const SizedBox(height: 14),
-      Text(msg, style: const TextStyle(color: _muted, fontSize: 13)),
-    ],
-  ));
+  Widget _splash(String msg) => ClipRRect(
+    borderRadius: BorderRadius.circular(20),
+    child: Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 0.9),
+        boxShadow: const [BoxShadow(
+          color: Color(0x22000000),
+          blurRadius: 32,
+          spreadRadius: -4,
+          offset: Offset(0, 8),
+        )],
+      ),
+      child: Center(child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (_loading)
+            const CircularProgressIndicator(color: _navy, strokeWidth: 2),
+          if (!_loading)
+            const Icon(Icons.inventory_2_outlined, size: 40, color: _muted),
+          const SizedBox(height: 14),
+          Text(msg, style: const TextStyle(color: _muted, fontSize: 13)),
+        ],
+      )),
+    ),
+  );
 
-  Widget _errView() => Center(child: Padding(
-    padding: const EdgeInsets.all(20),
-    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      const Icon(Icons.error_outline, color: _rose, size: 44),
-      const SizedBox(height: 12),
-      Text(_error!, style: const TextStyle(color: _slate, fontSize: 11),
-          textAlign: TextAlign.center),
-      const SizedBox(height: 16),
-      ElevatedButton.icon(onPressed: _load,
-          icon: const Icon(Icons.refresh, size: 16),
-          label: const Text('Retry'),
-          style: ElevatedButton.styleFrom(backgroundColor: _navy,
-              foregroundColor: Colors.white)),
-    ]),
-  ));
+  Widget _errView() => ClipRRect(
+    borderRadius: BorderRadius.circular(20),
+    child: Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 0.9),
+        boxShadow: const [BoxShadow(
+          color: Color(0x22000000),
+          blurRadius: 32,
+          spreadRadius: -4,
+          offset: Offset(0, 8),
+        )],
+      ),
+      child: Center(child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Icon(Icons.error_outline, color: _rose, size: 44),
+          const SizedBox(height: 12),
+          Text(_error!, style: const TextStyle(color: _slate, fontSize: 11),
+              textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(onPressed: _load,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(backgroundColor: _navy,
+                  foregroundColor: Colors.white)),
+        ]),
+      )),
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
