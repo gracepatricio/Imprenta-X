@@ -24,14 +24,14 @@ class _CustomerAboutScreenState extends State<CustomerAboutScreen> {
           'State-of-the-art large-format printers ready for your projects.',
       accentColor: Color(0xFF1E6AE8),
       icon: Icons.print_outlined,
-      imagePath: null, // replace with 'assets/images/about_print_floor.jpg'
+      imagePath: 'assets/images/print_floor.jpg',
     ),
     _Slide(
       title: 'Design Studio',
       caption: 'Our in-house design team helps bring your concepts to life.',
       accentColor: Color(0xFF7C3AED),
       icon: Icons.draw_outlined,
-      imagePath: null, // replace with 'assets/images/about_design_studio.jpg'
+      imagePath: 'assets/images/design_studio.jpg' // replace with 'assets/images/about_design_studio.jpg'
     ),
     _Slide(
       title: 'Finishing Area',
@@ -39,7 +39,7 @@ class _CustomerAboutScreenState extends State<CustomerAboutScreen> {
           'Precision cutting, laminating, and mounting for a polished result.',
       accentColor: Color(0xFF059669),
       icon: Icons.content_cut_outlined,
-      imagePath: null, // replace with 'assets/images/about_finishing_area.jpg'
+      imagePath:'assets/images/finishing_area.jpg', // replace with 'assets/images/about_finishing_area.jpg'
     ),
   ];
 

@@ -54,6 +54,9 @@ flutter:
     - assets/images/imprentalogo.jpg
     - assets/images/sysbackground.jpg
     - assets/images/sysbackground_mobile.jpg
+    - assets/images/print_floor.jpg
+    - assets/images/finishing_area.jpg
+    - assets/images/design_studio.jpg
     # About screen photos — add these files to assets/images/ then uncomment:
     # - assets/images/about_print_floor.jpg
     # - assets/images/about_design_studio.jpg
