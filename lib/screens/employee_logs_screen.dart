@@ -1236,7 +1236,11 @@ class _EmployeeOrderHistoryState extends State<_EmployeeOrderHistory> {
                       .toLowerCase();
                   final name = (data['customer_name']?.toString() ?? '')
                       .toLowerCase();
-                  if (id.contains(_search) || name.contains(_search)) {
+                  final customerId = (data['customer_id']?.toString() ?? '')
+                      .toLowerCase();
+                  if (id.contains(_search) ||
+                      name.contains(_search) ||
+                      customerId.contains(_search)) {
                     return true;
                   }
                   if (_resolvedCustomerName != null &&

@@ -1204,27 +1204,30 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                           ..addAll(newSelected);
                                         CartManager.removeAt(i);
                                       }),
-                                      onEdit: () => Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) => CustomerOrderScreen(
-                                            product: {
-                                              'product_id': items[i].productId,
-                                              'product_name': items[i].productName,
-                                              'category': items[i].category,
-                                              'image_url': items[i].imageUrl,
-                                              'price': items[i].unitPrice,
-                                              'pricing_unit': items[i].pricingUnit,
-                                              'min_quantity': 1,
-                                              'description': items[i].description,
-                                              // Carry forward so edit preserves subtotal
-                                              'additional_services': items[i].selectedServices,
-                                              'discount_amount': items[i].discountAmount,
-                                            },
-                                            initialItem: items[i],
-                                            editIndex: i,
+                                      onEdit: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => CustomerOrderScreen(
+                                              product: {
+                                                'product_id': items[i].productId,
+                                                'product_name': items[i].productName,
+                                                'category': items[i].category,
+                                                'image_url': items[i].imageUrl,
+                                                'price': items[i].unitPrice,
+                                                'pricing_unit': items[i].pricingUnit,
+                                                'min_quantity': 1,
+                                                'description': items[i].description,
+                                                'additional_services': items[i].selectedServices,
+                                                'discount_amount': items[i].discountAmount,
+                                              },
+                                              initialItem: items[i],
+                                              editIndex: i,
+                                            ),
                                           ),
-                                        ),
-                                      ),
+                                        ).then((_) {
+                                          if (mounted) setState(() {});
+                                        });
+                                      },
                                     );
                                   },
                                 ),
@@ -1563,7 +1566,9 @@ class _CartItemTileState extends State<_CartItemTile> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    return MouseRegion(
+    return GestureDetector(
+      onTap: () => widget.onToggle(!widget.isSelected),
+      child: MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
@@ -1778,6 +1783,7 @@ class _CartItemTileState extends State<_CartItemTile> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
