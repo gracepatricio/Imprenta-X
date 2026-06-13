@@ -850,7 +850,7 @@ class _GroupedRecord {
   final String? paymentMethod;
   final Timestamp? latestDate;
   final List<DocumentReference> docRefs;
-  final bool isImported; // true for Excel-imported historical records
+  final bool isImported; // true for seeded/imported historical records (historical_seed or manual_xlsx_import)
 
   const _GroupedRecord({
     required this.orderId,
@@ -893,7 +893,8 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
     );
     if (!hasCustId) {
       final allImported = records.every(
-        (r) => r['import_source'] == 'manual_xlsx_import',
+        (r) => r['import_source'] == 'manual_xlsx_import' ||
+               r['import_source'] == 'historical_seed',
       );
       if (!allImported) missingCustIdOrders.add(orderId);
     }
@@ -995,7 +996,8 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
     }
 
     final isImported = records.any(
-      (r) => r['import_source'] == 'manual_xlsx_import',
+      (r) => r['import_source'] == 'manual_xlsx_import' ||
+             r['import_source'] == 'historical_seed',
     );
 
     groups.add(
@@ -1216,8 +1218,10 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
       }).toList();
     }
 
-    // Revenue total includes all (system + imported) within the date filter
-    final totalRevenue = allDateFiltered.fold<double>(0, (s, g) => s + g.totalPaid);
+    // Revenue total — system orders only (no imported seed data)
+    final totalRevenue = allDateFiltered
+        .where((g) => !g.isImported)
+        .fold<double>(0, (s, g) => s + g.totalPaid);
 
     // To Collect — system orders only (imported records are fully paid)
     double paymentToCollect = 0;
@@ -1257,7 +1261,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                 const SizedBox(width: 8),
                 _SummaryChip(
                   label: 'Records',
-                  value: '${allDateFiltered.length}',
+                  value: '${filtered.length}',
                   fg: const Color(0xFF374151),
                   bg: _T.headerBg,
                   border: _T.divider,

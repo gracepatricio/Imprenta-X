@@ -19,6 +19,7 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
   String? _selectedCategory;
   Map<String, double> _stockMap = {};
   bool _stockLoaded = false;
+  final Set<String> _precachedUrls = {};
 
   static const _categories = [
     'Large Format & Signage',
@@ -78,6 +79,25 @@ class _CustomerProductsScreenState extends State<CustomerProductsScreen> {
                     data['product_name']?.toString().toLowerCase() ?? '';
                 return name.contains(_searchQuery.toLowerCase());
               }).toList();
+
+              // Precache all product images so they appear instantly when rendered
+              final toPrecache = snapshot.data!.docs
+                  .map((doc) =>
+                      (doc.data() as Map)['image_url']?.toString() ?? '')
+                  .where((url) =>
+                      url.isNotEmpty && !_precachedUrls.contains(url))
+                  .toList();
+              if (toPrecache.isNotEmpty) {
+                for (final url in toPrecache) {
+                  _precachedUrls.add(url);
+                }
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  for (final url in toPrecache) {
+                    precacheImage(NetworkImage(url), context);
+                  }
+                });
+              }
             }
 
             return Scrollbar(
