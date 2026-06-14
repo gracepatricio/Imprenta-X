@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'sales_import_widget.dart' show showSalesImportSheet;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DOUBLE EXPONENTIAL SMOOTHING  — Holt's Linear Trend method
@@ -254,11 +253,36 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
 
   // ── Load & compute ──────────────────────────────────────────────────────────
 
+  // Deletes any Sales_Records that were only ever used for forecast seeding.
+  // Runs silently; a no-op once the collection is already clean.
+  Future<void> _purgeSeedRecords(FirebaseFirestore db) async {
+    for (final src in ['historical_seed']) {
+      while (true) {
+        final snap = await db
+            .collection('Sales_Records')
+            .where('import_source', isEqualTo: src)
+            .limit(400)
+            .get();
+        if (snap.docs.isEmpty) break;
+        final batch = db.batch();
+        for (final d in snap.docs) batch.delete(d.reference);
+        await batch.commit();
+      }
+    }
+  }
+
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
       final db  = FirebaseFirestore.instance;
-      final now = DateTime.now();
+      final _now = DateTime.now();
+      // Truncate to midnight so period boundaries are identical on every load
+      // within the same day — prevents an order near a boundary from flipping
+      // between periods on consecutive loads (which destabilises the DES fit).
+      final now = DateTime(_now.year, _now.month, _now.day);
+
+      // Remove any seeded / imported docs that were incorrectly inflating the forecast.
+      await _purgeSeedRecords(db);
 
       final limits = List.generate(_nPeriods + 1, (k) =>
           Timestamp.fromDate(now.subtract(
@@ -329,9 +353,13 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         }
       }
 
+      // Deduplicate by order_id across both Orders and Order_Queue.
       final seen   = <String>{};
       final allOrd = [...ordSnap.docs, ...oqSnap.docs]
-          .where((d) => seen.add(d.id)).toList();
+          .where((d) {
+            final oid = d.data()['order_id']?.toString() ?? d.id;
+            return seen.add(oid);
+          }).toList();
 
       for (final doc in allOrd) {
         final ts = doc.data()['created_at'] as Timestamp?;
@@ -345,11 +373,22 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
           final widthFt  = (p['width_ft']  as num?)?.toDouble();
           final heightFt = (p['height_ft'] as num?)?.toDouble();
           if (qty <= 0) continue;
-          final bom = bomById[pid] ?? bomByName[name.toLowerCase()] ?? [];
+          // Resolve BOM: prefer product_id, but fall through to name if the
+          // product has no BOM defined (bomById returns [] not null, so ?? alone
+          // won't fall through — check isNotEmpty explicitly).
+          final List<Map<String, dynamic>> bom;
+          final String key;
+          final String label;
+          if (pid.isNotEmpty && (bomById[pid]?.isNotEmpty ?? false)) {
+            bom   = bomById[pid]!;
+            key   = pid;
+            label = nameById[pid] ?? name;
+          } else {
+            bom   = bomByName[name.toLowerCase()] ?? [];
+            key   = name.toLowerCase();
+            label = name;
+          }
           if (bom.isEmpty) continue;
-          final key   = pid.isNotEmpty && bomById.containsKey(pid)
-              ? pid : name.toLowerCase();
-          final label = nameById[pid] ?? name;
           final actualSqft = (widthFt != null && heightFt != null)
               ? widthFt * heightFt * qty : null;
           addSale(key, label, bom, idx, qty, actualSqft: actualSqft);
@@ -357,10 +396,17 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
       }
 
       for (final doc in srSnap.docs) {
-        final ts = doc.data()['sale_date'] as Timestamp?;
+        final d = doc.data();
+        // Only process xlsx imports — real app records are already counted via the Orders loop.
+        final src = d['import_source']?.toString() ?? '';
+        if (src != 'manual_xlsx_import') continue;
+        // Skip if the order is already in the Orders collection (prevent double-counting).
+        final srOrderId = d['order_id']?.toString() ?? '';
+        if (srOrderId.isNotEmpty && seen.contains(srOrderId)) continue;
+        final ts = d['sale_date'] as Timestamp?;
         if (ts == null) continue;
         final idx = periodOf(ts); if (idx == null) continue;
-        for (final p in (doc.data()['products'] as List? ?? [])
+        for (final p in (d['products'] as List? ?? [])
             .cast<Map<String, dynamic>>()) {
           final name     = (p['name']?.toString() ?? '').trim();
           final qty      = (p['qty'] as num?)?.toDouble() ?? 1.0;
@@ -445,11 +491,24 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         double fRaw30 = mDes.forecast(1); // next 30d in base units
         bool isSynthetic = false;
 
-        if (fRaw30 < 0.001 && rawRestock > 0.001) {
-          final synth = List.generate(_nPeriods, (i) =>
-              i < _nPeriods - 12 ? 0.0 : rawRestock);
-          fRaw30 = _bestFit(synth).forecast(1);
-          isSynthetic = true;
+        if (fRaw30 < 0.001) {
+          // DES predicts zero (strong downward trend or no recent data).
+          // If there IS consumption history, use average of the last 6 non-zero
+          // periods as a baseline so materials aren't buried as "No Demand".
+          final hist = periodSqft[id] ?? List.filled(_nPeriods, 0.0);
+          final nonZero = hist.reversed
+              .take(6)
+              .where((v) => v > 0.001)
+              .toList();
+          if (nonZero.isNotEmpty) {
+            fRaw30 = nonZero.reduce((a, b) => a + b) / nonZero.length;
+            isSynthetic = true;
+          } else if (rawRestock > 0.001) {
+            final synth = List.generate(_nPeriods, (i) =>
+                i < _nPeriods - 12 ? 0.0 : rawRestock);
+            fRaw30 = _bestFit(synth).forecast(1);
+            isSynthetic = true;
+          }
         }
 
         // Multi-horizon forecasts in stocking units.
@@ -616,16 +675,6 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
                   style: TextStyle(color: _muted, fontSize: 10)),
             ],
           )),
-          _HdrBtn('Import', Icons.upload_file_rounded, _navy, () async {
-            await showSalesImportSheet(context);
-            if (mounted) _load();
-          }),
-          const SizedBox(width: 6),
-          _HdrBtn('Diagnose', Icons.troubleshoot_rounded, _amber, () =>
-              _openDiag(context)),
-          const SizedBox(width: 6),
-          _HdrBtn('Refresh', Icons.refresh_rounded, _slate, _load),
-          const SizedBox(width: 6),
           // Collapse / expand search + filter
           GestureDetector(
             onTap: () => setState(() => _filtersVisible = !_filtersVisible),
@@ -713,11 +762,6 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
 
   void _setFilter(String f) => setState(() => _filter = f);
 
-  void _openDiag(BuildContext ctx) => showModalBottomSheet(
-    context: ctx, isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => const _DiagSheet(),
-  );
 
   Widget _splash(String msg) => ClipRRect(
     borderRadius: BorderRadius.circular(20),
@@ -1414,29 +1458,6 @@ class _HorizonBox extends StatelessWidget {
 // Small reusable widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _HdrBtn extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-  const _HdrBtn(this.label, this.icon, this.color, this.onTap);
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-      decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(color: color.withValues(alpha: 0.25))),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 13, color: color.withValues(alpha: 0.85)),
-        const SizedBox(width: 5),
-        Text(label, style: TextStyle(color: color.withValues(alpha: 0.85),
-            fontSize: 11, fontWeight: FontWeight.w700)),
-      ]),
-    ));
-}
 
 class _SChip extends StatelessWidget {
   final String label;
@@ -1512,233 +1533,3 @@ class _StatBox extends StatelessWidget {
     ]));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Diagnostic sheet
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _DiagSheet extends StatefulWidget {
-  const _DiagSheet();
-  @override
-  State<_DiagSheet> createState() => _DiagSheetState();
-}
-
-class _DiagSheetState extends State<_DiagSheet> {
-  bool _loading = true;
-  String? _error;
-  Map<String, dynamic>? _res;
-
-  @override
-  void initState() { super.initState(); _run(); }
-
-  Future<void> _run() async {
-    try {
-      final db       = FirebaseFirestore.instance;
-      final prodSnap = await db.collection('Products').get();
-      final matSnap  = await db.collection('RawMaterials').get();
-      final srSnap   = await db.collection('Sales_Records').get();
-      final ordSnap  = await db.collection('Orders')
-          .where('status', isEqualTo: 'completed').get();
-
-      final bomByName = <String, List>{};
-      final allNames  = <String>{};
-      for (final d in prodSnap.docs) {
-        final bom  = (d.data()['bill_of_materials'] as List?) ?? [];
-        final name = (d.data()['product_name']?.toString() ?? '').trim();
-        if (name.isEmpty) continue;
-        allNames.add(name);
-        bomByName[name.toLowerCase()] = bom;
-      }
-      final validMats = matSnap.docs.map((d) => d.id).toSet();
-
-      final matched   = <String, int>{};
-      final unmatched = <String, int>{};
-      final noBom     = <String, int>{};
-      final badMat    = <String, int>{};
-      int csvDocs = 0, csvLines = 0, ordDocs = ordSnap.docs.length, ordMatch = 0;
-
-      for (final doc in ordSnap.docs) {
-        bool hit = false;
-        for (final p in (doc.data()['products'] as List? ?? [])
-            .cast<Map<String, dynamic>>()) {
-          final name = (p['name']?.toString() ?? '').trim();
-          final bom  = bomByName[name.toLowerCase()] ?? [];
-          if (bom.isNotEmpty) {
-            hit = true;
-            for (final b in bom.cast<Map<String, dynamic>>()) {
-              final mid = b['material_id']?.toString() ?? '';
-              if (mid.isNotEmpty && !validMats.contains(mid)) {
-                badMat[mid] = (badMat[mid] ?? 0) + 1;
-              }
-            }
-          }
-        }
-        if (hit) ordMatch++;
-      }
-
-      for (final doc in srSnap.docs) {
-        final items = (doc.data()['products'] as List? ?? [])
-            .cast<Map<String, dynamic>>();
-        if (items.isEmpty) continue;
-        csvDocs++;
-        for (final item in items) {
-          csvLines++;
-          final name = (item['name']?.toString() ?? '').trim();
-          if (name.isEmpty) continue;
-          final bom = bomByName[name.toLowerCase()] ?? [];
-          if (bom.isEmpty) {
-            if (allNames.any((n) => n.toLowerCase() == name.toLowerCase())) {
-              noBom[name] = (noBom[name] ?? 0) + 1;
-            } else {
-              unmatched[name] = (unmatched[name] ?? 0) + 1;
-            }
-          } else {
-            final qty = (item['qty'] as num?)?.toInt() ?? 0;
-            matched[name] = (matched[name] ?? 0) + qty;
-            for (final b in bom.cast<Map<String, dynamic>>()) {
-              final mid = b['material_id']?.toString() ?? '';
-              if (mid.isNotEmpty && !validMats.contains(mid)) {
-                badMat[mid] = (badMat[mid] ?? 0) + 1;
-              }
-            }
-          }
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _res = {
-            'products': allNames.length, 'materials': validMats.length,
-            'csvDocs': csvDocs, 'csvLines': csvLines,
-            'ordDocs': ordDocs, 'ordMatch': ordMatch,
-            'matched': matched, 'unmatched': unmatched,
-            'noBom': noBom, 'badMat': badMat,
-          };
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) { setState(() { _error = e.toString(); _loading = false; }); }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.82,
-      decoration: const BoxDecoration(
-          color: Color(0xFFFAFAFC),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      child: Column(children: [
-        Center(child: Container(margin: const EdgeInsets.only(top: 12),
-            width: 36, height: 4,
-            decoration: BoxDecoration(color: const Color(0xFFD1D5DB),
-                borderRadius: BorderRadius.circular(2)))),
-        Padding(padding: const EdgeInsets.fromLTRB(18, 10, 12, 10),
-          child: Row(children: [
-            const Icon(Icons.troubleshoot_rounded,
-                color: Color(0xFFB45309), size: 20),
-            const SizedBox(width: 10),
-            const Expanded(child: Text('Forecast Diagnostic',
-                style: TextStyle(color: _navy, fontSize: 15,
-                    fontWeight: FontWeight.w800))),
-            IconButton(onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded,
-                    color: _muted, size: 20)),
-          ])),
-        const Divider(height: 1, color: Color(0xFFE5E7EB)),
-        Expanded(child: _loading
-          ? const Center(child: CircularProgressIndicator(
-              strokeWidth: 2, color: _navy))
-          : _error != null
-              ? Center(child: Text(_error!,
-                  style: const TextStyle(color: _rose, fontSize: 11)))
-              : _body()),
-      ]),
-    );
-  }
-
-  Widget _body() {
-    final r = _res!;
-    final matched   = r['matched']   as Map<String, int>;
-    final unmatched = r['unmatched'] as Map<String, int>;
-    final noBom     = r['noBom']     as Map<String, int>;
-    final badMat    = r['badMat']    as Map<String, int>;
-
-    return ListView(padding: const EdgeInsets.all(18), children: [
-      _sec('Overview'),
-      _row('Products in catalog',      '${r['products']}'),
-      _row('Raw materials',             '${r['materials']}'),
-      _row('Sales Records (CSV docs)', '${r['csvDocs']}'),
-      _row('Total CSV line items',     '${r['csvLines']}'),
-      _row('Completed Orders',         '${r['ordDocs']}'),
-      _row('Orders with BOM match',    '${r['ordMatch']}'),
-      const SizedBox(height: 14),
-
-      _sec('Matched ✓', color: _emerald),
-      matched.isEmpty
-          ? _hint('None matched yet — import CSV sales data.')
-          : Column(children: matched.entries.map((e) =>
-              _row(e.key, 'qty: ${e.value}', color: _emerald)).toList()),
-      const SizedBox(height: 14),
-
-      _sec('NOT in Catalog ✗', color: _rose),
-      unmatched.isEmpty
-          ? _hint('All CSV product names matched the catalog.')
-          : Column(children: [
-              _hint('Fix: make sure product_name in CSV exactly matches '
-                  'the product_name in Products.'),
-              ...unmatched.entries.map((e) =>
-                  _row('"${e.key}"', '${e.value} items', color: _rose)),
-            ]),
-      const SizedBox(height: 14),
-
-      _sec('In Catalog — No BOM ⚠', color: _amber),
-      noBom.isEmpty
-          ? _hint('All matched products have BOM entries.')
-          : Column(children: [
-              _hint('Add bill_of_materials in Admin → Products.'),
-              ...noBom.entries.map((e) =>
-                  _row(e.key, '${e.value} items', color: _amber)),
-            ]),
-      const SizedBox(height: 14),
-
-      _sec('Invalid BOM material_id ✗', color: _rose),
-      badMat.isEmpty
-          ? _hint('All BOM material IDs are valid.')
-          : Column(children: [
-              _hint('Fix: check material_id in BOM matches the '
-                  'RawMaterials document ID exactly.'),
-              ...badMat.entries.map((e) =>
-                  _row('"${e.key}"', '${e.value} entries', color: _rose)),
-            ]),
-      const SizedBox(height: 24),
-    ]);
-  }
-
-  Widget _sec(String t, {Color color = _navy}) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(t, style: TextStyle(color: color, fontSize: 12,
-        fontWeight: FontWeight.w800)));
-
-  Widget _row(String l, String v, {Color? color}) =>
-      Padding(padding: const EdgeInsets.only(bottom: 5),
-        child: Row(children: [
-          Expanded(child: Text(l, style: TextStyle(
-              color: color ?? const Color(0xFF374151), fontSize: 12,
-              fontWeight: color != null ? FontWeight.w600 : FontWeight.w400))),
-          Text(v, style: TextStyle(
-              color: color ?? _slate, fontSize: 12,
-              fontWeight: FontWeight.w600)),
-        ]));
-
-  Widget _hint(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Container(
-      padding: const EdgeInsets.all(9),
-      decoration: BoxDecoration(
-          color: const Color(0xFFF9FAFB),
-          borderRadius: BorderRadius.circular(7),
-          border: Border.all(color: const Color(0xFFE5E7EB))),
-      child: Text(t, style: const TextStyle(
-          color: _slate, fontSize: 10, height: 1.5))));
-}

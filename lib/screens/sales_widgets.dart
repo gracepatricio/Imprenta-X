@@ -850,7 +850,8 @@ class _GroupedRecord {
   final String? paymentMethod;
   final Timestamp? latestDate;
   final List<DocumentReference> docRefs;
-  final bool isImported; // true for seeded/imported historical records (historical_seed or manual_xlsx_import)
+  final bool isImported;    // true for historical_seed — excluded from everything
+  final bool isXlsxImport; // true for manual_xlsx_import — counted in summary but hidden from list
 
   const _GroupedRecord({
     required this.orderId,
@@ -863,6 +864,7 @@ class _GroupedRecord {
     required this.latestDate,
     required this.docRefs,
     this.isImported = false,
+    this.isXlsxImport = false,
   });
 }
 
@@ -893,8 +895,7 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
     );
     if (!hasCustId) {
       final allImported = records.every(
-        (r) => r['import_source'] == 'manual_xlsx_import' ||
-               r['import_source'] == 'historical_seed',
+        (r) => r['import_source'] == 'historical_seed',
       );
       if (!allImported) missingCustIdOrders.add(orderId);
     }
@@ -968,7 +969,10 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
     String derivedType = 'downpayment';
 
     for (final r in records) {
-      totalPaid += (r['sale_amount'] as num?)?.toDouble() ?? 0;
+      final rAmt  = (r['sale_amount']  as num?)?.toDouble() ?? 0;
+      final rType = r['payment_type']?.toString() ?? '';
+      // Refunds are money returned — exclude from totalPaid so revenue stays correct
+      if (rType != 'refund') totalPaid += rAmt;
       final ot = (r['order_total'] as num?)?.toDouble() ?? 0;
       if (ot > orderTotal) orderTotal = ot;
       if ((r['customer_name']?.toString() ?? '').isNotEmpty)
@@ -996,8 +1000,10 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
     }
 
     final isImported = records.any(
-      (r) => r['import_source'] == 'manual_xlsx_import' ||
-             r['import_source'] == 'historical_seed',
+      (r) => r['import_source'] == 'historical_seed',
+    );
+    final isXlsxImport = !isImported && records.any(
+      (r) => r['import_source'] == 'manual_xlsx_import',
     );
 
     groups.add(
@@ -1012,6 +1018,7 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
         latestDate: latestTs,
         docRefs: refs,
         isImported: isImported,
+        isXlsxImport: isXlsxImport,
       ),
     );
   }
@@ -1043,6 +1050,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
   String _search = '';
 
   List<_GroupedRecord> _allGroups = [];
+  double _totalOutstanding = 0;
   bool _groupsLoading = false;
   // True when no date filter is active and we're showing a limited window
   bool _isLimited = false;
@@ -1081,9 +1089,36 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
 
       final snap = await q.get();
       final groups = await _groupRecordsAsync(snap.docs);
+
+      // Outstanding: non-cancelled orders filtered by paid_at within the selected range.
+      // When no date filter, all active orders are included (same as Sales Report).
+      double outstanding = 0;
+      try {
+        final ordSnap = await FirebaseFirestore.instance
+            .collection('Orders')
+            .where('status', whereIn: [
+              'pending', 'in_production', 'ready', 'completed',
+            ])
+            .get();
+        for (final doc in ordSnap.docs) {
+          final d = doc.data();
+          if (_selectedRange != null) {
+            final paidAt = d['paid_at'] as Timestamp?;
+            if (paidAt == null) continue;
+            if (!_isWithinDateRange(paidAt.toDate().toLocal(), _selectedRange)) continue;
+          }
+          final rem  = (d['remaining_balance'] as num?)?.toDouble() ?? 0;
+          final diff = ((d['total_price']  as num?)?.toDouble() ?? 0) -
+                       ((d['amount_paid']  as num?)?.toDouble() ?? 0);
+          final owed = rem > 0.01 ? rem : (diff > 0.01 ? diff : 0.0);
+          if (owed > 0.01) outstanding += owed;
+        }
+      } catch (_) {}
+
       if (mounted)
         setState(() {
           _allGroups = groups;
+          _totalOutstanding = outstanding;
           _groupsLoading = false;
         });
     } catch (_) {
@@ -1198,8 +1233,12 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
     final allGroups = _allGroups;
     final allDateFiltered = allGroups.toList();
 
-    // System orders only (no imported) — used for list, search, Records chip, To Collect
-    var filtered = allDateFiltered.where((g) => !g.isImported).toList();
+    // Exclude historical_seed AND xlsx imports — Sales Records shows only real app records.
+    final nonSeed = allDateFiltered
+        .where((g) => !g.isImported && !g.isXlsxImport)
+        .toList();
+
+    var filtered = nonSeed.toList();
 
     if (_typeFilter != 'all') {
       filtered = filtered.where((g) => g.paymentType == _typeFilter).toList();
@@ -1218,19 +1257,14 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
       }).toList();
     }
 
-    // Revenue total — system orders only (no imported seed data)
-    final totalRevenue = allDateFiltered
-        .where((g) => !g.isImported)
-        .fold<double>(0, (s, g) => s + g.totalPaid);
-
-    // To Collect — system orders only (imported records are fully paid)
-    double paymentToCollect = 0;
-    for (final g in allGroups.where((g) => !g.isImported)) {
-      if (g.paymentType == 'downpayment' && g.orderTotal > 0) {
-        final remaining = g.orderTotal - g.totalPaid;
-        if (remaining > 0.01) paymentToCollect += remaining;
-      }
+    // Records count and revenue: real app records only (type filter applied, search not applied)
+    var countFiltered = nonSeed;
+    if (_typeFilter != 'all') {
+      countFiltered = countFiltered.where((g) => g.paymentType == _typeFilter).toList();
     }
+
+    final totalRevenue = nonSeed.fold<double>(0, (s, g) => s + g.totalPaid);
+
 
     final headerContent = Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
@@ -1261,7 +1295,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                 const SizedBox(width: 8),
                 _SummaryChip(
                   label: 'Records',
-                  value: '${filtered.length}',
+                  value: '${countFiltered.length}',
                   fg: const Color(0xFF374151),
                   bg: _T.headerBg,
                   border: _T.divider,
@@ -1269,7 +1303,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                 const SizedBox(width: 8),
                 _SummaryChip(
                   label: 'To Collect',
-                  value: '₱${paymentToCollect.toStringAsFixed(2)}',
+                  value: '₱${_totalOutstanding.toStringAsFixed(2)}',
                   fg: const Color(0xFFDC2626),
                   bg: const Color(0xFFFEF2F2),
                   border: const Color(0xFFFECACA),
@@ -2137,50 +2171,58 @@ class _SalesReportContentState extends State<_SalesReportContent> {
           );
         }
 
+        // ── Balance to Collect: from Orders (authoritative, excludes cancelled) ──
+        // whereIn already drops 'cancelled'. Client-side date filter via paid_at.
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('Orders')
               .where('status', whereIn: [
-                'pending',
-                'in_production',
-                'ready',
-                'completed',
+                'pending', 'in_production', 'ready', 'completed',
               ])
               .snapshots(),
           builder: (context, ordSnap) {
+            // Non-cancelled orders filtered by paid_at within the selected date range.
+            // When _range == null (All time), all active orders are included.
             double outstanding = 0;
             if (ordSnap.hasData) {
               for (final doc in ordSnap.data!.docs) {
                 final d = doc.data() as Map<String, dynamic>;
-                final rem = (d['remaining_balance'] as num?)?.toDouble();
-                if (rem != null && rem > 0.01) {
-                  outstanding += rem;
-                } else {
-                  final diff =
-                      ((d['total_price'] as num?)?.toDouble() ?? 0) -
-                          ((d['amount_paid'] as num?)?.toDouble() ?? 0);
-                  if (diff > 0.01) outstanding += diff;
+                if (_range != null) {
+                  final paidAt = d['paid_at'] as Timestamp?;
+                  if (paidAt == null) continue;
+                  if (!_isWithinDateRange(paidAt.toDate().toLocal(), _range)) continue;
                 }
+                final rem  = (d['remaining_balance'] as num?)?.toDouble() ?? 0;
+                final diff = ((d['total_price'] as num?)?.toDouble() ?? 0) -
+                    ((d['amount_paid'] as num?)?.toDouble() ?? 0);
+                final owed = rem > 0.01 ? rem : (diff > 0.01 ? diff : 0.0);
+                if (owed > 0.01) outstanding += owed;
               }
             }
 
             final allDocs = salesSnap.data!.docs;
 
+            // Date-range filter on Sales_Records
             final filtered = allDocs.where((doc) {
-              final ts =
-                  (doc.data() as Map<String, dynamic>)['sale_date']
-                      as Timestamp?;
+              final ts = (doc.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
               if (ts == null) return _range == null;
               return _isWithinDateRange(ts.toDate().toLocal(), _range);
             }).toList();
 
-            // Build buckets and fill with totals
+            // Exclude only historical_seed; Excel imports count as real sales
+            final appFiltered = filtered.where((doc) {
+              final src = (doc.data() as Map<String, dynamic>)['import_source']?.toString() ?? '';
+              return src != 'historical_seed';
+            }).toList();
+
+            // Chart buckets (refunds excluded from revenue bars)
             final buckets = _buildBuckets(allDocs, _range);
             for (final b in buckets) b.total = 0;
-            for (final doc in filtered) {
+            for (final doc in appFiltered) {
               final d = doc.data() as Map<String, dynamic>;
               final ts = d['sale_date'] as Timestamp?;
               if (ts == null) continue;
+              if ((d['payment_type']?.toString() ?? '') == 'refund') continue;
               final dt = _dateOnly(ts.toDate().toLocal());
               final amt = (d['sale_amount'] as num?)?.toDouble() ?? 0;
               for (final b in buckets) {
@@ -2191,31 +2233,33 @@ class _SalesReportContentState extends State<_SalesReportContent> {
               }
             }
 
-            // Summary stats
-            double totalRevenue = 0, dpTotal = 0, balTotal = 0, uptTotal = 0;
+            // Revenue breakdown — refunds separate so dp+bal+upt always = totalRevenue
+            double totalRevenue = 0, dpTotal = 0, balTotal = 0, uptTotal = 0, refundTotal = 0;
             final orderIds = <String>{};
-            for (final doc in filtered) {
+
+            for (final doc in appFiltered) {
               final d = doc.data() as Map<String, dynamic>;
               final amt = (d['sale_amount'] as num?)?.toDouble() ?? 0;
               final type = d['payment_type']?.toString() ?? '';
               final oid = d['order_id']?.toString() ?? '';
-              totalRevenue += amt;
-              if (type == 'downpayment') dpTotal += amt;
-              if (type == 'balance' || type == 'cash') balTotal += amt;
-              if (type == 'full') uptTotal += amt;
+
+              if (type == 'refund') {
+                refundTotal += amt;
+              } else {
+                totalRevenue += amt;
+                if (type == 'downpayment') dpTotal += amt;
+                else if (type == 'balance') balTotal += amt;
+                else if (type == 'full') uptTotal += amt;
+              }
               if (oid.isNotEmpty) orderIds.add(oid);
             }
 
             final spanDays = _range != null
                 ? _range!.end.difference(_range!.start).inDays + 1
                 : (buckets.length > 1
-                    ? buckets.last.end
-                            .difference(buckets.first.start)
-                            .inDays +
-                        1
+                    ? buckets.last.end.difference(buckets.first.start).inDays + 1
                     : 31);
-            final granLabel =
-                _granularityLabel(_decideBucketType(spanDays));
+            final granLabel = _granularityLabel(_decideBucketType(spanDays));
 
             return _buildBody(
               buckets: buckets,
@@ -2225,6 +2269,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
               dpTotal: dpTotal,
               balTotal: balTotal,
               uptTotal: uptTotal,
+              refundTotal: refundTotal,
               outstanding: outstanding,
             );
           },
@@ -2241,6 +2286,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
     required double dpTotal,
     required double balTotal,
     required double uptTotal,
+    required double refundTotal,
     required double outstanding,
   }) {
     final l31  = _pLast31();
@@ -2358,6 +2404,16 @@ class _SalesReportContentState extends State<_SalesReportContent> {
                   narrow: narrow,
                   tooltip: 'Orders paid 100% at the time of ordering',
                 ),
+                if (refundTotal > 0)
+                  _AdminReportCard(
+                    label: 'Refunds',
+                    value: '−₱${refundTotal.toStringAsFixed(2)}',
+                    color: const Color(0xFF9D174D),
+                    bg: const Color(0xFFFFF1F2),
+                    border: const Color(0xFFFFCDD2),
+                    narrow: narrow,
+                    tooltip: 'Total refunds paid out in this period',
+                  ),
                 _AdminReportCard(
                   label: 'Balance to Collect',
                   value: '₱${outstanding.toStringAsFixed(2)}',
@@ -2365,7 +2421,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
                   bg: const Color(0xFFFEF2F2),
                   border: const Color(0xFFFECACA),
                   narrow: narrow,
-                  tooltip: 'Total remaining balance on non-cancelled orders',
+                  tooltip: 'Unpaid balance on downpayment orders within the selected period',
                 ),
               ],
             );

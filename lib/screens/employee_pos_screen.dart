@@ -281,26 +281,20 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
               'sale_date':      FieldValue.serverTimestamp(),
             });
           } else {
-            // ── Balance: find the record by order_id and update it ────
-            final snap = await _db
-                .collection('Sales_Records')
-                .where('order_id', isEqualTo: salesOrderId)
-                .limit(1)
-                .get();
-
-            if (snap.docs.isNotEmpty) {
-              await _db
-                  .collection('Sales_Records')
-                  .doc(snap.docs.first.id)
-                  .update({
-                'payment_type': 'balance',
-                'sale_amount':  newPaid,
-                'order_total':  total,
-                'balance_date': FieldValue.serverTimestamp(),
-              });
-            }
-            // If somehow no record exists yet, do nothing —
-            // do NOT create a new record on a balance payment.
+            // ── Balance: add a separate Sales_Record for the balance ──
+            // The original downpayment record stays intact so dpTotal
+            // in reports is not affected. sale_amount is cashPaid only
+            // (the balance amount), never the cumulative newPaid total.
+            await _db.collection('Sales_Records').add({
+              'order_id':       salesOrderId,
+              'customer_name':  custName,
+              'customer_id':    custId,
+              'payment_type':   'balance',
+              'payment_method': 'cash',
+              'sale_amount':    cashPaid,
+              'order_total':    total,
+              'sale_date':      FieldValue.serverTimestamp(),
+            });
           }
 
           // ── 5. POS Activity Log ───────────────────────────────────────

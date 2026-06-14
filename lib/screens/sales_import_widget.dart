@@ -303,7 +303,21 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
     final invoices = invoiceMap.values.toList();
     if (mounted) setState(() => _totalCount = invoices.length);
 
-    final fs        = FirebaseFirestore.instance;
+    final fs = FirebaseFirestore.instance;
+
+    // Remove all previously imported records so re-importing a new file doesn't
+    // leave stale docs behind. App sales (no import_source) are never touched.
+    while (true) {
+      final old = await fs.collection('Sales_Records')
+          .where('import_source', isEqualTo: 'manual_xlsx_import')
+          .limit(400)
+          .get();
+      if (old.docs.isEmpty) break;
+      final del = fs.batch();
+      for (final d in old.docs) del.delete(d.reference);
+      await del.commit();
+    }
+
     const batchSize = 400;
     int done        = 0;
 
@@ -311,8 +325,10 @@ class _SalesImportSheetState extends State<_SalesImportSheet> {
       final batch = fs.batch();
       final slice = invoices.skip(done).take(batchSize);
       for (final inv in slice) {
+        // Use a namespaced ID (xlsx_ prefix) so imported docs can never share
+        // a Firestore document ID with real app records.
         batch.set(
-          fs.collection('Sales_Records').doc(inv.orderId),
+          fs.collection('Sales_Records').doc('xlsx_${inv.orderId}'),
           inv.toFirestoreMap(),
         );
       }
