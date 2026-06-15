@@ -94,6 +94,7 @@ class _GlassBox extends StatelessWidget {
 class ChatScreen extends StatefulWidget {
   final String customerUid;
   final String customerName;
+  final String customerId;
   final bool isEmployee;
   final Map<String, dynamic>? orderContext;
   final bool embedded;
@@ -103,6 +104,7 @@ class ChatScreen extends StatefulWidget {
     super.key,
     required this.customerUid,
     required this.customerName,
+    this.customerId = '',
     required this.isEmployee,
     this.orderContext,
     this.embedded = false,
@@ -485,9 +487,87 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildHeader(BuildContext context) {
     final headerName = widget.isEmployee
-        ? widget.customerName
+        ? (widget.customerId.isNotEmpty
+            ? '${widget.customerName} · ${widget.customerId}'
+            : widget.customerName)
         : 'Imprenta Inc.';
     final headerSub = widget.isEmployee ? 'Customer' : 'Printing Services';
+
+    Widget titleBlock({
+      required Color nameColor,
+      required Color subColor,
+      required double nameSize,
+      required FontWeight nameWeight,
+    }) {
+      if (!widget.isEmployee || widget.customerUid.isEmpty) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              headerName,
+              style: TextStyle(
+                color: nameColor,
+                fontWeight: nameWeight,
+                fontSize: nameSize,
+                letterSpacing: -0.2,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              headerSub,
+              style: TextStyle(
+                color: subColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        );
+      }
+
+      return StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('User')
+            .doc(widget.customerUid)
+            .snapshots(),
+        builder: (context, snap) {
+          final data = snap.data?.data() as Map<String, dynamic>?;
+          final currentName = data?['full_name']?.toString().trim() ?? '';
+          final currentId = data?['customer_id']?.toString().trim() ?? '';
+          final name = currentName.isNotEmpty ? currentName : widget.customerName;
+          final id = currentId.isNotEmpty ? currentId : widget.customerId;
+          final display = id.isNotEmpty ? '$name · $id' : name;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                display,
+                style: TextStyle(
+                  color: nameColor,
+                  fontWeight: nameWeight,
+                  fontSize: nameSize,
+                  letterSpacing: -0.2,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                headerSub,
+                style: TextStyle(
+                  color: subColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    }
 
     // ── Embedded (light) header ──────────────────────────────────
     if (widget.embedded) {
@@ -549,28 +629,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
             // Title + subtitle
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    headerName,
-                    style: const TextStyle(
-                      color: _GL.textPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      letterSpacing: -0.2,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    headerSub,
-                    style: const TextStyle(
-                      color: _GL.textMuted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+              child: titleBlock(
+                nameColor: _GL.textPrimary,
+                subColor: _GL.textMuted,
+                nameSize: 14,
+                nameWeight: FontWeight.w700,
               ),
             ),
             // No Active badge in embedded mode
@@ -639,28 +702,11 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    headerName,
-                    style: const TextStyle(
-                      color: _G.textPrimary,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    headerSub,
-                    style: const TextStyle(
-                      color: _G.textMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+              child: titleBlock(
+                nameColor: _G.textPrimary,
+                subColor: _G.textMuted,
+                nameSize: 16,
+                nameWeight: FontWeight.w800,
               ),
             ),
           ],

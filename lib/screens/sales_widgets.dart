@@ -44,6 +44,19 @@ bool _isWithinDateRange(DateTime date, DateTimeRange? range) {
   return !day.isBefore(start) && !day.isAfter(end);
 }
 
+String _normalizedPaymentType(Map<String, dynamic> data) {
+  final raw = data['payment_type']?.toString().toLowerCase() ?? '';
+  if (raw == 'partial') return 'downpayment';
+  if (raw == 'cash') return 'full';
+  return raw;
+}
+
+Timestamp? _orderFilterTimestamp(Map<String, dynamic> data) {
+  return data['paid_at'] as Timestamp? ??
+      data['created_at'] as Timestamp? ??
+      data['sale_date'] as Timestamp?;
+}
+
 // ── Date picker dialog ────────────────────────────────────────────────────────
 Future<void> _pickSalesDateRange({
   required BuildContext context,
@@ -850,6 +863,7 @@ class _GroupedRecord {
   final String? paymentMethod;
   final Timestamp? latestDate;
   final List<DocumentReference> docRefs;
+  final bool isWalkIn;
   final bool isImported;    // true for historical_seed — excluded from everything
   final bool isXlsxImport; // true for manual_xlsx_import — counted in summary but hidden from list
 
@@ -863,6 +877,7 @@ class _GroupedRecord {
     required this.paymentMethod,
     required this.latestDate,
     required this.docRefs,
+    this.isWalkIn = false,
     this.isImported = false,
     this.isXlsxImport = false,
   });
@@ -970,7 +985,7 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
 
     for (final r in records) {
       final rAmt  = (r['sale_amount']  as num?)?.toDouble() ?? 0;
-      final rType = r['payment_type']?.toString() ?? '';
+      final rType = _normalizedPaymentType(r);
       // Refunds are money returned — exclude from totalPaid so revenue stays correct
       if (rType != 'refund') totalPaid += rAmt;
       final ot = (r['order_total'] as num?)?.toDouble() ?? 0;
@@ -985,10 +1000,8 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
       final ts = r['sale_date'] as Timestamp?;
       if (ts != null && (latestTs == null || ts.compareTo(latestTs) > 0)) {
         latestTs = ts;
-        final t = r['payment_type']?.toString() ?? '';
-        if (t == 'cash') {
-          derivedType = 'full';
-        } else if (t.isNotEmpty) {
+        final t = _normalizedPaymentType(r);
+        if (t.isNotEmpty) {
           derivedType = t;
         }
       }
@@ -1005,6 +1018,11 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
     final isXlsxImport = !isImported && records.any(
       (r) => r['import_source'] == 'manual_xlsx_import',
     );
+    final isWalkIn = records.any((r) => r['walk_in'] == true) ||
+        (custId.isEmpty &&
+            records.any(
+              (r) => (r['customer_name']?.toString() ?? '').isNotEmpty,
+            ));
 
     groups.add(
       _GroupedRecord(
@@ -1017,6 +1035,7 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
         paymentMethod: lastMethod,
         latestDate: latestTs,
         docRefs: refs,
+        isWalkIn: isWalkIn,
         isImported: isImported,
         isXlsxImport: isXlsxImport,
       ),
@@ -1103,9 +1122,9 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
         for (final doc in ordSnap.docs) {
           final d = doc.data();
           if (_selectedRange != null) {
-            final paidAt = d['paid_at'] as Timestamp?;
-            if (paidAt == null) continue;
-            if (!_isWithinDateRange(paidAt.toDate().toLocal(), _selectedRange)) continue;
+            final filterTs = _orderFilterTimestamp(d);
+            if (filterTs == null) continue;
+            if (!_isWithinDateRange(filterTs.toDate().toLocal(), _selectedRange)) continue;
           }
           final rem  = (d['remaining_balance'] as num?)?.toDouble() ?? 0;
           final diff = ((d['total_price']  as num?)?.toDouble() ?? 0) -
@@ -2188,9 +2207,9 @@ class _SalesReportContentState extends State<_SalesReportContent> {
               for (final doc in ordSnap.data!.docs) {
                 final d = doc.data() as Map<String, dynamic>;
                 if (_range != null) {
-                  final paidAt = d['paid_at'] as Timestamp?;
-                  if (paidAt == null) continue;
-                  if (!_isWithinDateRange(paidAt.toDate().toLocal(), _range)) continue;
+                  final filterTs = _orderFilterTimestamp(d);
+                  if (filterTs == null) continue;
+                  if (!_isWithinDateRange(filterTs.toDate().toLocal(), _range)) continue;
                 }
                 final rem  = (d['remaining_balance'] as num?)?.toDouble() ?? 0;
                 final diff = ((d['total_price'] as num?)?.toDouble() ?? 0) -
@@ -2222,7 +2241,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
               final d = doc.data() as Map<String, dynamic>;
               final ts = d['sale_date'] as Timestamp?;
               if (ts == null) continue;
-              if ((d['payment_type']?.toString() ?? '') == 'refund') continue;
+              if (_normalizedPaymentType(d) == 'refund') continue;
               final dt = _dateOnly(ts.toDate().toLocal());
               final amt = (d['sale_amount'] as num?)?.toDouble() ?? 0;
               for (final b in buckets) {
@@ -2240,7 +2259,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
             for (final doc in appFiltered) {
               final d = doc.data() as Map<String, dynamic>;
               final amt = (d['sale_amount'] as num?)?.toDouble() ?? 0;
-              final type = d['payment_type']?.toString() ?? '';
+              final type = _normalizedPaymentType(d);
               final oid = d['order_id']?.toString() ?? '';
 
               if (type == 'refund') {

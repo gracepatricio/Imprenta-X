@@ -1280,6 +1280,24 @@ class _SectionLabel extends StatelessWidget {
 // =============================================================================
 // Employee Messages Content
 // =============================================================================
+class _MessageThread {
+  final QueryDocumentSnapshot doc;
+  final String customerUid;
+  final String customerName;
+  final String customerId;
+  final String lastMessage;
+  final int unread;
+
+  const _MessageThread({
+    required this.doc,
+    required this.customerUid,
+    required this.customerName,
+    required this.customerId,
+    required this.lastMessage,
+    required this.unread,
+  });
+}
+
 class _EmployeeMessagesContent extends StatefulWidget {
   const _EmployeeMessagesContent();
 
@@ -1291,8 +1309,56 @@ class _EmployeeMessagesContent extends StatefulWidget {
 class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
   String? _selectedUid;
   String _selectedName = '';
+  String _selectedCustomerId = '';
   String _search = '';
   final _searchCtrl = TextEditingController();
+
+  Future<List<_MessageThread>> _resolveThreads(
+    List<QueryDocumentSnapshot> docs,
+  ) async {
+    final uids = docs
+        .map((doc) =>
+            ((doc.data() as Map<String, dynamic>)['customer_uid'] ?? '')
+                .toString())
+        .where((uid) => uid.isNotEmpty)
+        .toSet()
+        .toList();
+
+    final profiles = <String, Map<String, dynamic>>{};
+    for (var i = 0; i < uids.length; i += 30) {
+      final chunk = uids.sublist(i, (i + 30).clamp(0, uids.length));
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('User')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+        for (final userDoc in snap.docs) {
+          profiles[userDoc.id] = userDoc.data();
+        }
+      } catch (_) {}
+    }
+
+    return docs.map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final uid = data['customer_uid']?.toString() ?? '';
+      final profile = profiles[uid] ?? const <String, dynamic>{};
+      final currentName = profile['full_name']?.toString().trim() ?? '';
+      final storedName = data['customer_name']?.toString().trim() ?? '';
+      final currentId = profile['customer_id']?.toString().trim() ?? '';
+      final storedId = data['customer_id']?.toString().trim() ?? '';
+
+      return _MessageThread(
+        doc: doc,
+        customerUid: uid,
+        customerName: currentName.isNotEmpty
+            ? currentName
+            : (storedName.isNotEmpty ? storedName : 'Customer'),
+        customerId: currentId.isNotEmpty ? currentId : storedId,
+        lastMessage: data['last_message']?.toString() ?? '',
+        unread: ((data['unread_employee'] as num?) ?? 0).toInt(),
+      );
+    }).toList();
+  }
 
   @override
   void dispose() {
@@ -1380,52 +1446,61 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
                     if (at == null || bt == null) return 0;
                     return (bt as dynamic).compareTo(at);
                   });
-                final docs = _search.isEmpty
-                    ? allDocs
-                    : allDocs.where((doc) {
-                        final name = ((doc.data() as Map)['customer_name']
-                                    ?.toString() ??
-                                '')
-                            .toLowerCase();
-                        return name.contains(_search);
-                      }).toList();
-                if (docs.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: _G.navyBlue.withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Icon(
-                            Icons.chat_bubble_outline_rounded,
-                            size: 36,
-                            color: _G.navyBlue,
-                          ),
+                return FutureBuilder<List<_MessageThread>>(
+                  future: _resolveThreads(allDocs.cast<QueryDocumentSnapshot>()),
+                  builder: (context, threadSnap) {
+                    if (!threadSnap.hasData) {
+                      return const Center(
+                        child: CircularProgressIndicator(color: _G.navyBlue),
+                      );
+                    }
+
+                    final docs = _search.isEmpty
+                        ? threadSnap.data!
+                        : threadSnap.data!.where((thread) {
+                            final name = thread.customerName.toLowerCase();
+                            final id = thread.customerId.toLowerCase();
+                            return name.contains(_search) ||
+                                id.contains(_search);
+                          }).toList();
+
+                    if (docs.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: _G.navyBlue.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(
+                                Icons.chat_bubble_outline_rounded,
+                                size: 36,
+                                color: _G.navyBlue,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'No customer messages yet',
+                              style: TextStyle(color: _G.textMuted, fontSize: 13),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'No customer messages yet',
-                          style: TextStyle(color: _G.textMuted, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                return ListView.separated(
-                  itemCount: docs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) {
-                    final d = docs[i].data() as Map<String, dynamic>;
-                    final lastMsg = d['last_message']?.toString() ?? '';
-                    final unread = ((d['unread_employee'] as num?) ?? 0)
-                        .toInt();
-                    final customerName =
-                        d['customer_name']?.toString() ?? 'Customer';
-                    final customerUid = d['customer_uid']?.toString() ?? '';
+                      );
+                    }
+
+                    return ListView.separated(
+                      itemCount: docs.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                    final thread = docs[i];
+                    final lastMsg = thread.lastMessage;
+                    final unread = thread.unread;
+                    final customerName = thread.customerName;
+                    final customerId = thread.customerId;
+                    final customerUid = thread.customerUid;
                     final isSelected = splitMode && _selectedUid == customerUid;
 
                     return GestureDetector(
@@ -1434,6 +1509,7 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
                           setState(() {
                             _selectedUid = customerUid;
                             _selectedName = customerName;
+                            _selectedCustomerId = customerId;
                           });
                         } else {
                           Navigator.push(
@@ -1445,6 +1521,7 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
                                   child: ChatScreen(
                                     customerUid: customerUid,
                                     customerName: customerName,
+                                    customerId: customerId,
                                     isEmployee: true,
                                     embedded: true,
                                     onClose: () => Navigator.pop(ctx),
@@ -1504,7 +1581,9 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    customerName,
+                                    customerId.isNotEmpty
+                                        ? '$customerName · $customerId'
+                                        : customerName,
                                     style: TextStyle(
                                       color: isSelected
                                           ? _G.navyBlue
@@ -1557,6 +1636,8 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
                           ],
                         ),
                       ),
+                    );
+                      },
                     );
                   },
                 );
@@ -1613,9 +1694,13 @@ class _EmployeeMessagesContentState extends State<_EmployeeMessagesContent> {
                         key: ValueKey(_selectedUid),
                         customerUid: _selectedUid!,
                         customerName: _selectedName,
+                        customerId: _selectedCustomerId,
                         isEmployee: true,
                         embedded: true,
-                        onClose: () => setState(() => _selectedUid = null),
+                        onClose: () => setState(() {
+                          _selectedUid = null;
+                          _selectedCustomerId = '';
+                        }),
                       ),
               ),
             ],
