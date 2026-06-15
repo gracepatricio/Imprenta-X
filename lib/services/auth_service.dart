@@ -610,7 +610,7 @@ class AuthService {
       }
 
       final currentEmail = user.email ?? '';
-      final hasPlaceholder = currentEmail.endsWith('@imprenta.internal');
+      final hasPlaceholder = currentEmail.endsWith('@imprenta.sys');
 
       if (!hasPlaceholder) {
         await user.verifyBeforeUpdateEmail(newEmail);

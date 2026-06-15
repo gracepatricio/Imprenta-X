@@ -10,8 +10,7 @@ const _magenta = Color(0xFFFF006E);
 const _yellow = Color(0xFFFFDE89);
 const _green = Color(0xFF80B918);
 
-/// Optional screen shown after the forced password change.
-/// The user can skip and add their email later from their profile.
+/// Screen shown after the forced password change for email verification.
 class AddEmailScreen extends StatefulWidget {
   final String role;
   final String newPassword;
@@ -140,18 +139,13 @@ class _AddEmailScreenState extends State<AddEmailScreen>
     }
   }
 
-  void _skip() {
-    _pollTimer?.cancel();
-    _navigateHome();
-  }
-
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
       child: Scaffold(
         body: Container(
-decoration: AppTheme.backgroundDecoration(context),
+          decoration: AppTheme.backgroundDecoration(context),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 600;
@@ -257,25 +251,6 @@ decoration: AppTheme.backgroundDecoration(context),
                         ),
                       ),
 
-                      // ── Skip link ───────────────────────────────────────
-                      if (!_verificationSent) ...[
-                        const SizedBox(height: 20),
-                        GestureDetector(
-                          onTap: _skip,
-                          child: Text(
-                            'Skip for now — I\'ll add it in my profile settings',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.28),
-                              fontSize: 12,
-                              decoration: TextDecoration.underline,
-                              decorationColor: Colors.white.withValues(
-                                alpha: 0.15,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -326,22 +301,22 @@ decoration: AppTheme.backgroundDecoration(context),
           ),
           child: _isSending
               ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.black,
-                  ),
-                )
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.black,
+            ),
+          )
               : const Text(
-                  'Send Verification Email',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                  ),
-                ),
+            'Send Verification Email',
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.2,
+            ),
+          ),
         ),
 
         const SizedBox(height: 20),
@@ -382,8 +357,8 @@ decoration: AppTheme.backgroundDecoration(context),
         const SizedBox(height: 8),
         Text(
           'We sent a link to ${_emailCtrl.text.trim()}.\n'
-          'Click the link to confirm your email.\n\n'
-          'This screen will advance automatically.',
+              'Click the link to confirm your email.\n\n'
+              'This screen will advance automatically.',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.45),
@@ -416,24 +391,6 @@ decoration: AppTheme.backgroundDecoration(context),
         ),
 
         const SizedBox(height: 24),
-
-        // Divider
-        Divider(color: Colors.white.withValues(alpha: 0.08), thickness: 1),
-        const SizedBox(height: 16),
-
-        GestureDetector(
-          onTap: _skip,
-          child: Text(
-            'Skip — I\'ll verify later in my profile',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.28),
-              fontSize: 12,
-              decoration: TextDecoration.underline,
-              decorationColor: Colors.white.withValues(alpha: 0.15),
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
         _CmykDots(controller: _dotCtrl),
       ],
     );
@@ -516,12 +473,12 @@ class _AuthFieldState extends State<_AuthField> {
             ),
             boxShadow: _focused
                 ? [
-                    BoxShadow(
-                      color: _yellow.withValues(alpha: 0.08),
-                      blurRadius: 10,
-                      spreadRadius: 1,
-                    ),
-                  ]
+              BoxShadow(
+                color: _yellow.withValues(alpha: 0.08),
+                blurRadius: 10,
+                spreadRadius: 1,
+              ),
+            ]
                 : [],
           ),
           child: TextField(
