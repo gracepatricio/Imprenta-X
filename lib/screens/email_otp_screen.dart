@@ -136,7 +136,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-decoration: AppTheme.backgroundDecoration(context),
+        decoration: AppTheme.backgroundDecoration(context),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth >= 600;
@@ -146,47 +146,6 @@ decoration: AppTheme.backgroundDecoration(context),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // ── Back button — yellow pill ──────────────────────────
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 7,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _yellow.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(30),
-                            border: Border.all(
-                              color: _yellow.withValues(alpha: 0.35),
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(
-                                Icons.arrow_back_ios_new_rounded,
-                                color: _yellow,
-                                size: 13,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Back',
-                                style: TextStyle(
-                                  color: _yellow,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
                     const SizedBox(height: 24),
 
                     // ── Brand icon ────────────────────────────────────────
@@ -384,6 +343,42 @@ decoration: AppTheme.backgroundDecoration(context),
 
                                 const SizedBox(height: 20),
                                 _CmykDots(controller: _dotCtrl),
+
+                                const SizedBox(height: 20),
+
+                                // Divider
+                                Divider(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  thickness: 1,
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                // ── Back to Register button ───────────────
+                                GestureDetector(
+                                  onTap: () => Navigator.pop(context),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(
+                                        Icons.arrow_back_ios_new_rounded,
+                                        color: _yellow,
+                                        size: 13,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Back to Register',
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.35,
+                                          ),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                           ),

@@ -41,32 +41,47 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     super.dispose();
   }
 
+  /// Resolves the typed email to the Firebase Auth email, or returns null
+  /// with an appropriate error set on [_error].
+  ///
+  /// Returns:
+  ///   - A non-null String  → the Auth email to send the reset to.
+  ///   - null               → abort; [_error] has already been set.
   Future<String?> _resolveAuthEmail(String typedEmail) async {
     final firestore = FirebaseFirestore.instance;
 
+    // ── 1. Look up the typed email in the User collection ─────────────────
     final snap = await firestore
         .collection('User')
         .where('email', isEqualTo: typedEmail)
         .limit(1)
         .get();
 
-    if (snap.docs.isEmpty) return typedEmail;
+    if (snap.docs.isEmpty) {
+      // The email doesn't belong to any account in the system.
+      setState(() {
+        _error = 'No account found with that email address.\n'
+            'Please try a different email.';
+      });
+      return null;
+    }
 
-    final role = (snap.docs.first.data()['user_role'] as String? ?? '');
+    final data = snap.docs.first.data();
+    final role = (data['user_role'] as String? ?? '');
+
+    // ── 2. Customers → use their email directly as the Auth email ─────────
     if (role != 'employee' && role != 'admin') return typedEmail;
 
+    // ── 3. Admin / Employee → look up the placeholder Auth email ──────────
     final uid = snap.docs.first.id;
     final indexDoc = await firestore.collection('AuthIndex').doc(uid).get();
     final authEmail = indexDoc.data()?['placeholder_email'] as String?;
 
     if (authEmail == null || authEmail.endsWith('@imprenta.internal')) {
       setState(() {
-        _error =
-            'Your email hasn\'t been verified yet.\n'
-            'Please check your inbox for the verification link '
-            'that was sent when you set your email, then try again.\n\n'
-            'Alternatively, log in with your Employee ID and change '
-            'your password from your account settings.';
+        _error = 'Your email hasn\'t been verified yet.\n'
+            'Please check your inbox for the verification link\n'
+            'that was sent when you set your email, then try again.';
       });
       return null;
     }
@@ -89,13 +104,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     try {
       final authEmail = await _resolveAuthEmail(email);
       if (authEmail == null) {
+        // _error is already set inside _resolveAuthEmail.
         setState(() => _isSending = false);
         return;
       }
 
-      final continueUrl = kIsWeb
-          ? Uri.base.origin + '/'
-          : 'https://imprenta-x-system.web.app/';
+      final continueUrl =
+          kIsWeb ? Uri.base.origin + '/' : 'https://imprenta-x-system.web.app/';
 
       await FirebaseAuth.instance.sendPasswordResetEmail(
         email: authEmail,
@@ -105,16 +120,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         ),
       );
 
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isSending = false;
           _linkSent = true;
         });
+      }
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         setState(() {
-          _error =
-              e.message ??
+          _error = e.message ??
               'Could not send reset link. Check your email and try again.';
           _isSending = false;
         });
@@ -133,7 +148,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-decoration: AppTheme.backgroundDecoration(context),
+        decoration: AppTheme.backgroundDecoration(context),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth >= 600;
@@ -143,7 +158,7 @@ decoration: AppTheme.backgroundDecoration(context),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // ── Brand icon ────────────────────────────────────────
+                    // ── Brand icon ──────────────────────────────────────────
                     Container(
                       width: 64,
                       height: 64,
@@ -186,7 +201,7 @@ decoration: AppTheme.backgroundDecoration(context),
 
                     const SizedBox(height: 24),
 
-                    // ── Card ─────────────────────────────────────────────
+                    // ── Card ────────────────────────────────────────────────
                     ConstrainedBox(
                       constraints: BoxConstraints(
                         maxWidth: isWide ? 400 : double.infinity,
@@ -308,7 +323,7 @@ decoration: AppTheme.backgroundDecoration(context),
 
         const SizedBox(height: 20),
 
-        // ── Back to Sign In — flanked by dividers, mirrors login "or" row ──
+        // ── Back to Sign In — flanked by dividers ───────────────────────────
         Row(
           children: [
             Expanded(
@@ -394,11 +409,45 @@ decoration: AppTheme.backgroundDecoration(context),
         ),
         const SizedBox(height: 24),
 
-        // Try different email — subtle ghost button
+        // Resend — ghost button
         SizedBox(
           width: double.infinity,
           child: OutlinedButton(
-            onPressed: () => setState(() => _linkSent = false),
+            onPressed: _isSending ? null : _sendResetLink,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              disabledForegroundColor: Colors.white38,
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+            ),
+            child: _isSending
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white54,
+                    ),
+                  )
+                : const Text(
+                    'Resend email',
+                    style: TextStyle(fontSize: 13),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // Try different email — ghost button (unchanged)
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => setState(() {
+              _linkSent = false;
+              _error = null;
+            }),
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.white,
               side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
