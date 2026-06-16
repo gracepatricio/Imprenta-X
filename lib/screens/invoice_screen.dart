@@ -884,13 +884,13 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
               onPressed: _downloadPdf,
               icon: const Icon(
                 Icons.download_rounded,
-                color: const Color(0xFFB45309),
+                color: AppTheme.gold,
                 size: 18,
               ),
               label: const Text(
                 'PDF',
                 style: TextStyle(
-                  color: const Color(0xFFB45309),
+                  color: AppTheme.gold,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1033,14 +1033,14 @@ class _InvoiceView extends StatelessWidget {
                                       ? const Color(0xFFFEE2E2)
                                       : isFullPaid
                                       ? const Color(0xFFDCFCE7)
-                                      : const Color(0xFFFDE68A),
+                                      : const Color(0xFFFEF3C7),
                                   borderRadius: BorderRadius.circular(99),
                                   border: Border.all(
                                     color: isCancelled
                                         ? const Color(0xFFFCA5A5)
                                         : isFullPaid
                                         ? const Color(0xFF86EFAC)
-                                        : const Color(0xFFD97706),
+                                        : const Color(0xFFFCD34D),
                                   ),
                                 ),
                                 child: Text(
@@ -1054,7 +1054,7 @@ class _InvoiceView extends StatelessWidget {
                                         ? const Color(0xFFDC2626)
                                         : isFullPaid
                                         ? const Color(0xFF16A34A)
-                                        : const Color(0xFF92400E),
+                                        : const Color(0xFFD97706),
                                     fontSize: 9,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 0.5,
@@ -1305,7 +1305,7 @@ class _InvoiceView extends StatelessWidget {
                               child: Text(
                                 'DESCRIPTION',
                                 style: TextStyle(
-                                  color: Color(0xFFB45309),
+                                  color: AppTheme.gold,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 0.8,
@@ -1603,7 +1603,7 @@ class _InvoiceView extends StatelessWidget {
                         child: const Text(
                           'SUMMARY',
                           style: TextStyle(
-                            color: Color(0xFFB45309),
+                            color: AppTheme.gold,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 1,
@@ -1635,7 +1635,7 @@ class _InvoiceView extends StatelessWidget {
                                   ? 'Balance — Fully Settled'
                                   : 'Balance Due on Pickup',
                               value: isFullPaid ? 0 : remaining,
-                              color: isFullPaid ? Colors.green : const Color(0xFFB45309),
+                              color: isFullPaid ? Colors.green : AppTheme.gold,
                               large: true,
                             ),
                           ],
@@ -1653,17 +1653,17 @@ class _InvoiceView extends StatelessWidget {
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF92400E).withValues(alpha: 0.08),
+                      color: Colors.orange.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: const Color(0xFF92400E).withValues(alpha: 0.35),
+                        color: Colors.orange.withValues(alpha: 0.25),
                       ),
                     ),
                     child: Row(
                       children: [
                         const Icon(
                           Icons.info_outline,
-                          color: const Color(0xFF92400E),
+                          color: Colors.orange,
                           size: 15,
                         ),
                         const SizedBox(width: 8),
@@ -1672,7 +1672,7 @@ class _InvoiceView extends StatelessWidget {
                             'Remaining balance of ₱${AppTheme.fmtAmt(remaining)} '
                             'is due upon pickup.',
                             style: const TextStyle(
-                              color: const Color(0xFF92400E),
+                              color: Colors.orange,
                               fontSize: 11,
                             ),
                           ),
