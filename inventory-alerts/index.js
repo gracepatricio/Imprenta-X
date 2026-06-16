@@ -101,7 +101,10 @@ exports.orderStatusUpdate = onDocumentUpdated(
       },
       cancelled: {
         title: `❌ Order Cancelled: ${orderId}`,
-        body: `Your order has been cancelled. Please contact us for details.`,
+        body: after?.refund_amount
+          ? `Your order has been cancelled. A refund of ₱${after.refund_amount} will be processed shortly.`
+          : `Your order has been cancelled. Please contact us for details.`,
+      },
       },
     };
 
@@ -163,6 +166,48 @@ exports.paymentConfirmation = onDocumentUpdated(
     });
 
     console.log(`Payment confirmation sent to ${customerUid} for ${orderId}`);
+    return null;
+  }
+);
+
+// ── Refund Notification ───────────────────────────────────────────────────
+exports.refundNotification = onDocumentUpdated(
+  "Orders/{orderId}",
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+
+    const wasPickedUp = before?.refund_picked_up;
+    const isNowPickedUp = after?.refund_picked_up;
+    const customerUid = after?.customer_uid;
+
+    // Only fire when refund_picked_up flips to true
+    if (wasPickedUp === isNowPickedUp) return null;
+    if (!isNowPickedUp) return null;
+    if (!customerUid || customerUid === "") return null;
+
+    const orderId = after?.order_id ?? "Your order";
+    const amountPaid = after?.amount_paid ?? 0;
+
+    const db = getFirestore();
+    const userDoc = await db.collection("User").doc(customerUid).get();
+    const token = userDoc.data()?.fcm_token;
+
+    if (!token) return null;
+
+    await getMessaging().send({
+      token,
+      notification: {
+        title: `💸 Refund Confirmed: ${orderId}`,
+        body: amountPaid > 0
+          ? `Your refund of ₱${amountPaid} for order ${orderId} has been processed and picked up.`
+          : `Your refund for order ${orderId} has been confirmed.`,
+      },
+      android: { priority: "high" },
+      apns: { payload: { aps: { sound: "default" } } },
+    });
+
+    console.log(`Refund pickup notification sent to ${customerUid} for ${orderId}`);
     return null;
   }
 );
