@@ -1512,7 +1512,7 @@ class _OrderCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Total: ₱${total.toStringAsFixed(2)}',
+                      'Total: ₱${AppTheme.fmtAmt(total)}',
                       style: const TextStyle(
                         color: _G.accentAmber,
                         fontWeight: FontWeight.w700,
@@ -1524,7 +1524,7 @@ class _OrderCard extends StatelessWidget {
                       Text(
                         fullyPaid
                             ? 'Fully paid'
-                            : 'Remaining: ₱${remaining.toStringAsFixed(2)}',
+                            : 'Remaining: ₱${AppTheme.fmtAmt(remaining)}',
                         style: TextStyle(
                           color: fullyPaid ? _G.accentEmerald : _G.accentAmber,
                           fontSize: 11,
@@ -1747,10 +1747,11 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-          final chosen = (double.tryParse(ctrl.text) ?? maxAmt).clamp(
-            minAmt,
-            maxAmt,
-          );
+          final _rawAcc = double.tryParse(ctrl.text) ?? 0;
+          final bool _accTooLow = _rawAcc < minAmt - 0.009;
+          final bool _accTooHigh = _rawAcc > maxAmt + 0.009;
+          final bool _accValid = !_accTooLow && !_accTooHigh;
+          final chosen = _rawAcc.clamp(0.0, double.infinity);
           return ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             child: BackdropFilter(
@@ -1828,8 +1829,8 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
                               Expanded(
                                 child: Text(
                                   _status == 'awaiting_payment'
-                                      ? 'Minimum: ₱${minAmt.toStringAsFixed(2)} (50% downpayment)'
-                                      : 'Outstanding balance: ₱${maxAmt.toStringAsFixed(2)}',
+                                      ? 'Minimum: ₱${AppTheme.fmtAmt(minAmt)} (50% downpayment)'
+                                      : 'Outstanding balance: ₱${AppTheme.fmtAmt(maxAmt)}',
                                   style: TextStyle(
                                     color: _G.accentAmber,
                                     fontSize: 12,
@@ -1890,17 +1891,34 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
                             ],
                           ),
                         ),
+                        if (_accTooLow || _accTooHigh) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: Colors.redAccent, size: 13),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  _accTooLow
+                                      ? 'Minimum: ₱${AppTheme.fmtAmt(minAmt)}${_status == 'awaiting_payment' ? ' (50% downpayment)' : ''}'
+                                      : 'Cannot exceed ₱${AppTheme.fmtAmt(maxAmt)}',
+                                  style: const TextStyle(color: Colors.redAccent, fontSize: 11.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
                           child: GestureDetector(
-                            onTap: chosen < minAmt - 0.009
+                            onTap: !_accValid
                                 ? null
                                 : () => Navigator.pop(ctx, chosen),
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               decoration: BoxDecoration(
-                                color: chosen < minAmt - 0.009
+                                color: !_accValid
                                     ? Colors.white.withValues(alpha: 0.10)
                                     : _G.activeBtn,
                                 borderRadius: BorderRadius.circular(12),
@@ -1910,16 +1928,16 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
                                 children: [
                                   Icon(
                                     Icons.payment_rounded,
-                                    color: chosen < minAmt - 0.009
+                                    color: !_accValid
                                         ? _G.textMuted
                                         : _G.activeBtnText,
                                     size: 18,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Pay ₱${chosen.toStringAsFixed(2)} via PayMongo',
+                                    'Pay ₱${AppTheme.fmtAmt(chosen)} via QRPH',
                                     style: TextStyle(
-                                      color: chosen < minAmt - 0.009
+                                      color: !_accValid
                                           ? _G.textMuted
                                           : _G.activeBtnText,
                                       fontWeight: FontWeight.w700,
@@ -2059,7 +2077,7 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
                 ...products.map((p) {
                   final name = p['name']?.toString() ?? '—';
                   final qty = p['qty']?.toString() ?? '1';
-                  final price = (p['price'] as num?)?.toStringAsFixed(2) ?? '—';
+                  final price = p['price'] != null ? AppTheme.fmtAmt((p['price'] as num).toDouble()) : '—';
                   final size = p['size_label']?.toString();
                   final mat = p['material']?.toString();
                   return Container(
@@ -2170,8 +2188,8 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
                           const SizedBox(width: 8),
                           Text(
                             _status == 'awaiting_payment'
-                                ? 'Pay via PayMongo (min 50%)'
-                                : 'Pay Remaining ₱${remaining.toStringAsFixed(2)}',
+                                ? 'Pay via QRPH (min 50%)'
+                                : 'Pay Remaining ₱${AppTheme.fmtAmt(remaining)}',
                             style: TextStyle(
                               color: _payingNow
                                   ? _G.textMuted
@@ -2259,7 +2277,7 @@ class _BalRow extends StatelessWidget {
         ),
       ),
       Text(
-        value < 0.01 ? 'Settled' : '₱${value.toStringAsFixed(2)}',
+        value < 0.01 ? 'Settled' : '₱${AppTheme.fmtAmt(value)}',
         style: TextStyle(
           color: color,
           fontSize: large ? 18 : 13,
@@ -2621,7 +2639,7 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
           ),
           const SizedBox(height: 12),
           Text(
-            '₱${amount.toStringAsFixed(2)}',
+            '₱${AppTheme.fmtAmt(amount)}',
             style: const TextStyle(
               color: _G.textPrimary,
               fontSize: 14,
@@ -2630,7 +2648,7 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
           ),
           const SizedBox(height: 3),
           const Text(
-            'Opens PayMongo → GCash / Maya / Card',
+            'Opens QRPH checkout (GCash / Maya / Card)',
             style: TextStyle(color: _G.textMuted, fontSize: 11),
           ),
           const SizedBox(height: 2),

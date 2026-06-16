@@ -357,7 +357,11 @@ class _OrderCardState extends State<_OrderCard> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-          double chosen = (double.tryParse(ctrl.text) ?? maxAmt).clamp(minAmt, maxAmt);
+          final rawChosen = double.tryParse(ctrl.text) ?? 0;
+          final bool chosenTooLow = rawChosen < minAmt - 0.009;
+          final bool chosenTooHigh = rawChosen > maxAmt + 0.009;
+          final bool chosenValid = !chosenTooLow && !chosenTooHigh;
+          final double chosen = rawChosen.clamp(0.0, double.infinity);
 
           void setAmt(double v) {
             final c = v.clamp(minAmt, maxAmt);
@@ -405,8 +409,8 @@ class _OrderCardState extends State<_OrderCard> {
                         Expanded(
                           child: Text(
                             isInitial
-                                ? 'Minimum: ₱${minAmt.toStringAsFixed(2)} (50% downpayment)'
-                                : 'Outstanding balance: ₱${maxAmt.toStringAsFixed(2)}',
+                                ? 'Minimum: ₱${AppTheme.fmtAmt(minAmt)} (50% downpayment)'
+                                : 'Outstanding balance: ₱${AppTheme.fmtAmt(maxAmt)}',
                             style: const TextStyle(
                                 color: AppTheme.gold, fontSize: 12, fontWeight: FontWeight.w500),
                           ),
@@ -452,6 +456,25 @@ class _OrderCardState extends State<_OrderCard> {
                   ),
                   const SizedBox(height: 10),
 
+                  // Inline error when amount is out of range
+                  if (chosenTooLow || chosenTooHigh) ...[
+                    Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.redAccent, size: 13),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            chosenTooLow
+                                ? 'Minimum: ₱${AppTheme.fmtAmt(minAmt)}${isInitial ? ' (50% downpayment)' : ''}'
+                                : 'Cannot exceed ₱${AppTheme.fmtAmt(maxAmt)}',
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 11.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+
                   // QR note
                   Row(
                     children: [
@@ -459,7 +482,7 @@ class _OrderCardState extends State<_OrderCard> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'PayMongo checkout includes GCash & Maya QR codes',
+                          'QRPH checkout (GCash / Maya / Card)',
                           style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.5), fontSize: 11),
                         ),
@@ -471,12 +494,12 @@ class _OrderCardState extends State<_OrderCard> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: chosen < minAmt - 0.009
+                      onPressed: !chosenValid
                           ? null
                           : () => Navigator.pop(ctx, chosen),
                       icon: const Icon(Icons.payment_rounded),
                       label: Text(
-                        'Pay ₱${chosen.toStringAsFixed(2)} via PayMongo',
+                        'Pay ₱${AppTheme.fmtAmt(chosen)} via QRPH',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -668,8 +691,8 @@ class _OrderCardState extends State<_OrderCard> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(isFullyPaid
-            ? '₱${paidAmount.toStringAsFixed(2)} paid — order fully settled!'
-            : '₱${paidAmount.toStringAsFixed(2)} paid. Remaining: ₱${newRemain.toStringAsFixed(2)}'),
+            ? '₱${AppTheme.fmtAmt(paidAmount)} paid — order fully settled!'
+            : '₱${AppTheme.fmtAmt(paidAmount)} paid. Remaining: ₱${AppTheme.fmtAmt(newRemain)}'),
         backgroundColor: isFullyPaid ? Colors.green.shade700 : Colors.blue.shade700,
         duration: const Duration(seconds: 4),
       ));
@@ -766,11 +789,11 @@ class _OrderCardState extends State<_OrderCard> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Paid ₱${_paid.toStringAsFixed(2)}',
+                            Text('Paid ₱${AppTheme.fmtAmt(_paid)}',
                                 style: const TextStyle(color: Colors.green, fontSize: 10)),
                             Text(
                               _remaining > 0
-                                  ? 'Due ₱${_remaining.toStringAsFixed(2)}'
+                                  ? 'Due ₱${AppTheme.fmtAmt(_remaining)}'
                                   : 'Fully Paid',
                               style: TextStyle(
                                   color: _remaining > 0 ? AppTheme.gold : Colors.green,
@@ -817,8 +840,8 @@ class _OrderCardState extends State<_OrderCard> {
                     _payingNow
                         ? 'Loading…'
                         : _status == 'awaiting_payment'
-                        ? 'Pay via PayMongo (min 50%)'
-                        : 'Pay Remaining ₱${_remaining.toStringAsFixed(2)}',
+                        ? 'Pay via QRPH (min 50%)'
+                        : 'Pay Remaining ₱${AppTheme.fmtAmt(_remaining)}',
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -938,7 +961,7 @@ class _OrderDetailSheet extends StatelessWidget {
           ...products.map((p) {
             final name     = p['name']?.toString() ?? 'Item';
             final qty      = p['qty']?.toString() ?? '1';
-            final price    = (p['price'] as num?)?.toStringAsFixed(2) ?? '—';
+            final price    = p['price'] != null ? AppTheme.fmtAmt((p['price'] as num).toDouble()) : '—';
             final size     = p['size_label']?.toString();
             final mat      = p['material']?.toString();
             final notes    = p['notes']?.toString() ?? '';
@@ -1016,13 +1039,13 @@ class _OrderDetailSheet extends StatelessWidget {
           // Balance summary
           Row(children: [
             const Expanded(child: Text('Total', style: TextStyle(color: Colors.white70, fontSize: 13))),
-            Text('₱${total.toStringAsFixed(2)}',
+            Text('₱${AppTheme.fmtAmt(total)}',
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
           ]),
           const SizedBox(height: 6),
           Row(children: [
             const Expanded(child: Text('Paid', style: TextStyle(color: Colors.white70, fontSize: 13))),
-            Text('₱${paid.toStringAsFixed(2)}',
+            Text('₱${AppTheme.fmtAmt(paid)}',
                 style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w600, fontSize: 14)),
           ]),
           const SizedBox(height: 6),
@@ -1031,7 +1054,7 @@ class _OrderDetailSheet extends StatelessWidget {
                 style: TextStyle(
                     color: remaining > 0 ? AppTheme.gold : Colors.green,
                     fontSize: 14, fontWeight: FontWeight.bold))),
-            Text('₱${remaining.toStringAsFixed(2)}',
+            Text('₱${AppTheme.fmtAmt(remaining)}',
                 style: TextStyle(
                     color: remaining > 0 ? AppTheme.gold : Colors.green,
                     fontWeight: FontWeight.bold, fontSize: 18)),
@@ -1057,8 +1080,8 @@ class _OrderDetailSheet extends StatelessWidget {
                 icon: const Icon(Icons.payment_rounded),
                 label: Text(
                   status == 'awaiting_payment'
-                      ? 'Pay via PayMongo (min 50%)'
-                      : 'Pay Remaining ₱${remaining.toStringAsFixed(2)} via PayMongo',
+                      ? 'Pay via QRPH (min 50%)'
+                      : 'Pay Remaining ₱${AppTheme.fmtAmt(remaining)} via QRPH',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1383,11 +1406,11 @@ class _PaymentQrSectionState extends State<_PaymentQrSection> {
           ),
 
           const SizedBox(height: 12),
-          Text('₱${amount.toStringAsFixed(2)}',
+          Text('₱${AppTheme.fmtAmt(amount)}',
               style: const TextStyle(
                   color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 3),
-          const Text('Opens PayMongo → GCash / Maya / Card',
+          const Text('Opens QRPH checkout (GCash / Maya / Card)',
               style: TextStyle(color: Colors.white38, fontSize: 11)),
           const SizedBox(height: 2),
           const Text('This QR is unique to this order and safe to share.',

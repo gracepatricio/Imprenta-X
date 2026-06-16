@@ -876,10 +876,10 @@ decoration: AppTheme.backgroundDecoration(context),
                   _pricingUnit == 'per_qty'
                       ? '₱${_effectiveBasePrice.toStringAsFixed(0)} / $_pricingQty pcs'
                       : _pricingUnit == 'per_sqin'
-                      ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq in'
+                      ? '₱${AppTheme.fmtAmt(_effectiveBasePrice)} / sq in'
                       : _pricingUnit == 'per_sqft'
-                      ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq ft'
-                      : '₱${_effectiveBasePrice.toStringAsFixed(2)} / pc',
+                      ? '₱${AppTheme.fmtAmt(_effectiveBasePrice)} / sq ft'
+                      : '₱${AppTheme.fmtAmt(_effectiveBasePrice)} / pc',
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -1153,10 +1153,10 @@ decoration: AppTheme.backgroundDecoration(context),
             final priceLabel = _pricingUnit == 'per_qty'
                 ? '+₱${price.toStringAsFixed(0)} / $_pricingQty pcs'
                 : _pricingUnit == 'per_sqin'
-                ? '+₱${price.toStringAsFixed(2)} / sq in'
+                ? '+₱${AppTheme.fmtAmt(price)} / sq in'
                 : _pricingUnit == 'per_sqft'
-                ? '+₱${price.toStringAsFixed(2)} / sq ft'
-                : '+₱${price.toStringAsFixed(2)} / piece';
+                ? '+₱${AppTheme.fmtAmt(price)} / sq ft'
+                : '+₱${AppTheme.fmtAmt(price)} / piece';
             return GestureDetector(
               onTap: () => setState(() {
                 if (sel) _selectedServices.remove(name); else _selectedServices.add(name);
@@ -1315,10 +1315,10 @@ decoration: AppTheme.backgroundDecoration(context),
                 _pricingUnit == 'per_qty'
                     ? '₱${_effectiveBasePrice.toStringAsFixed(0)} / $_pricingQty pcs'
                     : _pricingUnit == 'per_sqin'
-                    ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq in'
+                    ? '₱${AppTheme.fmtAmt(_effectiveBasePrice)} / sq in'
                     : _pricingUnit == 'per_sqft'
-                    ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq ft'
-                    : '₱${_effectiveBasePrice.toStringAsFixed(2)} / pc',
+                    ? '₱${AppTheme.fmtAmt(_effectiveBasePrice)} / sq ft'
+                    : '₱${AppTheme.fmtAmt(_effectiveBasePrice)} / pc',
                 style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -1645,10 +1645,10 @@ decoration: AppTheme.backgroundDecoration(context),
             final priceLabel = _pricingUnit == 'per_qty'
                 ? '+₱${price.toStringAsFixed(0)} / $_pricingQty pcs'
                 : _pricingUnit == 'per_sqin'
-                ? '+₱${price.toStringAsFixed(2)} / sq in'
+                ? '+₱${AppTheme.fmtAmt(price)} / sq in'
                 : _pricingUnit == 'per_sqft'
-                ? '+₱${price.toStringAsFixed(2)} / sq ft'
-                : '+₱${price.toStringAsFixed(2)} / piece';
+                ? '+₱${AppTheme.fmtAmt(price)} / sq ft'
+                : '+₱${AppTheme.fmtAmt(price)} / piece';
             return GestureDetector(
               onTap: () => setState(() {
                 if (sel) _selectedServices.remove(name);
@@ -1862,7 +1862,7 @@ decoration: AppTheme.backgroundDecoration(context),
         if (_discountAmount > 0)
           _sumRow(
             'Bulk Discount',
-            '-₱${_discountAmount.toStringAsFixed(2)}',
+            '-₱${AppTheme.fmtAmt(_discountAmount)}',
             valueColor: Colors.greenAccent,
           ),
         _sumRow('Shipping', 'Pick-Up'),
@@ -1891,7 +1891,7 @@ decoration: AppTheme.backgroundDecoration(context),
                       fontWeight: FontWeight.bold,
                       fontSize: 15)),
             ),
-            Text('₱${_subtotal.toStringAsFixed(2)}',
+            Text('₱${AppTheme.fmtAmt(_subtotal)}',
                 style: const TextStyle(
                     color: AppTheme.gold,
                     fontWeight: FontWeight.bold,
@@ -1924,7 +1924,7 @@ decoration: AppTheme.backgroundDecoration(context),
               ),
               const SizedBox(width: 8),
               Text(
-                '₱${(_subtotal * 0.5).toStringAsFixed(2)}',
+                '₱${AppTheme.fmtAmt(_subtotal * 0.5)}',
                 style: const TextStyle(
                     color: Colors.orangeAccent,
                     fontSize: 13,
@@ -2147,7 +2147,7 @@ decoration: AppTheme.backgroundDecoration(context),
                 borderRadius: BorderRadius.circular(99),
               ),
               child: Text(
-                'Discount applied: -₱${_discountAmount.toStringAsFixed(2)}',
+                'Discount applied: -₱${AppTheme.fmtAmt(_discountAmount)}',
                 style: const TextStyle(
                     color: Colors.greenAccent,
                     fontSize: 11,

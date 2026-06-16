@@ -1563,19 +1563,19 @@ class _OrderHistoryCard extends StatelessWidget {
                     children: [
                       _InfoChip(
                         'Total',
-                        '₱${total.toStringAsFixed(2)}',
+                        '₱${AppTheme.fmtAmt(total)}',
                         _Glass.textSecondary,
                       ),
                       const SizedBox(width: 10),
                       _InfoChip(
                         'Paid',
-                        '₱${paid.toStringAsFixed(2)}',
+                        '₱${AppTheme.fmtAmt(paid)}',
                         _Glass.accentEmerald,
                       ),
                       const SizedBox(width: 10),
                       _InfoChip(
                         fullyPaid ? 'Fully Paid' : 'Balance',
-                        fullyPaid ? '—' : '₱${remaining.toStringAsFixed(2)}',
+                        fullyPaid ? '—' : '₱${AppTheme.fmtAmt(remaining)}',
                         fullyPaid ? _Glass.accentEmerald : _amber,
                         bold: true,
                       ),
@@ -2315,7 +2315,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                                                     : '${item.widthFt}ft × ${item.heightFt}ft',
                                               if (item.material != null)
                                                 item.material!,
-                                              '₱${item.unitPrice.toStringAsFixed(2)} × ${item.qty} = ₱${item.subtotal.toStringAsFixed(2)}',
+                                              '₱${AppTheme.fmtAmt(item.unitPrice)} × ${item.qty} = ₱${AppTheme.fmtAmt(item.subtotal)}',
                                             ].join(' · '),
                                             style: const TextStyle(
                                               color: _Glass.textMuted,
@@ -2431,7 +2431,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                                   ),
                                   const Spacer(),
                                   Text(
-                                    'Total: ₱${_total.toStringAsFixed(2)}',
+                                    'Total: ₱${AppTheme.fmtAmt(_total)}',
                                     style: const TextStyle(
                                       color: _Glass.textPrimary,
                                       fontWeight: FontWeight.w800,
@@ -2484,10 +2484,10 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                               if (_items.isNotEmpty) {
                                 final minDown = _total * 0.5;
                                 if (n < minDown - 0.01) {
-                                  return 'Minimum 50% downpayment required: ₱${minDown.toStringAsFixed(2)}';
+                                  return 'Minimum 50% downpayment required: ₱${AppTheme.fmtAmt(minDown)}';
                                 }
                                 if (n > _total + 0.01) {
-                                  return 'Cannot exceed total ₱${_total.toStringAsFixed(2)}';
+                                  return 'Cannot exceed total ₱${AppTheme.fmtAmt(_total)}';
                                 }
                               }
                               return null;
@@ -3470,7 +3470,7 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    '₱${price.toStringAsFixed(2)}',
+                                    '₱${AppTheme.fmtAmt(price)}',
                                     style: const TextStyle(
                                       color: _Glass.textPrimary,
                                       fontWeight: FontWeight.w800,
@@ -3584,12 +3584,12 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                           const SizedBox(height: 4),
                           Text(
                             _pricingUnit == 'per_qty'
-                                ? '₱${_effectiveBasePrice.toStringAsFixed(2)} per $_pricingQty pcs'
+                                ? '₱${AppTheme.fmtAmt(_effectiveBasePrice)} per $_pricingQty pcs'
                                 : _pricingUnit == 'per_sqin'
-                                ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq in'
+                                ? '₱${AppTheme.fmtAmt(_effectiveBasePrice)} / sq in'
                                 : _pricingUnit == 'per_sqft'
-                                ? '₱${_effectiveBasePrice.toStringAsFixed(2)} / sq ft'
-                                : '₱${_effectiveBasePrice.toStringAsFixed(2)} / piece',
+                                ? '₱${AppTheme.fmtAmt(_effectiveBasePrice)} / sq ft'
+                                : '₱${AppTheme.fmtAmt(_effectiveBasePrice)} / piece',
                             style: const TextStyle(
                               color: _Glass.textMuted,
                               fontSize: 12,
@@ -3855,7 +3855,7 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                         const SizedBox(width: 8),
                       ],
                       Text(
-                        '₱${_lineSubtotal.toStringAsFixed(2)}',
+                        '₱${AppTheme.fmtAmt(_lineSubtotal)}',
                         style: const TextStyle(
                           color: _navyBlue,
                           fontWeight: FontWeight.w800,
@@ -3890,10 +3890,10 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                     final priceLabel = _pricingUnit == 'per_qty'
                         ? '+₱${price.toStringAsFixed(0)} / $_pricingQty pcs'
                         : _pricingUnit == 'per_sqin'
-                        ? '+₱${price.toStringAsFixed(2)} / sq in'
+                        ? '+₱${AppTheme.fmtAmt(price)} / sq in'
                         : _pricingUnit == 'per_sqft'
-                        ? '+₱${price.toStringAsFixed(2)} / sq ft'
-                        : '+₱${price.toStringAsFixed(2)} / piece';
+                        ? '+₱${AppTheme.fmtAmt(price)} / sq ft'
+                        : '+₱${AppTheme.fmtAmt(price)} / piece';
 
                     return GestureDetector(
                       onTap: () => setState(() {
@@ -4225,7 +4225,7 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                       style: TextStyle(color: _Glass.textMuted, fontSize: 11),
                     ),
                     Text(
-                      '₱${_lineSubtotal.toStringAsFixed(2)}',
+                      '₱${AppTheme.fmtAmt(_lineSubtotal)}',
                       style: const TextStyle(
                         color: _navyBlue,
                         fontSize: 20,
@@ -4233,7 +4233,7 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
                       ),
                     ),
                     Text(
-                      '50% min: ₱${(_lineSubtotal * 0.5).toStringAsFixed(2)}',
+                      '50% min: ₱${AppTheme.fmtAmt(_lineSubtotal * 0.5)}',
                       style: const TextStyle(
                         color: _Glass.textMuted,
                         fontSize: 10,
@@ -4945,7 +4945,7 @@ class _ReadyOrderCard extends StatelessWidget {
         'Regarding Order: $orderLabel\n'
         'Items: $productSummary\n'
         'Status: Ready for Pickup\n'
-        'Total: ₱${total.toStringAsFixed(2)}';
+        'Total: ₱${AppTheme.fmtAmt(total)}';
 
     await threadRef.collection('chat').add({
       'sender_uid': user?.uid ?? 'employee',
@@ -5117,19 +5117,19 @@ class _ReadyOrderCard extends StatelessWidget {
               children: [
                 _InfoChip(
                   'Total',
-                  '₱${total.toStringAsFixed(2)}',
+                  '₱${AppTheme.fmtAmt(total)}',
                   _Glass.textSecondary,
                 ),
                 const SizedBox(width: 10),
                 _InfoChip(
                   'Paid',
-                  '₱${paid.toStringAsFixed(2)}',
+                  '₱${AppTheme.fmtAmt(paid)}',
                   _Glass.accentEmerald,
                 ),
                 const SizedBox(width: 10),
                 _InfoChip(
                   fullyPaid ? 'Fully Paid' : 'Balance Due',
-                  fullyPaid ? '—' : '₱${remaining.toStringAsFixed(2)}',
+                  fullyPaid ? '—' : '₱${AppTheme.fmtAmt(remaining)}',
                   fullyPaid ? _Glass.accentEmerald : _amber,
                   bold: true,
                 ),
@@ -5175,7 +5175,7 @@ class _ReadyOrderCard extends StatelessWidget {
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  '₱${remaining.toStringAsFixed(2)} balance due — via POS or app payment',
+                                  '₱${AppTheme.fmtAmt(remaining)} balance due — via POS or app payment',
                                   style: const TextStyle(
                                     color: _Glass.accentAmber,
                                     fontSize: 11,
@@ -5451,7 +5451,7 @@ class _RefundPickupSection extends StatelessWidget {
         SnackBar(
           content: Text(
             'Refund pickup confirmed for $orderId'
-            '${actualPaid > 0.01 ? ' — ₱${actualPaid.toStringAsFixed(2)} deducted from sales' : ''}',
+            '${actualPaid > 0.01 ? ' — ₱${AppTheme.fmtAmt(actualPaid)} deducted from sales' : ''}',
           ),
           backgroundColor: _Glass.accentEmerald,
         ),
@@ -5529,7 +5529,7 @@ class _RefundPickupSection extends StatelessWidget {
               Expanded(
                 child: Text(
                   amountPaid > 0.01
-                      ? 'Refund to be picked up — ₱${amountPaid.toStringAsFixed(2)}'
+                      ? 'Refund to be picked up — ₱${AppTheme.fmtAmt(amountPaid)}'
                       : 'Refund to be picked up',
                   style: const TextStyle(
                     color: _Glass.accentAmber,
@@ -6253,7 +6253,7 @@ class _QueueCard extends StatelessWidget {
 
     if (customerUid != null && customerUid.isNotEmpty) {
       final balanceNote = remaining > 0
-          ? ' Remaining balance due on pickup: ₱${remaining.toStringAsFixed(2)}.'
+          ? ' Remaining balance due on pickup: ₱${AppTheme.fmtAmt(remaining)}.'
           : ' Your order is fully paid — just come pick it up!';
       final threadRef = FirebaseFirestore.instance
           .collection('Messages')
@@ -6319,7 +6319,7 @@ class _QueueCard extends StatelessWidget {
         'Regarding Order: $orderId\n'
         'Items: $productSummary\n'
         'Status: $statusLabel\n'
-        'Total: ₱${total.toStringAsFixed(2)}';
+        'Total: ₱${AppTheme.fmtAmt(total)}';
 
     await threadRef.collection('chat').add({
       'sender_uid': user?.uid ?? 'employee',
@@ -6625,7 +6625,7 @@ class _QueueCard extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '₱${total.toStringAsFixed(2)}',
+                                  '₱${AppTheme.fmtAmt(total)}',
                                   style: const TextStyle(
                                     color: _Glass.accentAmber,
                                     fontSize: 14,
@@ -6634,7 +6634,7 @@ class _QueueCard extends StatelessWidget {
                                 ),
                                 if (paid > 0)
                                   Text(
-                                    'Paid: ₱${paid.toStringAsFixed(2)}',
+                                    'Paid: ₱${AppTheme.fmtAmt(paid)}',
                                     style: const TextStyle(
                                       color: _Glass.accentEmerald,
                                       fontSize: 11,
@@ -6721,7 +6721,7 @@ class _QueueCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              '₱${total.toStringAsFixed(2)}',
+                              '₱${AppTheme.fmtAmt(total)}',
                               style: const TextStyle(
                                 color: _Glass.accentAmber,
                                 fontSize: 14,
@@ -6730,7 +6730,7 @@ class _QueueCard extends StatelessWidget {
                             ),
                             if (paid > 0)
                               Text(
-                                'Paid: ₱${paid.toStringAsFixed(2)}',
+                                'Paid: ₱${AppTheme.fmtAmt(paid)}',
                                 style: const TextStyle(
                                   color: _Glass.accentEmerald,
                                   fontSize: 11,

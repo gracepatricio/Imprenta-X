@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class AppTheme {
+  static final _amtFmt = NumberFormat('#,##0.00');
+  static String fmtAmt(double v) => _amtFmt.format(v);
   // Background image (legacy — kept for backward compat)
   static const DecorationImage backgroundImage = DecorationImage(
     image: AssetImage('assets/images/sysbackground.jpg'),

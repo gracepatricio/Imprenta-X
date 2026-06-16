@@ -158,8 +158,11 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-          double payAmount = double.tryParse(amountCtrl.text) ?? minPay;
-          payAmount = payAmount.clamp(minPay, total);
+          final _rawAmt = double.tryParse(amountCtrl.text) ?? 0;
+          final bool _amtTooLow = _rawAmt < minPay - 0.009;
+          final bool _amtTooHigh = _rawAmt > total + 0.009;
+          final bool _amtValid = !_amtTooLow && !_amtTooHigh;
+          final payAmount = _rawAmt.clamp(minPay, total);
           final remaining = total - payAmount;
           final pct = (payAmount / total * 100).round();
 
@@ -358,7 +361,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                                   ),
                                                   const SizedBox(width: 8),
                                                   Text(
-                                                    '₱${item.subtotal.toStringAsFixed(2)}',
+                                                    '₱${AppTheme.fmtAmt(item.subtotal)}',
                                                     style: const TextStyle(
                                                       color: AppTheme.gold,
                                                       fontWeight:
@@ -458,7 +461,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                           ),
                                           const Spacer(),
                                           Text(
-                                            '₱${total.toStringAsFixed(2)}',
+                                            '₱${AppTheme.fmtAmt(total)}',
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.bold,
@@ -514,7 +517,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: Text(
-                                          'Minimum required: ₱${minPay.toStringAsFixed(2)} (50% downpayment)',
+                                          'Minimum required: ₱${AppTheme.fmtAmt(minPay)} (50% downpayment)',
                                           style: const TextStyle(
                                             color: AppTheme.gold,
                                             fontSize: 12,
@@ -603,6 +606,23 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                     ],
                                   ),
                                 ),
+                                if (_amtTooLow || _amtTooHigh) ...[
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 13),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          _amtTooLow
+                                              ? 'Minimum: ₱${AppTheme.fmtAmt(minPay)} (50% downpayment)'
+                                              : 'Cannot exceed order total of ₱${AppTheme.fmtAmt(total)}',
+                                          style: const TextStyle(color: Colors.redAccent, fontSize: 11.5),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                                 const SizedBox(height: 14),
 
                                 // Breakdown card
@@ -690,7 +710,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                       Expanded(
                                         child: Text(
                                           'QRPH / GCash / Maya and card — a secure '
-                                          'QR code checkout powered by PayMongo.',
+                                          'QR code checkout.',
                                           style: TextStyle(
                                             color: Colors.white.withValues(
                                               alpha: 0.6,
@@ -710,7 +730,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                   width: double.infinity,
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(30),
-                                    boxShadow: payAmount < minPay - 0.009
+                                    boxShadow: !_amtValid
                                         ? null
                                         : [
                                             BoxShadow(
@@ -721,7 +741,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                           ],
                                   ),
                                   child: ElevatedButton.icon(
-                                    onPressed: payAmount < minPay - 0.009
+                                    onPressed: !_amtValid
                                         ? null
                                         : () {
                                             final chosenAmt =
@@ -743,7 +763,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                       size: 18,
                                     ),
                                     label: Text(
-                                      'Pay ₱${payAmount.toStringAsFixed(2)} via QRPH',
+                                      'Pay ₱${AppTheme.fmtAmt(payAmount)} via QRPH',
                                       style: const TextStyle(
                                         fontFamily: 'Spartan',
                                         fontWeight: FontWeight.w800,
@@ -1030,8 +1050,8 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       'sender_role': 'system',
       'text':
           'Payment confirmed for $orderId\n'
-          'Paid: ₱${paidAmount.toStringAsFixed(2)}'
-          '${remaining > 0 ? ' | Balance due: ₱${remaining.toStringAsFixed(2)}' : ' (Fully paid)'}',
+          'Paid: ₱${AppTheme.fmtAmt(paidAmount)}'
+          '${remaining > 0 ? ' | Balance due: ₱${AppTheme.fmtAmt(remaining)}' : ' (Fully paid)'}',
       'timestamp': now,
     });
 
@@ -1284,7 +1304,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
-                                          '50% down: ₱${_downpayment.toStringAsFixed(2)}',
+                                          '50% down: ₱${AppTheme.fmtAmt(_downpayment)}',
                                           style: const TextStyle(
                                             color: AppTheme.gold,
                                             fontSize: 11,
@@ -1310,7 +1330,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                       ),
                                     ),
                                     Text(
-                                      '₱${_subtotal.toStringAsFixed(2)}',
+                                      '₱${AppTheme.fmtAmt(_subtotal)}',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 22,
@@ -1526,7 +1546,7 @@ class _SheetSummaryRow extends StatelessWidget {
         ),
       ),
       Text(
-        '₱${value.toStringAsFixed(2)}',
+        '₱${AppTheme.fmtAmt(value)}',
         style: TextStyle(
           color: color,
           fontSize: bold ? 15 : 13,
@@ -1727,7 +1747,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    '₱${item.subtotal.toStringAsFixed(2)}',
+                    '₱${AppTheme.fmtAmt(item.subtotal)}',
                     style: const TextStyle(
                       color: AppTheme.gold,
                       fontWeight: FontWeight.bold,

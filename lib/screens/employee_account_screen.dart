@@ -1003,7 +1003,15 @@ class _EmployeeDashboardContent extends StatelessWidget {
               final unreadDocs = allDocs.where((d) {
                 final u = ((d.data() as Map)['unread_employee'] as num?) ?? 0;
                 return u > 0;
-              }).toList();
+              }).toList()
+                ..sort((a, b) {
+                  final at = (a.data() as Map)['last_updated'];
+                  final bt = (b.data() as Map)['last_updated'];
+                  if (at == null && bt == null) return 0;
+                  if (at == null) return 1;
+                  if (bt == null) return -1;
+                  return (bt as Timestamp).compareTo(at as Timestamp);
+                });
               final totalUnread = unreadDocs.fold<int>(
                 0,
                 (sum, d) =>

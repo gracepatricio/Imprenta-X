@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
 import 'sales_widgets.dart';
-import 'sales_import_widget.dart';
 import 'invoice_screen.dart';
 import 'design_file_viewer.dart';
 
@@ -1154,19 +1153,19 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
                     children: [
                       _AdminInfoChip(
                         'Total',
-                        '₱${total.toStringAsFixed(2)}',
+                        '₱${AppTheme.fmtAmt(total)}',
                         _G.textSecondary,
                       ),
                       const SizedBox(width: 10),
                       _AdminInfoChip(
                         'Paid',
-                        '₱${amountPaid.toStringAsFixed(2)}',
+                        '₱${AppTheme.fmtAmt(amountPaid)}',
                         _G.accentEmerald,
                       ),
                       const SizedBox(width: 10),
                       _AdminInfoChip(
                         fullyPaid ? 'Fully Paid' : 'Balance Due',
-                        fullyPaid ? '—' : '₱${remaining.toStringAsFixed(2)}',
+                        fullyPaid ? '—' : '₱${AppTheme.fmtAmt(remaining)}',
                         fullyPaid ? _G.accentEmerald : _G.accentAmber,
                         bold: true,
                       ),
@@ -1245,13 +1244,13 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
                     children: [
                       _AdminInfoChip(
                         'Total',
-                        '₱${total.toStringAsFixed(2)}',
+                        '₱${AppTheme.fmtAmt(total)}',
                         _G.textSecondary,
                       ),
                       const SizedBox(width: 10),
                       _AdminInfoChip(
                         'Paid',
-                        '₱${amountPaid.toStringAsFixed(2)}',
+                        '₱${AppTheme.fmtAmt(amountPaid)}',
                         _G.accentEmerald,
                       ),
                       const SizedBox(width: 10),
@@ -1259,7 +1258,7 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
                         fullyPaid ? 'Fully Paid' : 'Balance',
                         fullyPaid
                             ? '—'
-                            : '₱${remaining.toStringAsFixed(2)}',
+                            : '₱${AppTheme.fmtAmt(remaining)}',
                         fullyPaid ? _G.accentEmerald : _G.accentAmber,
                         bold: true,
                       ),
@@ -1355,7 +1354,7 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            '₱${total.toStringAsFixed(2)}',
+                            '₱${AppTheme.fmtAmt(total)}',
                             style: const TextStyle(
                               color: _G.accentAmber,
                               fontSize: 14,
@@ -1364,7 +1363,7 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
                           ),
                           if (amountPaid > 0)
                             Text(
-                              'Paid: ₱${amountPaid.toStringAsFixed(2)}',
+                              'Paid: ₱${AppTheme.fmtAmt(amountPaid)}',
                               style: const TextStyle(
                                 color: _G.accentEmerald,
                                 fontSize: 11,
@@ -1447,7 +1446,7 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              'Refund to be picked up — ₱${amountPaid.toStringAsFixed(2)}',
+                              'Refund to be picked up — ₱${AppTheme.fmtAmt(amountPaid)}',
                               style: const TextStyle(
                                 color: _G.accentAmber,
                                 fontSize: 12,
@@ -1478,7 +1477,7 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            '₱${total.toStringAsFixed(2)}',
+                            '₱${AppTheme.fmtAmt(total)}',
                             style: const TextStyle(
                               color: _G.accentAmber,
                               fontSize: 14,
@@ -1487,7 +1486,7 @@ class _AdminReadOnlyQueueCard extends StatelessWidget {
                           ),
                           if (amountPaid > 0)
                             Text(
-                              'Paid: ₱${amountPaid.toStringAsFixed(2)}',
+                              'Paid: ₱${AppTheme.fmtAmt(amountPaid)}',
                               style: const TextStyle(
                                 color: _G.accentEmerald,
                                 fontSize: 11,
@@ -2105,7 +2104,6 @@ class _SalesRecordSubTabState extends State<_SalesRecordSubTab> {
                 ),
               ),
               const Spacer(),
-              if (_sub == _SalesSubTab.record) const SalesImportButton(),
             ],
           ),
         ),
@@ -3235,7 +3233,7 @@ class _JobQueueActivityRow extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 3),
                     child: Text(
-                      '₱${amountRefunded.toStringAsFixed(2)} refunded',
+                      '₱${AppTheme.fmtAmt(amountRefunded)} refunded',
                       style: const TextStyle(color: _G.accentEmerald, fontSize: 10),
                     ),
                   ),
@@ -3401,7 +3399,7 @@ class _PosActivityRow extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.only(top: 1),
               child: Text(
-                '₱${amount.toStringAsFixed(2)}',
+                '₱${AppTheme.fmtAmt(amount)}',
                 style: const TextStyle(
                   color: _G.accentAmber,
                   fontSize: 13,
@@ -4913,14 +4911,14 @@ class _OrderHistoryCard extends StatelessWidget {
 
               final totalChip = _PayChip(
                 label: 'Total',
-                value: '₱${total.toStringAsFixed(2)}',
+                value: '₱${AppTheme.fmtAmt(total)}',
                 color: _G.textPrimary,
                 bgColor: _G.surfaceThin,
                 borderColor: _G.borderMid,
               );
               final paidChip = _PayChip(
                 label: 'Paid',
-                value: '₱${paid.toStringAsFixed(2)}',
+                value: '₱${AppTheme.fmtAmt(paid)}',
                 color: _G.accentEmerald,
                 bgColor: const Color(0xFFF0FDF4),
                 borderColor: const Color(0xFFBBF7D0),
@@ -4929,7 +4927,7 @@ class _OrderHistoryCard extends StatelessWidget {
                 label: fullyPaid ? 'Fully Paid' : 'Balance',
                 value: fullyPaid
                     ? '✓ Paid'
-                    : '₱${remaining.toStringAsFixed(2)}',
+                    : '₱${AppTheme.fmtAmt(remaining)}',
                 color: fullyPaid ? _G.accentEmerald : _G.amber,
                 bgColor: fullyPaid
                     ? const Color(0xFFF0FDF4)

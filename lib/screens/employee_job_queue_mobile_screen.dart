@@ -521,7 +521,7 @@ class _MobileQueueListState extends State<_MobileQueueList> {
           if (ta == null && tb == null) return 0;
           if (ta == null) return 1;
           if (tb == null) return -1;
-          return tb.compareTo(ta);
+          return ta.compareTo(tb);
         });
       return docs;
     });
@@ -940,7 +940,7 @@ class _MobileOrderCard extends StatelessWidget {
                           Text(
                             orderId,
                             style: const TextStyle(
-                              color: _Glass.textPrimary,
+                              color: Colors.black,
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
                               letterSpacing: -0.2,
@@ -975,7 +975,7 @@ class _MobileOrderCard extends StatelessWidget {
                       Text(
                         customerName,
                         style: const TextStyle(
-                          color: _Glass.textSecondary,
+                          color: Colors.black,
                           fontSize: 12,
                         ),
                       ),
@@ -1082,7 +1082,7 @@ class _MobileOrderCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '₱${total.toStringAsFixed(2)}',
+                      '₱${AppTheme.fmtAmt(total)}',
                       style: const TextStyle(
                         color: _Glass.accentAmber,
                         fontSize: 14,
@@ -1091,7 +1091,7 @@ class _MobileOrderCard extends StatelessWidget {
                     ),
                     if (amountPaid > 0)
                       Text(
-                        'Paid: ₱${amountPaid.toStringAsFixed(2)}',
+                        'Paid: ₱${AppTheme.fmtAmt(amountPaid)}',
                         style: const TextStyle(
                           color: _Glass.accentEmerald,
                           fontSize: 11,
@@ -1298,60 +1298,68 @@ class _MobileDeadlineBannerState extends State<_MobileDeadlineBanner> {
                 ),
 
                 if (_expanded)
-                  ...due.map((doc) {
-                    final data     = doc.data() as Map<String, dynamic>;
-                    final orderId  = data['order_id']?.toString() ?? doc.id;
-                    final customer = data['customer_name']?.toString() ?? '—';
-                    final ts       = data['estimated_completion'] as Timestamp?;
-                    final dueDate  = ts?.toDate().toLocal();
-                    final isOver   = dueDate != null && dueDate.isBefore(now);
-                    final todayMid = DateTime(now.year, now.month, now.day);
-                    final dueMid   = dueDate != null
-                        ? DateTime(dueDate.year, dueDate.month, dueDate.day)
-                        : null;
-                    final diff     = dueMid?.difference(todayMid).inDays;
-                    final c = isOver ? _Glass.accentRose : _Glass.accentAmber;
-                    final dueLabel = dueDate == null
-                        ? '—'
-                        : diff! < 0
-                            ? 'Overdue'
-                            : diff == 0 ? 'Due TODAY' : 'Due ${_fmtBanner(dueDate)}';
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 220),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: due.map((doc) {
+                          final data     = doc.data() as Map<String, dynamic>;
+                          final orderId  = data['order_id']?.toString() ?? doc.id;
+                          final customer = data['customer_name']?.toString() ?? '—';
+                          final ts       = data['estimated_completion'] as Timestamp?;
+                          final dueDate  = ts?.toDate().toLocal();
+                          final isOver   = dueDate != null && dueDate.isBefore(now);
+                          final todayMid = DateTime(now.year, now.month, now.day);
+                          final dueMid   = dueDate != null
+                              ? DateTime(dueDate.year, dueDate.month, dueDate.day)
+                              : null;
+                          final diff     = dueMid?.difference(todayMid).inDays;
+                          final c = isOver ? _Glass.accentRose : _Glass.accentAmber;
+                          final dueLabel = dueDate == null
+                              ? '—'
+                              : diff! < 0
+                                  ? 'Overdue'
+                                  : diff == 0 ? 'Due TODAY' : 'Due ${_fmtBanner(dueDate)}';
 
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 7),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 22),
-                          Expanded(
-                            child: Text(
-                              '$orderId · $customer',
-                              style: TextStyle(
-                                color: _Glass.textSecondary,
-                                fontSize: 11,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 7),
+                            child: Row(
+                              children: [
+                                const SizedBox(width: 22),
+                                Expanded(
+                                  child: Text(
+                                    '$orderId · $customer',
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 11,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: c.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    dueLabel,
+                                    style: TextStyle(
+                                      color: c,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: c.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              dueLabel,
-                              style: TextStyle(
-                                color: c,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
+                          );
+                        }).toList(),
                       ),
-                    );
-                  }),
+                    ),
+                  ),
               ],
             ),
           ),

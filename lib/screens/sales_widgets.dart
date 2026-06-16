@@ -1075,11 +1075,28 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
   bool _isLimited = false;
   final _searchCtrl = TextEditingController();
 
+  StreamSubscription? _liveSubscription;
+  Timer? _debounce;
+
   @override
   void initState() {
     super.initState();
     _selectedRange = _pLast31();
     _loadRecords();
+    _startLiveSubscription();
+  }
+
+  void _startLiveSubscription() {
+    _liveSubscription = FirebaseFirestore.instance
+        .collection('Sales_Records')
+        .orderBy('sale_date', descending: true)
+        .limit(1)
+        .snapshots()
+        .skip(1) // skip the immediate initial emission; _loadRecords() handles first load
+        .listen((_) {
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 800), _loadRecords);
+    });
   }
 
   Future<void> _loadRecords() async {
@@ -1147,6 +1164,8 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
 
   @override
   void dispose() {
+    _liveSubscription?.cancel();
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -1306,7 +1325,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                 ],
                 _SummaryChip(
                   label: _selectedRange == null ? 'Total' : 'Date Total',
-                  value: '₱${totalRevenue.toStringAsFixed(2)}',
+                  value: '₱${AppTheme.fmtAmt(totalRevenue)}',
                   fg: _T.gold,
                   bg: const Color(0xFFFFFBEB),
                   border: const Color(0xFFFDE68A),
@@ -1322,7 +1341,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
                 const SizedBox(width: 8),
                 _SummaryChip(
                   label: 'To Collect',
-                  value: '₱${_totalOutstanding.toStringAsFixed(2)}',
+                  value: '₱${AppTheme.fmtAmt(_totalOutstanding)}',
                   fg: const Color(0xFFDC2626),
                   bg: const Color(0xFFFEF2F2),
                   border: const Color(0xFFFECACA),
@@ -1594,7 +1613,7 @@ class _SalesRecordCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '₱${totalPaid.toStringAsFixed(2)}',
+                      '₱${AppTheme.fmtAmt(totalPaid)}',
                       style: const TextStyle(
                         color: _T.gold,
                         fontSize: 16,
@@ -1604,7 +1623,7 @@ class _SalesRecordCard extends StatelessWidget {
                     ),
                     if (orderTotal > 0)
                       Text(
-                        'of ₱${orderTotal.toStringAsFixed(2)}',
+                        'of ₱${AppTheme.fmtAmt(orderTotal)}',
                         style: const TextStyle(
                           color: _T.textMuted,
                           fontSize: 10,
@@ -1642,11 +1661,11 @@ class _SalesRecordCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Paid ₱${totalPaid.toStringAsFixed(2)}',
+                    'Paid ₱${AppTheme.fmtAmt(totalPaid)}',
                     style: const TextStyle(color: _T.textMuted, fontSize: 10),
                   ),
                   Text(
-                    'Remaining ₱${(orderTotal - totalPaid).clamp(0, double.infinity).toStringAsFixed(2)}',
+                    'Remaining ₱${AppTheme.fmtAmt((orderTotal - totalPaid).clamp(0, double.infinity))}',
                     style: const TextStyle(
                       color: Color(0xFFB45309),
                       fontSize: 10,
@@ -2382,7 +2401,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
               children: [
                 _AdminReportCard(
                   label: 'Total Revenue',
-                  value: '₱${totalRevenue.toStringAsFixed(2)}',
+                  value: '₱${AppTheme.fmtAmt(totalRevenue)}',
                   color: _T.gold,
                   bg: const Color(0xFFFFFBEB),
                   border: const Color(0xFFFDE68A),
@@ -2398,7 +2417,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
                 ),
                 _AdminReportCard(
                   label: 'Downpayments',
-                  value: '₱${dpTotal.toStringAsFixed(2)}',
+                  value: '₱${AppTheme.fmtAmt(dpTotal)}',
                   color: const Color(0xFF1D4ED8),
                   bg: const Color(0xFFEFF6FF),
                   border: const Color(0xFFBFDBFE),
@@ -2407,7 +2426,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
                 ),
                 _AdminReportCard(
                   label: 'Balance Collected',
-                  value: '₱${balTotal.toStringAsFixed(2)}',
+                  value: '₱${AppTheme.fmtAmt(balTotal)}',
                   color: const Color(0xFFB45309),
                   bg: const Color(0xFFFFFBEB),
                   border: const Color(0xFFFDE68A),
@@ -2416,7 +2435,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
                 ),
                 _AdminReportCard(
                   label: 'Upfront Payments',
-                  value: '₱${uptTotal.toStringAsFixed(2)}',
+                  value: '₱${AppTheme.fmtAmt(uptTotal)}',
                   color: const Color(0xFF6D28D9),
                   bg: const Color(0xFFF5F3FF),
                   border: const Color(0xFFDDD6FE),
@@ -2426,7 +2445,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
                 if (refundTotal > 0)
                   _AdminReportCard(
                     label: 'Refunds',
-                    value: '−₱${refundTotal.toStringAsFixed(2)}',
+                    value: '−₱${AppTheme.fmtAmt(refundTotal)}',
                     color: const Color(0xFF9D174D),
                     bg: const Color(0xFFFFF1F2),
                     border: const Color(0xFFFFCDD2),
@@ -2435,7 +2454,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
                   ),
                 _AdminReportCard(
                   label: 'Balance to Collect',
-                  value: '₱${outstanding.toStringAsFixed(2)}',
+                  value: '₱${AppTheme.fmtAmt(outstanding)}',
                   color: const Color(0xFFDC2626),
                   bg: const Color(0xFFFEF2F2),
                   border: const Color(0xFFFECACA),
@@ -2768,7 +2787,7 @@ class _InteractiveChartState extends State<_InteractiveChart> {
           Text(
             b.total == 0
                 ? 'No sales'
-                : '₱${b.total.toStringAsFixed(2)}',
+                : '₱${AppTheme.fmtAmt(b.total)}',
             style: const TextStyle(
               color: AppTheme.gold,
               fontSize: 13,

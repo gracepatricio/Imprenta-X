@@ -280,6 +280,9 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
       // within the same day — prevents an order near a boundary from flipping
       // between periods on consecutive loads (which destabilises the DES fit).
       final now = DateTime(_now.year, _now.month, _now.day);
+      // Upper bound is tomorrow's midnight so today's orders are included in
+      // the current period (midnight today would exclude same-day orders).
+      final upperBound = Timestamp.fromDate(now.add(const Duration(days: 1)));
 
       // Remove any seeded / imported docs that were incorrectly inflating the forecast.
       await _purgeSeedRecords(db);
@@ -290,7 +293,7 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
 
       int? periodOf(Timestamp ts) {
         if (ts.compareTo(limits[0]) < 0) return null;
-        if (ts.compareTo(limits[_nPeriods]) >= 0) return null;
+        if (ts.compareTo(upperBound) >= 0) return null;
         for (int i = _nPeriods - 1; i >= 0; i--) {
           if (ts.compareTo(limits[i]) >= 0) return i;
         }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'invoice_screen.dart';
+import 'app_theme.dart';
 
 // ── Design tokens (aligned with employee-side Liquid Glass system) ─────────────
 const Color _navyBlue = Color(0xFF0F1A2E);
@@ -224,6 +225,7 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
           final cashPaid  = newPaid - prevPaid;
           final custName  = orderData['customer_name']?.toString() ?? '';
           final custId    = orderData['customer_id']?.toString() ?? '';
+          final walkIn    = orderData['walk_in'] == true;
 
           // ── 1. Update the Order document ──────────────────────────────
           await _db.collection('Orders').doc(orderId).update({
@@ -279,6 +281,7 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
               'sale_amount':    cashPaid,
               'order_total':    total,
               'sale_date':      FieldValue.serverTimestamp(),
+              if (walkIn) 'walk_in': true,
             });
           } else {
             // ── Balance: add a separate Sales_Record for the balance ──
@@ -294,6 +297,7 @@ class _EmployeePosScreenState extends State<EmployeePosScreen> {
               'sale_amount':    cashPaid,
               'order_total':    total,
               'sale_date':      FieldValue.serverTimestamp(),
+              if (walkIn) 'walk_in': true,
             });
           }
 
@@ -1011,7 +1015,7 @@ class _AmountChip extends StatelessWidget {
         Text(label,
             style: const TextStyle(color: _Glass.textMuted, fontSize: 10)),
         const SizedBox(height: 2),
-        Text('₱${value.toStringAsFixed(2)}',
+        Text('₱${AppTheme.fmtAmt(value)}',
             style: TextStyle(
                 color: color,
                 fontSize: bold ? 15 : 13,
@@ -1072,8 +1076,8 @@ class _PaymentSheetState extends State<_PaymentSheet> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'A minimum downpayment of ₱${minimumDown.toStringAsFixed(2)} '
-              '(50% of ₱${_total.toStringAsFixed(2)}) is required '
+              'A minimum downpayment of ₱${AppTheme.fmtAmt(minimumDown)} '
+              '(50% of ₱${AppTheme.fmtAmt(_total)}) is required '
               'to process this order.',
             ),
             backgroundColor: Colors.red.shade700,
@@ -1082,6 +1086,18 @@ class _PaymentSheetState extends State<_PaymentSheet> {
         );
         return;
       }
+    }
+
+    if (tendered > _remaining + 0.009) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Please enter a valid amount. Maximum payable is ₱${AppTheme.fmtAmt(_remaining)}.'),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
     }
 
     final change = tendered - _remaining;
@@ -1114,12 +1130,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final quickAmounts = [
-      _remaining,
-      ...[100.0, 200.0, 500.0, 1000.0]
-          .where((a) => a > _remaining)
-          .take(3),
-    ];
+    const _fixedChips = [75.0, 100.0, 200.0, 500.0];
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -1195,7 +1206,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
                                 Expanded(
                                   child: Text(
                                     'Minimum 50% downpayment required '
-                                    '(₱${(_total * 0.5).toStringAsFixed(2)})',
+                                    '(₱${AppTheme.fmtAmt(_total * 0.5)})',
                                     style: const TextStyle(
                                         color: _Glass.accentAmber,
                                         fontSize: 11,
@@ -1230,36 +1241,55 @@ class _PaymentSheetState extends State<_PaymentSheet> {
                         // ── Quick-amount chips ──
                         Wrap(
                           spacing: 8,
-                          children: quickAmounts
-                              .map((a) => GestureDetector(
-                                    onTap: () => _setQuickAmount(a),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 14, vertical: 7),
-                                      decoration: a == _remaining
-                                          ? _Glass.solidPill(_navyBlue)
-                                          : BoxDecoration(
-                                              color: _Glass.surfaceThin,
-                                              borderRadius:
-                                                  BorderRadius.circular(
-                                                      20),
-                                              border: Border.all(
-                                                  color: _Glass.borderMid),
-                                            ),
-                                      child: Text(
-                                        '₱${a.toStringAsFixed(a == _remaining ? 2 : 0)}',
-                                        style: TextStyle(
-                                            color: a == _remaining
-                                                ? Colors.white
-                                                : _Glass.textSecondary,
-                                            fontSize: 13,
-                                            fontWeight: a == _remaining
-                                                ? FontWeight.w700
-                                                : FontWeight.w400),
-                                      ),
-                                    ),
-                                  ))
-                              .toList(),
+                          runSpacing: 6,
+                          children: [
+                            // Exact remaining chip
+                            GestureDetector(
+                              onTap: () => _setQuickAmount(_remaining),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 7),
+                                decoration: _Glass.solidPill(_navyBlue),
+                                child: Text(
+                                  '₱${AppTheme.fmtAmt(_remaining)}',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ),
+                            // Fixed denomination chips — greyed when > remaining
+                            ..._fixedChips.map((a) {
+                              final disabled = a > _remaining + 0.009;
+                              return GestureDetector(
+                                onTap: disabled ? null : () => _setQuickAmount(a),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    color: disabled
+                                        ? _Glass.borderDim
+                                        : _Glass.surfaceThin,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                        color: disabled
+                                            ? _Glass.borderDim
+                                            : _Glass.borderMid),
+                                  ),
+                                  child: Text(
+                                    '₱${a.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                        color: disabled
+                                            ? _Glass.textMuted
+                                            : _Glass.textSecondary,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w400),
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
                         ),
                         const SizedBox(height: 14),
 
@@ -1345,7 +1375,7 @@ class _BalanceRow extends StatelessWidget {
             style: const TextStyle(
                 color: _Glass.textMuted, fontSize: 11)),
         const SizedBox(height: 4),
-        Text('₱${value.toStringAsFixed(2)}',
+        Text('₱${AppTheme.fmtAmt(value)}',
             style: TextStyle(
                 color: color,
                 fontSize: large ? 18 : 14,
@@ -1390,7 +1420,7 @@ class _SuccessView extends StatelessWidget {
           const Text('Change',
               style: TextStyle(color: _Glass.textMuted, fontSize: 13)),
           const SizedBox(height: 4),
-          Text('₱${change.toStringAsFixed(2)}',
+          Text('₱${AppTheme.fmtAmt(change)}',
               style: const TextStyle(
                   color: _amber,
                   fontSize: 36,
@@ -1551,7 +1581,7 @@ class _OrderWithBalanceList extends StatelessWidget {
                             .withValues(alpha: 0.35)),
                   ),
                   child: Text(
-                    '₱${remaining.toStringAsFixed(2)} due',
+                    '₱${AppTheme.fmtAmt(remaining)} due',
                     style: const TextStyle(
                         color: _Glass.accentOrange,
                         fontSize: 11,

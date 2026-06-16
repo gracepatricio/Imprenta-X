@@ -157,7 +157,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       }
     }
 
-    String php(double v) => '₱ ${v.toStringAsFixed(2)}';
+    String php(double v) => '₱ ${AppTheme.fmtAmt(v)}';
 
     // ── Colours ──────────────────────────────────────────────────────────────
     const navy = PdfColor.fromInt(0xFF0F1A2E);
@@ -1444,7 +1444,7 @@ class _InvoiceView extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    '₱${sub.toStringAsFixed(2)}',
+                                    '₱${AppTheme.fmtAmt(sub)}',
                                     style: const TextStyle(
                                       color: Color(0xFF1E3A5F),
                                       fontWeight: FontWeight.w700,
@@ -1452,7 +1452,7 @@ class _InvoiceView extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    '@ ₱${unit.toStringAsFixed(2)}',
+                                    '@ ₱${AppTheme.fmtAmt(unit)}',
                                     style: const TextStyle(
                                       color: Color(0xFF475569),
                                       fontSize: 10,
@@ -1669,7 +1669,7 @@ class _InvoiceView extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Remaining balance of ₱${remaining.toStringAsFixed(2)} '
+                            'Remaining balance of ₱${AppTheme.fmtAmt(remaining)} '
                             'is due upon pickup.',
                             style: const TextStyle(
                               color: Colors.orange,
@@ -1879,7 +1879,7 @@ class _PayRow extends StatelessWidget {
         ),
       ),
       Text(
-        value < 0.01 ? 'Settled' : '₱${value.toStringAsFixed(2)}',
+        value < 0.01 ? 'Settled' : '₱${AppTheme.fmtAmt(value)}',
         style: TextStyle(
           color: color,
           fontSize: large ? 18 : 13,

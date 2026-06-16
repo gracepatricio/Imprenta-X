@@ -202,7 +202,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
                 const SizedBox(height: 22),
 
                 Text(
-                  '₱${widget.payAmount.toStringAsFixed(2)}',
+                  '₱${AppTheme.fmtAmt(widget.payAmount)}',
                   style: const TextStyle(color: AppTheme.gold, fontSize: 36,
                       fontWeight: FontWeight.bold),
                 ),
@@ -226,7 +226,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
                         text: _opened
                             ? kIsWeb
                                 ? 'Payment page opened in a new tab'
-                                : 'PayMongo checkout opened'
+                                : 'QRPH checkout opened'
                             : kIsWeb
                                 ? 'Opening payment page in a new tab…'
                                 : 'Tap "Open Payment Page" below to start',
