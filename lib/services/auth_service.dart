@@ -366,6 +366,17 @@ class AuthService {
         return 'must_change_password:${data['user_role']}';
       }
 
+      // Admin/employee accounts require a verified real email before they
+      // can access the app. If email is still null (user bailed out of the
+      // AddEmailScreen), block login and send them back to verify.
+      final role = data['user_role'] as String? ?? '';
+      if (role == 'admin' || role == 'employee') {
+        final email = data['email'] as String?;
+        if (email == null || email.isEmpty) {
+          return 'needs_email_verification:$role';
+        }
+      }
+
       return data['user_role'] as String?;
     } on FirebaseAuthException catch (e) {
       print('DEBUG login() FirebaseAuthException: ${e.code} ${e.message}');
@@ -617,6 +628,67 @@ class AuthService {
         return 'verification_sent';
       }
 
+      // Check if there is already a pending verification for this exact email.
+      // This happens on resend — the Firebase Auth account was already created
+      // on the first attempt but the user hasn't clicked the link yet.
+      final pendingDoc = await _firestore
+          .collection('PendingEmailVerification')
+          .doc(user.uid)
+          .get();
+
+      if (pendingDoc.exists) {
+        final pendingData = pendingDoc.data()!;
+        final pendingEmail = pendingData['new_email'] as String?;
+        final pendingPassword = pendingData['password'] as String?;
+        final pendingNewUid = pendingData['new_uid'] as String?;
+
+        if (pendingEmail == newEmail &&
+            pendingPassword != null &&
+            pendingNewUid != null) {
+          // Reuse the existing Firebase Auth account — just resend the
+          // verification email to it without creating a new one.
+          FirebaseApp? secondaryApp;
+          try {
+            secondaryApp = await _createSecondaryApp();
+            final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+            final cred = await secondaryAuth.signInWithEmailAndPassword(
+              email: newEmail,
+              password: pendingPassword,
+            );
+            await cred.user!.sendEmailVerification();
+            await secondaryAuth.signOut();
+            return 'migration_sent';
+          } finally {
+            await secondaryApp?.delete();
+          }
+        }
+
+        // Different email — delete the old pending account before creating new.
+        if (pendingEmail != null &&
+            pendingPassword != null &&
+            pendingEmail != newEmail) {
+          FirebaseApp? cleanupApp;
+          try {
+            cleanupApp = await _createSecondaryApp();
+            final cleanupAuth = FirebaseAuth.instanceFor(app: cleanupApp);
+            final cred = await cleanupAuth.signInWithEmailAndPassword(
+              email: pendingEmail,
+              password: pendingPassword,
+            );
+            await cred.user!.delete();
+            await cleanupAuth.signOut();
+          } catch (_) {
+            // Best-effort cleanup — proceed regardless.
+          } finally {
+            await cleanupApp?.delete();
+          }
+          await _firestore
+              .collection('PendingEmailVerification')
+              .doc(user.uid)
+              .delete();
+        }
+      }
+
       FirebaseApp? secondaryApp;
       try {
         secondaryApp = await _createSecondaryApp();
@@ -808,8 +880,8 @@ class AuthService {
           .where('customer_uid', isEqualTo: uid)
           .get();
 
-      final toDelete   = <String>[];   // order IDs to delete
-      final toKeep     = <String>[];   // completed order IDs
+      final toDelete = <String>[]; // order IDs to delete
+      final toKeep = <String>[]; // completed order IDs
 
       for (final doc in ordersSnap.docs) {
         final status = doc.data()['status'] as String? ?? '';
@@ -823,7 +895,9 @@ class AuthService {
       // ── 5. Delete non-completed orders ───────────────────────────────────
       if (toDelete.isNotEmpty) {
         await _deleteDocsBatch(
-          toDelete.map((id) => _firestore.collection('Orders').doc(id)).toList(),
+          toDelete
+              .map((id) => _firestore.collection('Orders').doc(id))
+              .toList(),
         );
       }
 
@@ -868,16 +942,13 @@ class AuthService {
             .get();
         if (reviewsSnap.docs.isNotEmpty) {
           await _deleteDocsBatch(
-              reviewsSnap.docs.map((d) => d.reference).toList());
+            reviewsSnap.docs.map((d) => d.reference).toList(),
+          );
         }
       } catch (_) {}
 
       // ── 9. Delete Cart ───────────────────────────────────────────────────
-      await _firestore
-          .collection('Carts')
-          .doc(uid)
-          .delete()
-          .catchError((_) {});
+      await _firestore.collection('Carts').doc(uid).delete().catchError((_) {});
 
       // ── 10. Delete Messages thread + subcollection ───────────────────────
       try {
@@ -889,7 +960,8 @@ class AuthService {
             .get();
         if (msgsSnap.docs.isNotEmpty) {
           await _deleteDocsBatch(
-              msgsSnap.docs.map((d) => d.reference).toList());
+            msgsSnap.docs.map((d) => d.reference).toList(),
+          );
         }
         await _firestore
             .collection('Messages')
@@ -906,7 +978,8 @@ class AuthService {
             .get();
         if (convoSnap.docs.isNotEmpty) {
           await _deleteDocsBatch(
-              convoSnap.docs.map((d) => d.reference).toList());
+            convoSnap.docs.map((d) => d.reference).toList(),
+          );
         }
       } catch (_) {}
 

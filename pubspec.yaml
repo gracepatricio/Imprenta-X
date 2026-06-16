@@ -1,11 +1,10 @@
 name: imprentax
 description: "Imprenta X System"
 publish_to: 'none'
-
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.9.2
+  sdk: ^3.4.0
 
 dependencies:
   flutter:
@@ -13,23 +12,22 @@ dependencies:
   firebase_core: ^4.7.0
   firebase_auth: ^6.4.0
   cloud_firestore: ^6.3.0
-  firebase_storage: ^13.3.0 # Added Dependency
+  firebase_storage: ^13.3.0
   cupertino_icons: ^1.0.8
   http: ^1.6.0
-  mobile_scanner: ^6.0.0 # Added Dependency
-  qr_flutter: ^4.1.0 # Added Dependency
-  image_picker: ^1.1.2 # Added Dependency
-  file_picker: ^8.1.0 #Added Dependency
-  image: ^4.2.0 # Added Dependency
-  url_launcher: ^6.3.0 #Added Dependency
-  intl: ^0.20.1 # Added Dependency
+  mobile_scanner: ^6.0.0
+  qr_flutter: ^4.1.0
+  image_picker: ^1.1.2
+  file_picker: ^8.1.2
+  image: ^4.2.0
+  url_launcher: ^6.3.0
+  intl: ^0.20.1
   pdf: ^3.11.0
   printing: ^5.13.0
   shared_preferences: ^2.3.2
   excel: ^4.0.3
   firebase_messaging: ^16.2.0
   flutter_local_notifications: ^18.0.0
-  web: ^1.0.0
 
 dev_dependencies:
   flutter_test:
@@ -50,7 +48,6 @@ flutter_launcher_icons:
 
 flutter:
   uses-material-design: true
-
   assets:
     - assets/images/imprentalogo.jpg
     - assets/images/sysbackground.jpg
@@ -58,11 +55,6 @@ flutter:
     - assets/images/print_floor.jpg
     - assets/images/finishing_area.jpg
     - assets/images/design_studio.jpg
-    # About screen photos — add these files to assets/images/ then uncomment:
-    # - assets/images/about_print_floor.jpg
-    # - assets/images/about_design_studio.jpg
-    # - assets/images/about_finishing_area.jpg
-    
   fonts:
     - family: Spartan
       fonts:

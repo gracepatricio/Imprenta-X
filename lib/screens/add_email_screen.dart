@@ -10,7 +10,8 @@ const _magenta = Color(0xFFFF006E);
 const _yellow = Color(0xFFFFDE89);
 const _green = Color(0xFF80B918);
 
-/// Screen shown after the forced password change for email verification.
+/// Optional screen shown after the forced password change.
+/// The user can skip and add their email later from their profile.
 class AddEmailScreen extends StatefulWidget {
   final String role;
   final String newPassword;
@@ -31,9 +32,11 @@ class _AddEmailScreenState extends State<AddEmailScreen>
   final AuthService _authService = AuthService();
 
   bool _isSending = false;
+  bool _isResending = false;
   bool _verificationSent = false;
   bool _usedMigrationPath = false;
   String? _error;
+  String? _resendMessage;
   Timer? _pollTimer;
 
   late AnimationController _dotCtrl;
@@ -87,6 +90,38 @@ class _AddEmailScreenState extends State<AddEmailScreen>
       _startPolling(email);
     } else {
       setState(() => _error = result ?? 'Failed to send verification.');
+    }
+  }
+
+  Future<void> _resendVerification() async {
+    final email = _emailCtrl.text.trim();
+    setState(() {
+      _isResending = true;
+      _resendMessage = null;
+      _error = null;
+    });
+
+    _pollTimer?.cancel();
+
+    final result = await _authService.addEmail(
+      email,
+      currentPassword: widget.newPassword,
+    );
+
+    if (!mounted) return;
+
+    if (result == 'migration_sent' || result == 'verification_sent') {
+      setState(() {
+        _isResending = false;
+        _usedMigrationPath = result == 'migration_sent';
+        _resendMessage = 'Verification email resent!';
+      });
+      _startPolling(email);
+    } else {
+      setState(() {
+        _isResending = false;
+        _error = result ?? 'Failed to resend verification.';
+      });
     }
   }
 
@@ -250,7 +285,6 @@ class _AddEmailScreenState extends State<AddEmailScreen>
                           ],
                         ),
                       ),
-
                     ],
                   ),
                 ),
@@ -301,22 +335,22 @@ class _AddEmailScreenState extends State<AddEmailScreen>
           ),
           child: _isSending
               ? const SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.black,
-            ),
-          )
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.black,
+                  ),
+                )
               : const Text(
-            'Send Verification Email',
-            style: TextStyle(
-              color: Colors.black,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.2,
-            ),
-          ),
+                  'Send Verification Email',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                  ),
+                ),
         ),
 
         const SizedBox(height: 20),
@@ -357,8 +391,8 @@ class _AddEmailScreenState extends State<AddEmailScreen>
         const SizedBox(height: 8),
         Text(
           'We sent a link to ${_emailCtrl.text.trim()}.\n'
-              'Click the link to confirm your email.\n\n'
-              'This screen will advance automatically.',
+          'Click the link to confirm your email.\n\n'
+          'This screen will advance automatically.',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.45),
@@ -390,7 +424,100 @@ class _AddEmailScreenState extends State<AddEmailScreen>
           ],
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+
+        // Resend button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _isResending ? null : _resendVerification,
+            icon: _isResending
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: Colors.black54,
+                    ),
+                  )
+                : const Icon(Icons.refresh_rounded, size: 16),
+            label: Text(_isResending ? 'Resending…' : 'Resend Email'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _yellow,
+              foregroundColor: Colors.black87,
+              disabledBackgroundColor: _yellow.withValues(alpha: 0.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              textStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+
+        // Resend feedback message
+        if (_resendMessage != null) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.check_circle_outline, color: _green, size: 13),
+              const SizedBox(width: 5),
+              Text(
+                _resendMessage!,
+                style: const TextStyle(color: _green, fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _error!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _magenta, fontSize: 12),
+          ),
+        ],
+
+        const SizedBox(height: 16),
+
+        // Divider
+        Divider(color: Colors.white.withValues(alpha: 0.08), thickness: 1),
+        const SizedBox(height: 16),
+
+        // Try a different email — mirrors forgot_password _buildSuccess pattern
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () {
+              _pollTimer?.cancel();
+              setState(() {
+                _verificationSent = false;
+                _usedMigrationPath = false;
+                _error = null;
+                _resendMessage = null;
+                _emailCtrl.clear();
+              });
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+            ),
+            child: const Text(
+              'Try a different email',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
         _CmykDots(controller: _dotCtrl),
       ],
     );
@@ -473,12 +600,12 @@ class _AuthFieldState extends State<_AuthField> {
             ),
             boxShadow: _focused
                 ? [
-              BoxShadow(
-                color: _yellow.withValues(alpha: 0.08),
-                blurRadius: 10,
-                spreadRadius: 1,
-              ),
-            ]
+                    BoxShadow(
+                      color: _yellow.withValues(alpha: 0.08),
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                    ),
+                  ]
                 : [],
           ),
           child: TextField(

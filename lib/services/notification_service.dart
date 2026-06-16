@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:web/web.dart' as web;
+import 'web_notification.dart';
 
 class NotificationService {
   static final _messaging = FirebaseMessaging.instance;
@@ -15,6 +15,7 @@ class NotificationService {
       badge: true,
       sound: true,
     );
+
     if (settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional) {
       await _saveToken();
@@ -25,14 +26,17 @@ class NotificationService {
     });
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('Foreground notification: ${message.notification?.title}');
+      final title = message.notification?.title ?? '';
+      final body = message.notification?.body ?? '';
+      print('Foreground notification: $title');
 
       if (kIsWeb) {
-        final title = message.notification?.title ?? '';
-        final body = message.notification?.body ?? '';
-        final options = web.NotificationOptions(body: body);
-        web.Notification(title, options);
+        showWebNotification(title, body);
       }
+    });
+
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print('Notification tapped: ${message.notification?.title}');
     });
   }
 

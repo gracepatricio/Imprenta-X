@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../services/cart_manager.dart';
 import '../services/notification_service.dart';
+import 'add_email_screen.dart';
 import 'app_theme.dart';
 import 'platform_utils.dart';
 
@@ -83,6 +84,17 @@ class _LoginScreenState extends State<LoginScreen>
       );
       return;
     }
+
+    if (result.startsWith('needs_email_verification:')) {
+      final role = result.split(':').last;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AddEmailScreen(role: role, newPassword: password),
+        ),
+      );
+      return;
+    }
     switch (result) {
       case 'customer':
         final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -141,7 +153,7 @@ class _LoginScreenState extends State<LoginScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-decoration: AppTheme.backgroundDecoration(context),
+        decoration: AppTheme.backgroundDecoration(context),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth >= 600;
