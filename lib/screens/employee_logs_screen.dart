@@ -5411,6 +5411,8 @@ class _RefundPickupSection extends StatelessWidget {
 
     if (confirmed != true) return;
 
+    debugPrint('[RefundPickup] orderId=$orderId');
+
     final db = FirebaseFirestore.instance;
     double actualPaid = 0;
     try {
