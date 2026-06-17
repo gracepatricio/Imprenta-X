@@ -5424,6 +5424,27 @@ class _RefundPickupSection extends StatelessWidget {
       'refund_picked_up_at': FieldValue.serverTimestamp(),
     });
     await batch.commit();
+
+// Send refund notification directly for online customers
+    try {
+      final freshOrder = await db.collection('Orders').doc(orderId).get();
+      final freshCustomerUid = freshOrder.data()?['customer_uid']?.toString() ?? '';
+      if (freshCustomerUid.isNotEmpty) {
+        final freshAmountPaid = (freshOrder.data()?['amount_paid'] as num?)?.toDouble() ?? 0;
+        await db.collection('Notifications').add({
+          'customer_uid': freshCustomerUid,
+          'order_id': orderId,
+          'type': 'refund_confirmed',
+          'amount': freshAmountPaid,
+          'message': freshAmountPaid > 0.01
+              ? 'Your refund of ₱${AppTheme.fmtAmt(freshAmountPaid)} for order $orderId has been processed.'
+              : 'Your refund for order $orderId has been confirmed.',
+          'created_at': FieldValue.serverTimestamp(),
+          'read': false,
+        });
+      }
+    } catch (_) {}
+
     await _logJobQueueActivity(
       orderId: orderId,
       action: 'refund_confirmed',

@@ -1,4 +1,4 @@
-const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { onDocumentUpdated, onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
@@ -101,10 +101,9 @@ exports.orderStatusUpdate = onDocumentUpdated(
       },
       cancelled: {
         title: `❌ Order Cancelled: ${orderId}`,
-        body: after?.refund_amount
-          ? `Your order has been cancelled. A refund of ₱${after.refund_amount} will be processed shortly.`
+        body: after?.amount_paid > 0
+          ? `Your order has been cancelled. A refund of ₱${after.amount_paid} will be available for pickup.`
           : `Your order has been cancelled. Please contact us for details.`,
-      },
       },
     };
 
@@ -171,43 +170,37 @@ exports.paymentConfirmation = onDocumentUpdated(
 );
 
 // ── Refund Notification ───────────────────────────────────────────────────
-exports.refundNotification = onDocumentUpdated(
-  "Orders/{orderId}",
+exports.refundNotification = require("firebase-functions/v2/firestore").onDocumentCreated(
+  "Notifications/{notifId}",
   async (event) => {
-    const before = event.data.before.data();
-    const after = event.data.after.data();
+    const data = event.data.data();
 
-    const wasPickedUp = before?.refund_picked_up;
-    const isNowPickedUp = after?.refund_picked_up;
-    const customerUid = after?.customer_uid;
+    if (data?.type !== "refund_confirmed") return null;
 
-    // Only fire when refund_picked_up flips to true
-    if (wasPickedUp === isNowPickedUp) return null;
-    if (!isNowPickedUp) return null;
-    if (!customerUid || customerUid === "") return null;
-
-    const orderId = after?.order_id ?? "Your order";
-    const amountPaid = after?.amount_paid ?? 0;
+    const customerUid = data?.customer_uid;
+    if (!customerUid) return null;
 
     const db = getFirestore();
     const userDoc = await db.collection("User").doc(customerUid).get();
     const token = userDoc.data()?.fcm_token;
-
     if (!token) return null;
+
+    const orderId = data?.order_id ?? "Your order";
+    const amount = data?.amount ?? 0;
 
     await getMessaging().send({
       token,
       notification: {
         title: `💸 Refund Confirmed: ${orderId}`,
-        body: amountPaid > 0
-          ? `Your refund of ₱${amountPaid} for order ${orderId} has been processed and picked up.`
+        body: amount > 0
+          ? `Your refund of ₱${amount} for order ${orderId} has been processed and is ready for pickup.`
           : `Your refund for order ${orderId} has been confirmed.`,
       },
       android: { priority: "high" },
       apns: { payload: { aps: { sound: "default" } } },
     });
 
-    console.log(`Refund pickup notification sent to ${customerUid} for ${orderId}`);
+    console.log(`Refund notification sent to ${customerUid} for ${orderId}`);
     return null;
   }
 );
