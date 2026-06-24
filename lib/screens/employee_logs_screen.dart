@@ -14,6 +14,8 @@ import 'design_file_viewer.dart';
 import 'chat_screen.dart';
 import '../services/inventory_service.dart';
 import '../services/turnaround_service.dart';
+import '../services/paymongo_service.dart';
+import 'payment_webview_screen.dart';
 
 // =============================================================================
 // Design Tokens — Liquid Glass (aligned with EmployeeInventoryScreen)
@@ -160,7 +162,7 @@ class _EmployeeLogsScreenState extends State<EmployeeLogsScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'Employee Logs',
+                                'Accounting',
                                 style: TextStyle(
                                   color: _Glass.textPrimary,
                                   fontSize: 15,
@@ -1750,6 +1752,44 @@ class _WalkInItem {
     return price * qty;
   }
 
+  // ── NEW: Bulk pricing tiers ──────────────────────────────────────────────
+  List<Map<String, dynamic>> get _bulkPricing {
+    final raw = productData['bulk_pricing'] as List?;
+    if (raw == null) return [];
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Map<String, dynamic>? get _activeBulkTier {
+    final tiers = _bulkPricing;
+    if (tiers.isEmpty) return null;
+    Map<String, dynamic>? active;
+    for (final tier in tiers) {
+      final minQ = (tier['min_quantity'] as num?)?.toInt() ?? 0;
+      if (qty >= minQ) {
+        final activeMin = (active?['min_quantity'] as num?)?.toInt() ?? -1;
+        if (minQ > activeMin) active = tier;
+      }
+    }
+    return active;
+  }
+
+  double get discountAmount {
+    final tier = _activeBulkTier;
+    if (tier == null) return 0;
+    final type  = tier['discount_type']?.toString() ?? 'rate';
+    final value = (tier['discount_value'] as num?)?.toDouble() ?? 0;
+    if (value <= 0) return 0;
+    // Base total includes services (mirrors CustomerOrderScreen._discountAmount)
+    double baseTotal = _calcUnit(unitPrice);
+    for (final svc in selectedServices) {
+      final sp = (svc['price'] as num?)?.toDouble() ?? 0;
+      baseTotal += _calcUnit(sp);
+    }
+    if (type == 'rate') return baseTotal * (value / 100);
+    return value * qty; // fixed = ₱ off per piece
+  }
+// ────────────────────────────────────────────────────────────────────────
+
   double get subtotal {
     double total = _calcUnit(unitPrice);
     for (final svc in selectedServices) {
@@ -1757,7 +1797,8 @@ class _WalkInItem {
       total += _calcUnit(sp);
     }
     if (underMinSurcharge > 0 && qty < minQty) total += underMinSurcharge;
-    return total;
+    total -= discountAmount;              // ← apply bulk discount
+    return total.clamp(0, double.infinity); // ← clamp like CustomerOrderScreen
   }
 }
 
@@ -1784,6 +1825,9 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
   final List<_WalkInItem> _items = [];
   List<QueryDocumentSnapshot> _products = [];
   bool _loadingProducts = true;
+  bool _qrphPaid = false;         // true once PayMongo WebView returns paid
+  String? _qrphLinkId;            // stored so _submit can reference it
+  bool _launchingQrph = false;
 
   @override
   void initState() {
@@ -1843,6 +1887,84 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
     final formOk = _formKey.currentState!.validate();
     if (_items.isEmpty) setState(() => _showProductError = true);
     if (!formOk || _items.isEmpty) return;
+
+    // Generate IDs upfront so they're available for both QRPH and order creation
+    final orderId   = await _nextId('order', 'ORD-');
+    final invoiceId = await _nextId('invoice', 'INV-');
+
+    // ── If QRPH and not yet paid, launch payment first ───────────────────
+    if (_paymentMethod == 'gcash' && !_qrphPaid) {
+      final total    = _total;
+      final minAmt   = (total * 0.5 * 100).round() / 100;
+      final paidAmt  = double.tryParse(_paidCtrl.text.trim()) ?? minAmt;
+      final chosen   = paidAmt.clamp(minAmt, total);
+      final label    = chosen >= total - 0.01 ? 'Upfront Payment' : 'Downpayment';
+
+      setState(() => _submitting = true);
+      try {
+        final link = await PayMongoService.createLink(
+          amount:      chosen,
+          description: 'Walk-In $label $orderId (Imprenta X)',
+        );
+
+        await FirebaseFirestore.instance
+            .collection('PayMongoLinks')
+            .doc(link.id)
+            .set({
+          'order_id':        orderId,
+          'purpose':         chosen >= total - 0.01 ? 'upfront' : 'downpayment',
+          'expected_amount': chosen,
+          'processed':       false,
+          'created_at':      FieldValue.serverTimestamp(),
+        });
+
+        _qrphLinkId    = link.id;
+        _paidCtrl.text = chosen.toStringAsFixed(2);
+
+        if (!mounted) return;
+
+        final paid = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => PaymentWebViewScreen(
+              checkoutUrl:      link.checkoutUrl,
+              linkId:           link.id,
+              orderId:          orderId,
+              payAmount:        chosen,
+              isBalancePayment: false,
+            ),
+          ),
+        );
+
+        if (!mounted) return;
+
+        if (paid != true) {
+          setState(() => _submitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Payment not completed. Please complete payment to create the job order.',
+              ),
+              backgroundColor: Colors.redAccent,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          return;
+        }
+
+        setState(() => _qrphPaid = true);
+      } catch (e) {
+        if (mounted) {
+          setState(() => _submitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to create payment link: $e'),
+              backgroundColor: _Glass.accentRose,
+            ),
+          );
+        }
+        return;
+      }
+    }
     final paidAmount = double.tryParse(_paidCtrl.text.trim()) ?? 0.0;
     final total = _total;
     final remaining = (total - paidAmount).clamp(0.0, double.infinity);
@@ -1857,8 +1979,6 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
     setState(() => _submitting = true);
 
     try {
-      final orderId = await _nextId('order', 'ORD-');
-      final invoiceId = await _nextId('invoice', 'INV-');
       final db = FirebaseFirestore.instance;
       final batch = db.batch();
       final now = FieldValue.serverTimestamp();
@@ -2315,7 +2435,9 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                                                     : '${item.widthFt}ft × ${item.heightFt}ft',
                                               if (item.material != null)
                                                 item.material!,
-                                              '₱${AppTheme.fmtAmt(item.unitPrice)} × ${item.qty} = ₱${AppTheme.fmtAmt(item.subtotal)}',
+                                              item.discountAmount > 0
+                                                  ? '₱${AppTheme.fmtAmt(item.unitPrice)} × ${item.qty}'
+                                                  : '₱${AppTheme.fmtAmt(item.unitPrice)} × ${item.qty} = ₱${AppTheme.fmtAmt(item.subtotal)}',
                                             ].join(' · '),
                                             style: const TextStyle(
                                               color: _Glass.textMuted,
@@ -2330,6 +2452,29 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                                                 fontSize: 11,
                                               ),
                                             ),
+                                          if (item.discountAmount > 0) ...[
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  '₱${AppTheme.fmtAmt(item.subtotal + item.discountAmount)}',
+                                                  style: const TextStyle(
+                                                    color: _Glass.textMuted,
+                                                    fontSize: 12,
+                                                    decoration: TextDecoration.lineThrough,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  '₱${AppTheme.fmtAmt(item.subtotal)}',
+                                                  style: const TextStyle(
+                                                    color: _Glass.accentEmerald,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                           if (item.notes.isNotEmpty)
                                             Text(
                                               item.notes,
@@ -2464,8 +2609,8 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
                               const SizedBox(width: 8),
                               _payMethodChip(
                                 'gcash',
-                                'GCash',
-                                Icons.phone_android_outlined,
+                                'QRPH',
+                                Icons.qr_code_2_rounded,
                               ),
                             ],
                           ),
@@ -2823,6 +2968,45 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
 
   bool get _hasSurcharge => _underMinSurcharge > 0 && _qty < _minQty;
 
+  // ── NEW: Bulk pricing (mirrors CustomerOrderScreen) ──────────────────────
+  List<Map<String, dynamic>> get _bulkPricing {
+    final raw = _data?['bulk_pricing'] as List?;
+    if (raw == null) return [];
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Map<String, dynamic>? get _activeBulkTier {
+    final tiers = _bulkPricing;
+    if (tiers.isEmpty) return null;
+    Map<String, dynamic>? active;
+    for (final tier in tiers) {
+      final minQ = (tier['min_quantity'] as num?)?.toInt() ?? 0;
+      if (_qty >= minQ) {
+        final activeMin = (active?['min_quantity'] as num?)?.toInt() ?? -1;
+        if (minQ > activeMin) active = tier;
+      }
+    }
+    return active;
+  }
+
+  double get _discountAmount {
+    final tier = _activeBulkTier;
+    if (tier == null) return 0;
+    final type  = tier['discount_type']?.toString() ?? 'rate';
+    final value = (tier['discount_value'] as num?)?.toDouble() ?? 0;
+    if (value <= 0) return 0;
+    double baseTotal = _calcUnit(_effectiveBasePrice);
+    for (final svc in _additionalServicesList) {
+      final name = svc['name']?.toString() ?? '';
+      if (_selectedServices.contains(name)) {
+        baseTotal += _calcUnit((svc['price'] as num?)?.toDouble() ?? 0);
+      }
+    }
+    if (type == 'rate') return baseTotal * (value / 100);
+    return value * _qty;
+  }
+// ─────────────────────────────────────────────────────────────────────────
+
   List<String> get _materialList {
     final raw = _data?['material_options'] as List?;
     if (raw != null && raw.isNotEmpty) {
@@ -2866,7 +3050,8 @@ class _WalkInCustomizeDialogState extends State<_WalkInCustomizeDialog> {
       }
     }
     if (_hasSurcharge) total += _underMinSurcharge;
-    return total;
+    total -= _discountAmount;              // ← apply bulk discount
+    return total.clamp(0, double.infinity); // ← clamp like CustomerOrderScreen
   }
 
   bool get _sizeIsValid {
