@@ -1888,6 +1888,8 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
     if (_items.isEmpty) setState(() => _showProductError = true);
     if (!formOk || _items.isEmpty) return;
 
+    setState(() => _submitting = true);
+
     // Generate IDs upfront so they're available for both QRPH and order creation
     final orderId   = await _nextId('order', 'ORD-');
     final invoiceId = await _nextId('invoice', 'INV-');
@@ -1900,7 +1902,6 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
       final chosen   = paidAmt.clamp(minAmt, total);
       final label    = chosen >= total - 0.01 ? 'Upfront Payment' : 'Downpayment';
 
-      setState(() => _submitting = true);
       try {
         final link = await PayMongoService.createLink(
           amount:      chosen,
@@ -2098,7 +2099,7 @@ class _AddWalkInJobDialogState extends State<_AddWalkInJobDialog> {
       }
 
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).popUntil((route) => route.isFirst);
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => InvoiceScreen(invoiceId: invoiceId)),
       );
