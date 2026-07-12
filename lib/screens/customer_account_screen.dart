@@ -292,7 +292,7 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                     _buildAvatarSection(),
                     const SizedBox(height: 20),
                     ..._menus.map(
-                      (m) => _SidebarBtn(
+                          (m) => _SidebarBtn(
                         label: m.$2,
                         icon: m.$3,
                         isActive: _menu == m.$1,
@@ -467,18 +467,18 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                                 ),
                                 decoration: active
                                     ? BoxDecoration(
-                                        color: _G.activeBtn,
-                                        borderRadius: BorderRadius.circular(99),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: _G.activeBtn.withValues(
-                                              alpha: 0.40,
-                                            ),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 3),
-                                          ),
-                                        ],
-                                      )
+                                  color: _G.activeBtn,
+                                  borderRadius: BorderRadius.circular(99),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _G.activeBtn.withValues(
+                                        alpha: 0.40,
+                                      ),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                )
                                     : _G.pill(),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -651,24 +651,24 @@ class _SidebarBtn extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
           decoration: isActive
               ? BoxDecoration(
-                  color: _G.activeBtn,
-                  borderRadius: BorderRadius.circular(99),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _G.activeBtn.withValues(alpha: 0.40),
-                      blurRadius: 14,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                )
+            color: _G.activeBtn,
+            borderRadius: BorderRadius.circular(99),
+            boxShadow: [
+              BoxShadow(
+                color: _G.activeBtn.withValues(alpha: 0.40),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          )
               : BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(99),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    width: 0.9,
-                  ),
-                ),
+            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.15),
+              width: 0.9,
+            ),
+          ),
           child: Row(
             children: [
               Icon(
@@ -980,8 +980,8 @@ class _UnreadMessagesPreview extends StatelessWidget {
         }).toList();
         final totalUnread = docs.fold<int>(
           0,
-          (sum, d) =>
-              sum +
+              (sum, d) =>
+          sum +
               (((d.data() as Map)['unread_customer'] as num?) ?? 0).toInt(),
         );
 
@@ -1233,16 +1233,16 @@ class _OrdersContentState extends State<_OrdersContent> {
                   ),
                   decoration: active
                       ? BoxDecoration(
-                          color: _G.activeBtn,
-                          borderRadius: BorderRadius.circular(99),
-                          boxShadow: [
-                            BoxShadow(
-                              color: _G.activeBtn.withValues(alpha: 0.40),
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        )
+                    color: _G.activeBtn,
+                    borderRadius: BorderRadius.circular(99),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _G.activeBtn.withValues(alpha: 0.40),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  )
                       : _G.pill(),
                   child: Text(
                     f.$2,
@@ -1365,6 +1365,16 @@ class _OrderCard extends StatelessWidget {
     );
   }
 
+  DateTime? get _pickupExpiresAt {
+    final ts = data['pickup_expires_at'] as Timestamp?;
+    if (ts != null) return ts.toDate().toLocal();
+    final readyAt = (data['ready_at'] as Timestamp?)?.toDate().toLocal();
+    if (readyAt != null) return readyAt.add(const Duration(days: 30));
+    final createdAt = (data['created_at'] as Timestamp?)?.toDate().toLocal();
+    if (createdAt != null) return createdAt.add(const Duration(days: 30));
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = data['status']?.toString() ?? '';
@@ -1374,6 +1384,7 @@ class _OrderCard extends StatelessWidget {
     final paid = _paid;
     final pct = total > 0 ? (paid / total).clamp(0.0, 1.0) : 0.0;
     final fullyPaid = remaining < 0.01;
+    final pickupExpiresAt = _pickupExpiresAt;
 
     return GestureDetector(
       onTap: () => _showDetail(context),
@@ -1465,6 +1476,10 @@ class _OrderCard extends StatelessWidget {
                 );
               },
             ),
+            if (status == 'ready' && pickupExpiresAt != null) ...[
+              const SizedBox(height: 6),
+              _PickupExpiryBanner(expiresAt: pickupExpiresAt),
+            ],
             if (status == 'cancelled' &&
                 (data['cancel_reason']?.toString() ?? '').isNotEmpty) ...[
               const SizedBox(height: 6),
@@ -1649,7 +1664,7 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
   double get _paid => (widget.data['amount_paid'] as num?)?.toDouble() ?? 0;
   double get _remaining =>
       (widget.data['remaining_balance'] as num?)?.toDouble() ??
-      (_total - _paid);
+          (_total - _paid);
 
   String _fmtDate(dynamic ts) {
     if (ts == null) return '—';
@@ -1684,21 +1699,21 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
           .collection('PayMongoLinks')
           .doc(link.id)
           .set({
-            'order_id': orderId,
-            'purpose': isInitial ? 'downpayment' : 'balance',
-            'expected_amount': chosen,
-            'processed': false,
-            'created_at': FieldValue.serverTimestamp(),
-          });
+        'order_id': orderId,
+        'purpose': isInitial ? 'downpayment' : 'balance',
+        'expected_amount': chosen,
+        'processed': false,
+        'created_at': FieldValue.serverTimestamp(),
+      });
       if (!isInitial) {
         await FirebaseFirestore.instance
             .collection('Orders')
             .doc(orderId)
             .update({
-              'balance_link_id': link.id,
-              'balance_checkout_url': link.checkoutUrl,
-              'balance_link_amount': chosen,
-            });
+          'balance_link_id': link.id,
+          'balance_checkout_url': link.checkoutUrl,
+          'balance_link_amount': chosen,
+        });
       }
       final String checkoutUrl = link.checkoutUrl;
       final String linkId = link.id;
@@ -1865,9 +1880,9 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
                                 child: TextField(
                                   controller: ctrl,
                                   keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                        decimal: true,
-                                      ),
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
                                   style: const TextStyle(
                                     color: _G.textPrimary,
                                     fontSize: 20,
@@ -1972,8 +1987,8 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
     final fullyPaid = remaining < 0.01;
     final showPayBtn =
         _status == 'awaiting_payment' ||
-        (remaining > 0.009 &&
-            ['pending', 'in_production', 'ready'].contains(_status));
+            (remaining > 0.009 &&
+                ['pending', 'in_production', 'ready'].contains(_status));
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
@@ -2035,6 +2050,28 @@ class _AccountOrderDetailSheetState extends State<_AccountOrderDetailSheet> {
                     _StatusBadge(status: _status),
                   ],
                 ),
+
+                if (_status == 'ready') ...[
+                  const SizedBox(height: 10),
+                  Builder(
+                    builder: (context) {
+                      final ts = widget.data['pickup_expires_at'] as Timestamp?;
+                      final readyAt =
+                      (widget.data['ready_at'] as Timestamp?)?.toDate().toLocal();
+                      final createdAt =
+                      (widget.data['created_at'] as Timestamp?)?.toDate().toLocal();
+                      final expiresAt = ts != null
+                          ? ts.toDate().toLocal()
+                          : readyAt != null
+                          ? readyAt.add(const Duration(days: 30))
+                          : createdAt != null
+                          ? createdAt.add(const Duration(days: 30))
+                          : null;
+                      if (expiresAt == null) return const SizedBox.shrink();
+                      return _PickupExpiryBanner(expiresAt: expiresAt);
+                    },
+                  ),
+                ],
 
                 if (turnaround != null) ...[
                   const SizedBox(height: 10),
@@ -2345,19 +2382,19 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
             .collection('Orders')
             .doc(orderId)
             .update({
-              'paymongo_link_id': FieldValue.delete(),
-              'paymongo_checkout_url': FieldValue.delete(),
-            })
+          'paymongo_link_id': FieldValue.delete(),
+          'paymongo_checkout_url': FieldValue.delete(),
+        })
             .catchError((_) {});
       } else {
         FirebaseFirestore.instance
             .collection('Orders')
             .doc(orderId)
             .update({
-              'balance_link_id': FieldValue.delete(),
-              'balance_checkout_url': FieldValue.delete(),
-              'balance_link_amount': FieldValue.delete(),
-            })
+          'balance_link_id': FieldValue.delete(),
+          'balance_checkout_url': FieldValue.delete(),
+          'balance_link_amount': FieldValue.delete(),
+        })
             .catchError((_) {});
       }
       if (mounted) await _generate();
@@ -2387,28 +2424,28 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
         .collection('Orders')
         .doc(orderId)
         .update({
-          'amount_paid': newPaid,
-          'remaining_balance': newRemain.clamp(0.0, double.infinity),
-          'payment_status': fullyPaid ? 'paid' : 'partial',
-          if (fullyPaid) 'fully_paid_at': FieldValue.serverTimestamp(),
-          'balance_link_id': FieldValue.delete(),
-          'balance_checkout_url': FieldValue.delete(),
-          'balance_link_amount': FieldValue.delete(),
-        })
+      'amount_paid': newPaid,
+      'remaining_balance': newRemain.clamp(0.0, double.infinity),
+      'payment_status': fullyPaid ? 'paid' : 'partial',
+      if (fullyPaid) 'fully_paid_at': FieldValue.serverTimestamp(),
+      'balance_link_id': FieldValue.delete(),
+      'balance_checkout_url': FieldValue.delete(),
+      'balance_link_amount': FieldValue.delete(),
+    })
         .catchError((_) {});
 
     await FirebaseFirestore.instance
         .collection('Payments')
         .doc()
         .set({
-          'order_id': orderId,
-          'amount': paid,
-          'payment_type': 'balance',
-          'payment_method': 'online',
-          'transaction_reference': paidLinkId,
-          'payment_date': FieldValue.serverTimestamp(),
-          'status': 'paid',
-        })
+      'order_id': orderId,
+      'amount': paid,
+      'payment_type': 'balance',
+      'payment_method': 'online',
+      'transaction_reference': paidLinkId,
+      'payment_date': FieldValue.serverTimestamp(),
+      'status': 'paid',
+    })
         .catchError((_) {});
 
     if (!fullyPaid && mounted) {
@@ -2436,26 +2473,26 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
 
       final orderUpdates = isInitial
           ? {
-              'paymongo_link_id': link.id,
-              'paymongo_checkout_url': link.checkoutUrl,
-            }
+        'paymongo_link_id': link.id,
+        'paymongo_checkout_url': link.checkoutUrl,
+      }
           : {
-              'balance_link_id': link.id,
-              'balance_checkout_url': link.checkoutUrl,
-              'balance_link_amount': amount,
-            };
+        'balance_link_id': link.id,
+        'balance_checkout_url': link.checkoutUrl,
+        'balance_link_amount': amount,
+      };
 
       await Future.wait([
         FirebaseFirestore.instance
             .collection('PayMongoLinks')
             .doc(link.id)
             .set({
-              'order_id': orderId,
-              'purpose': isInitial ? 'downpayment' : 'balance',
-              'expected_amount': amount,
-              'processed': false,
-              'created_at': FieldValue.serverTimestamp(),
-            }),
+          'order_id': orderId,
+          'purpose': isInitial ? 'downpayment' : 'balance',
+          'expected_amount': amount,
+          'processed': false,
+          'created_at': FieldValue.serverTimestamp(),
+        }),
         FirebaseFirestore.instance
             .collection('Orders')
             .doc(orderId)
@@ -2483,7 +2520,7 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
     final url = _url;
     final amount =
         (widget.order['balance_link_amount'] as num?)?.toDouble() ??
-        widget.remaining;
+            widget.remaining;
 
     if (_validating || (_generating && url == null)) {
       return const Padding(
@@ -2655,6 +2692,76 @@ class _AccountQrSectionState extends State<_AccountQrSection> {
           const Text(
             'This QR is unique to this order and safe to share.',
             style: TextStyle(color: _G.textMuted, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PickupExpiryBanner extends StatelessWidget {
+  final DateTime expiresAt;
+  const _PickupExpiryBanner({required this.expiresAt});
+
+  static String _fmt(DateTime d) {
+    const m = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${m[d.month - 1]} ${d.day}, ${d.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final exp = DateTime(expiresAt.year, expiresAt.month, expiresAt.day);
+    final diff = exp.difference(today).inDays;
+
+    final Color color;
+    final String label;
+    final IconData icon;
+
+    if (diff < 0) {
+      color = const Color(0xFFEF4444);
+      icon = Icons.error_outline_rounded;
+      label = 'Pickup window expired — please contact us';
+    } else if (diff == 0) {
+      color = const Color(0xFFEF4444);
+      icon = Icons.error_outline_rounded;
+      label = 'Last day to pick up — expires today';
+    } else if (diff <= 5) {
+      color = _G.accentAmber;
+      icon = Icons.schedule_rounded;
+      label = 'Pick up by ${_fmt(expiresAt)} · $diff day${diff == 1 ? '' : 's'} left';
+    } else {
+      color = _G.accentEmerald;
+      icon = Icons.event_available_rounded;
+      label = 'Pick up by ${_fmt(expiresAt)}';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -3176,7 +3283,7 @@ class _ManageAccountContentState extends State<_ManageAccountContent>
         if (mounted)
           setState(() {
             _emailErr =
-                'Email not verified yet. Please check your inbox and click the link, then try again.';
+            'Email not verified yet. Please check your inbox and click the link, then try again.';
             _checkingVerification = false;
           });
         return;
@@ -3522,30 +3629,30 @@ class _ManageAccountContentState extends State<_ManageAccountContent>
           boxShadow: onTap == null
               ? []
               : [
-                  BoxShadow(
-                    color: c.withValues(alpha: 0.35),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
+            BoxShadow(
+              color: c.withValues(alpha: 0.35),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             loading
                 ? SizedBox(
-                    width: 13,
-                    height: 13,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: textC,
-                    ),
-                  )
+              width: 13,
+              height: 13,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: textC,
+              ),
+            )
                 : Icon(
-                    icon,
-                    size: 14,
-                    color: onTap == null ? _G.textMuted : textC,
-                  ),
+              icon,
+              size: 14,
+              color: onTap == null ? _G.textMuted : textC,
+            ),
             const SizedBox(width: 6),
             Text(
               label,
@@ -3898,13 +4005,13 @@ class _ManageAccountContentState extends State<_ManageAccountContent>
                   onTap: _savingEmail
                       ? null
                       : () => setState(() {
-                          _editingEmail = false;
-                          _emailErr = null;
-                          _emailMsg = null;
-                          _emailPwCtrl.clear();
-                          _showEmailPw = false;
-                          _emailCtrl.text = _originalEmail;
-                        }),
+                    _editingEmail = false;
+                    _emailErr = null;
+                    _emailMsg = null;
+                    _emailPwCtrl.clear();
+                    _showEmailPw = false;
+                    _emailCtrl.text = _originalEmail;
+                  }),
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     child: Text(
@@ -3963,12 +4070,12 @@ class _ManageAccountContentState extends State<_ManageAccountContent>
                   onTap: _checkingVerification
                       ? null
                       : () => setState(() {
-                          _verificationPending = false;
-                          _pendingNewEmail = '';
-                          _pendingPassword = '';
-                          _emailErr = null;
-                          _emailCtrl.text = _originalEmail;
-                        }),
+                    _verificationPending = false;
+                    _pendingNewEmail = '';
+                    _pendingPassword = '';
+                    _emailErr = null;
+                    _emailCtrl.text = _originalEmail;
+                  }),
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     child: Text(
@@ -4070,13 +4177,13 @@ class _StepChip extends StatelessWidget {
             child: isDone
                 ? const Icon(Icons.check_rounded, color: Colors.white, size: 12)
                 : Text(
-                    '$number',
-                    style: TextStyle(
-                      color: dotFg,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+              '$number',
+              style: TextStyle(
+                color: dotFg,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 6),
@@ -4518,20 +4625,20 @@ class _ReviewDialogState extends State<_ReviewDialog> {
                           child: Center(
                             child: _submitting
                                 ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: _G.activeBtnText,
-                                    ),
-                                  )
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: _G.activeBtnText,
+                              ),
+                            )
                                 : const Text(
-                                    'Submit',
-                                    style: TextStyle(
-                                      color: _G.activeBtnText,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
+                              'Submit',
+                              style: TextStyle(
+                                color: _G.activeBtnText,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
                         ),
                       ),

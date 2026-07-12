@@ -1,9 +1,27 @@
 // Shared widgets for Sales Record and Sales Report.
 // Used by BOTH the employee and admin screens.
 import 'dart:async';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import '../services/file_utils.dart' as file_utils;
 import 'app_theme.dart';
+
+// ── Print Document / PDF report constants (Sales Report) ────────────────────
+// Mirrors the business info block used by invoice_screen.dart and the Job
+// Queue report for visual consistency across all generated PDFs.
+const _srBizName    = 'IMPRENTA INC.';
+const _srBizTagline = 'Professional Printing Services';
+const _srBizAddr1   = '5th Street Pacita Avenue, Office 1 Rongavilla Building';
+const _srBizAddr2   = 'San Pedro, Laguna, 4023, Philippines';
+const _srBizTin     = '010-253-357-000';
+
+// The first month of orders to scan for the Price Changes section.
+final DateTime _priceChangeCutoff = DateTime(2026, 6, 1);
 
 // ── Light-theme design tokens ─────────────────────────────────────────────────
 class _T {
@@ -910,7 +928,7 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
     );
     if (!hasCustId) {
       final allImported = records.every(
-        (r) => r['import_source'] == 'historical_seed',
+            (r) => r['import_source'] == 'historical_seed',
       );
       if (!allImported) missingCustIdOrders.add(orderId);
     }
@@ -1013,15 +1031,15 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
     }
 
     final isImported = records.any(
-      (r) => r['import_source'] == 'historical_seed',
+          (r) => r['import_source'] == 'historical_seed',
     );
     final isXlsxImport = !isImported && records.any(
-      (r) => r['import_source'] == 'manual_xlsx_import',
+          (r) => r['import_source'] == 'manual_xlsx_import',
     );
     final isWalkIn = records.any((r) => r['walk_in'] == true) ||
         (custId.isEmpty &&
             records.any(
-              (r) => (r['customer_name']?.toString() ?? '').isNotEmpty,
+                  (r) => (r['customer_name']?.toString() ?? '').isNotEmpty,
             ));
 
     groups.add(
@@ -1051,6 +1069,1441 @@ Future<List<_GroupedRecord>> _groupRecordsAsync(
   });
 
   return groups;
+}
+
+// =============================================================================
+// Admin Sales Report — "Print Document" (PDF generation)
+// =============================================================================
+//
+// The full Sales Report PDF (_buildSalesReportPdf / generateAdminSalesReportPdf)
+// is the analytical companion to the lean Sales Records PDF further below
+// (_buildSalesRecordsPdf / generateAdminSalesRecordsPdf). The line-item
+// Sales Records table itself lives only in that companion PDF — this report
+// focuses on analysis. It contains:
+//   1. Sales Summary — headline totals (orders, revenue, paid/partial split).
+//   2. Price Change Analysis — every product/service or add-on whose
+//      per-unit price differs from the price it was sold at in its own most
+//      recent prior order, where the changed price first appears in an
+//      order dated June 1, 2026 or later. This app doesn't store a separate
+//      product-catalog price, so "previous price" is derived by comparing
+//      each product's price chronologically across every order rather than
+//      against a fixed catalog value.
+//   3. Revenue Impact from Price Changes — estimated net revenue effect of
+//      those price changes on the orders sold at the new prices.
+//   4. Best-Selling Products/Services — top items ranked by revenue.
+//   5. Payment Breakdown — orders/revenue grouped by payment method.
+//   6. Order Status Breakdown — orders/revenue grouped by order status.
+//   7. Remarks & Analysis — a short narrative summary tying the above
+//      together.
+//
+// Both PDFs are triggered from the admin Sales Record screen's "Print
+// Document" button (admin_logs_screen.dart), depending on which sub-tab
+// ("Sales Record" vs "Sales Report") is active.
+
+class _SalesReportRow {
+  final String salesRecordId;
+  final String orderId;
+  final String customer;
+  final String orderDate;
+  final Timestamp? orderDateRaw;
+  final String product;
+  final int qty;
+  final double unitPrice;
+  final double lineTotal;
+  final String paymentStatus;
+  final String orderStatus;
+  final double orderTotal;
+  const _SalesReportRow({
+    required this.salesRecordId,
+    required this.orderId,
+    required this.customer,
+    required this.orderDate,
+    required this.orderDateRaw,
+    required this.product,
+    required this.qty,
+    required this.unitPrice,
+    required this.lineTotal,
+    required this.paymentStatus,
+    required this.orderStatus,
+    required this.orderTotal,
+  });
+}
+
+class _PriceChangeRow {
+  final String orderId;
+  final String orderDate;
+  final Timestamp? orderDateRaw;
+  final String product;
+  // Add-on service name, if this price change applies to an add-on nested
+  // under a product/service rather than the product/service itself.
+  // Empty string when not applicable.
+  final String addonName;
+  final double previousPrice;
+  final double changedPrice;
+  final double difference;
+  final String customer;
+  // Every order (by order_id) sold at `changedPrice`, starting from the
+  // order where the new price first appeared through to the order right
+  // before the next detected change (or the most recent order, if none).
+  final List<String> affectedOrderIds;
+  const _PriceChangeRow({
+    required this.orderId,
+    required this.orderDate,
+    required this.orderDateRaw,
+    required this.product,
+    required this.addonName,
+    required this.previousPrice,
+    required this.changedPrice,
+    required this.difference,
+    required this.customer,
+    required this.affectedOrderIds,
+  });
+
+  bool get hasAddon => addonName.isNotEmpty;
+  // Display label combining product/service with its add-on, when present.
+  String get itemLabel => hasAddon ? '$product — $addonName' : product;
+}
+
+String _fmtSalesReportDate(Timestamp? ts) {
+  if (ts == null) return '—';
+  final d = ts.toDate().toLocal();
+  const mo = ['Jan','Feb','Mar','Apr','May','Jun',
+    'Jul','Aug','Sep','Oct','Nov','Dec'];
+  return '${mo[d.month - 1]} ${d.day}, ${d.year}';
+}
+
+String _salesOrderStatusLabel(String st) {
+  switch (st) {
+    case 'in_production': return 'Active';
+    case 'pending':        return 'Pending';
+    case 'ready':          return 'Ready';
+    case 'cancelled':      return 'Cancelled';
+    case 'completed':      return 'Completed';
+    default: return st.isEmpty ? '—' : st[0].toUpperCase() + st.substring(1);
+  }
+}
+
+// Joins grouped Sales_Records with their Orders data and fans out one row
+// per product line item (an order with 3 products yields 3 rows, all
+// sharing the same Sales Record ID / Order ID / customer / status info).
+List<_SalesReportRow> _buildSalesReportRows(
+    List<_GroupedRecord> groups,
+    Map<String, Map<String, dynamic>> ordersById,
+    ) {
+  final rows = <_SalesReportRow>[];
+
+  for (final g in groups) {
+    // Earliest Sales_Records doc for this order is treated as the
+    // canonical "Sales Record ID" (groups is built from date-sorted docs).
+    final salesRecordId = g.docRefs.isNotEmpty ? g.docRefs.first.id : g.orderId;
+    final order = ordersById[g.orderId];
+
+    final isFullyPaid = g.paymentType == 'full' ||
+        (g.orderTotal > 0 && g.totalPaid >= g.orderTotal - 0.01);
+    final paymentStatus = isFullyPaid ? 'Fully Paid' : 'Partial / Balance Due';
+
+    final orderStatusRaw = order?['status']?.toString() ?? '';
+    final orderStatus = orderStatusRaw.isEmpty ? '—' : _salesOrderStatusLabel(orderStatusRaw);
+
+    final orderDateTs = (order?['created_at'] as Timestamp?) ?? g.latestDate;
+    final orderTotal = (order?['total_price'] as num?)?.toDouble() ?? g.orderTotal;
+    final custDisplay = (g.custName.isNotEmpty && g.custName != '—')
+        ? g.custName
+        : (g.custId.isNotEmpty ? g.custId : '—');
+
+    final products = (order?['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+    if (products.isEmpty) {
+      // No matching Order product data (e.g. order doc missing) — still
+      // surface the sales/payment info as a single row.
+      rows.add(_SalesReportRow(
+        salesRecordId: salesRecordId,
+        orderId: g.orderId,
+        customer: custDisplay,
+        orderDate: _fmtSalesReportDate(orderDateTs),
+        orderDateRaw: orderDateTs,
+        product: '—',
+        qty: 0,
+        unitPrice: 0,
+        lineTotal: 0,
+        paymentStatus: paymentStatus,
+        orderStatus: orderStatus,
+        orderTotal: orderTotal,
+      ));
+      continue;
+    }
+
+    for (final p in products) {
+      final qty = (p['qty'] as num?)?.toInt() ?? 1;
+      final unit = (p['unit_price'] as num?)?.toDouble() ?? 0;
+      final line = (p['price'] as num?)?.toDouble() ?? (unit * qty);
+      rows.add(_SalesReportRow(
+        salesRecordId: salesRecordId,
+        orderId: g.orderId,
+        customer: custDisplay,
+        orderDate: _fmtSalesReportDate(orderDateTs),
+        orderDateRaw: orderDateTs,
+        product: (p['name']?.toString() ?? 'Item'),
+        qty: qty,
+        unitPrice: unit,
+        lineTotal: line,
+        paymentStatus: paymentStatus,
+        orderStatus: orderStatus,
+        orderTotal: orderTotal,
+      ));
+    }
+  }
+
+  // Most recent order first, matching the on-screen Sales Record list.
+  rows.sort((a, b) {
+    if (a.orderDateRaw == null && b.orderDateRaw == null) return 0;
+    if (a.orderDateRaw == null) return 1;
+    if (b.orderDateRaw == null) return -1;
+    return b.orderDateRaw!.compareTo(a.orderDateRaw!);
+  });
+
+  return rows;
+}
+
+// Builds a chronological price-usage timeline per product/service — and,
+// where present, per add-on nested under a product line item — across every
+// order, then flags any change whose new price was first introduced in an
+// order dated on/after `_priceChangeCutoff`. Add-ons are read defensively
+// from an optional `addons` list on each product entry (each with `name`
+// and `unit_price`/`price`); orders without that field are unaffected.
+List<_PriceChangeRow> _buildPriceChangeRows(Map<String, Map<String, dynamic>> ordersById) {
+  // key = 'product|||addon' ('' addon = the product/service itself).
+  final byKey = <String, List<Map<String, dynamic>>>{};
+  final keyMeta = <String, List<String>>{}; // key -> [product, addon]
+
+  void addOccurrence(String product, String addon, Timestamp ts, double unit,
+      String orderId, String cust) {
+    final key = '$product|||$addon';
+    keyMeta[key] = [product, addon];
+    byKey.putIfAbsent(key, () => []).add({
+      'ts': ts,
+      'unit': unit,
+      'orderId': orderId,
+      'cust': cust,
+    });
+  }
+
+  for (final order in ordersById.values) {
+    final ts = order['created_at'] as Timestamp?;
+    if (ts == null) continue;
+    final products = (order['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final orderId = order['order_id']?.toString() ?? '';
+    final custName = order['customer_name']?.toString() ?? '';
+    for (final p in products) {
+      final name = (p['name']?.toString() ?? '').trim();
+      if (name.isEmpty) continue;
+      final unit = (p['unit_price'] as num?)?.toDouble() ?? 0;
+      addOccurrence(name, '', ts, unit, orderId, custName);
+
+      final addons = (p['addons'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      for (final a in addons) {
+        final aName = (a['name']?.toString() ?? '').trim();
+        if (aName.isEmpty) continue;
+        final aUnit = (a['unit_price'] as num?)?.toDouble() ??
+            (a['price'] as num?)?.toDouble() ?? 0;
+        addOccurrence(name, aName, ts, aUnit, orderId, custName);
+      }
+    }
+  }
+
+  final changes = <_PriceChangeRow>[];
+  for (final entry in byKey.entries) {
+    final meta = keyMeta[entry.key]!;
+    final occurrences = entry.value
+      ..sort((a, b) => (a['ts'] as Timestamp).compareTo(b['ts'] as Timestamp));
+    for (int i = 1; i < occurrences.length; i++) {
+      final prev = occurrences[i - 1];
+      final curr = occurrences[i];
+      final prevPrice = prev['unit'] as double;
+      final currPrice = curr['unit'] as double;
+      final currTs = curr['ts'] as Timestamp;
+      if ((currPrice - prevPrice).abs() < 0.01) continue; // not a real change
+      if (currTs.toDate().isBefore(_priceChangeCutoff)) continue;
+
+      // Orders affected: every occurrence from the change point onward that
+      // was sold at the same new price, up to the next detected change.
+      final affected = <String>{};
+      for (int j = i; j < occurrences.length; j++) {
+        final pj = occurrences[j]['unit'] as double;
+        if ((pj - currPrice).abs() >= 0.01) break;
+        final oid = occurrences[j]['orderId'] as String;
+        if (oid.isNotEmpty) affected.add(oid);
+      }
+
+      changes.add(_PriceChangeRow(
+        orderId: curr['orderId'] as String,
+        orderDate: _fmtSalesReportDate(currTs),
+        orderDateRaw: currTs,
+        product: meta[0],
+        addonName: meta[1],
+        previousPrice: prevPrice,
+        changedPrice: currPrice,
+        difference: currPrice - prevPrice,
+        customer: (curr['cust'] as String).isNotEmpty ? curr['cust'] as String : '—',
+        affectedOrderIds: affected.toList(),
+      ));
+    }
+  }
+
+  changes.sort((a, b) {
+    if (a.orderDateRaw == null && b.orderDateRaw == null) return 0;
+    if (a.orderDateRaw == null) return 1;
+    if (b.orderDateRaw == null) return -1;
+    return b.orderDateRaw!.compareTo(a.orderDateRaw!);
+  });
+
+  return changes;
+}
+
+// =============================================================================
+// Sales Report analysis aggregates — best sellers, payment breakdown, and
+// order status breakdown. All computed from the same `rows`/`groups` data
+// already assembled for the Sales Records table, so they always stay
+// consistent with what's printed above them in the report.
+// =============================================================================
+
+class _BestSellerEntry {
+  final String product;
+  final int qty;
+  final double revenue;
+  const _BestSellerEntry(this.product, this.qty, this.revenue);
+}
+
+class _PaymentBreakdownEntry {
+  final String label;
+  final int orderCount;
+  final double revenue;
+  const _PaymentBreakdownEntry(this.label, this.orderCount, this.revenue);
+}
+
+class _StatusBreakdownEntry {
+  final String label;
+  final int orderCount;
+  final double revenue;
+  const _StatusBreakdownEntry(this.label, this.orderCount, this.revenue);
+}
+
+String _srMethodLabel(String? m) {
+  switch (m) {
+    case 'gcash': return 'GCash';
+    case 'card': return 'Card';
+    case 'maya': return 'Maya';
+    case 'cash': return 'Cash';
+    case 'online': return 'Online';
+    default: return (m != null && m.isNotEmpty) ? m : 'Unspecified';
+  }
+}
+
+// Ranks products/services (and add-ons folded into a line's total) by
+// revenue across every fanned-out sales row.
+List<_BestSellerEntry> _buildBestSellers(List<_SalesReportRow> rows, {int top = 10}) {
+  final qty = <String, int>{};
+  final revenue = <String, double>{};
+  for (final r in rows) {
+    if (r.product == '—' || r.qty <= 0) continue;
+    qty[r.product] = (qty[r.product] ?? 0) + r.qty;
+    revenue[r.product] = (revenue[r.product] ?? 0) + r.lineTotal;
+  }
+  final entries = qty.entries
+      .map((e) => _BestSellerEntry(e.key, e.value, revenue[e.key] ?? 0))
+      .toList()
+    ..sort((a, b) => b.revenue.compareTo(a.revenue));
+  return entries.take(top).toList();
+}
+
+// Breaks down orders (not fanned-out line items) by the payment method
+// recorded on their most recent Sales_Records entry.
+List<_PaymentBreakdownEntry> _buildPaymentBreakdown(List<_GroupedRecord> groups) {
+  final counts = <String, int>{};
+  final revenue = <String, double>{};
+  for (final g in groups) {
+    final label = _srMethodLabel(g.paymentMethod);
+    counts[label] = (counts[label] ?? 0) + 1;
+    revenue[label] = (revenue[label] ?? 0) + g.totalPaid;
+  }
+  final entries = counts.entries
+      .map((e) => _PaymentBreakdownEntry(e.key, e.value, revenue[e.key] ?? 0))
+      .toList()
+    ..sort((a, b) => b.revenue.compareTo(a.revenue));
+  return entries;
+}
+
+// Breaks down orders (deduplicated — one entry per order_id, not per line
+// item) by their order status, alongside the revenue collected on each.
+List<_StatusBreakdownEntry> _buildOrderStatusBreakdown(
+    List<_SalesReportRow> rows, List<_GroupedRecord> groups) {
+  final revenueByOrder = {for (final g in groups) g.orderId: g.totalPaid};
+  final statusByOrder = <String, String>{};
+  for (final r in rows) {
+    statusByOrder.putIfAbsent(r.orderId, () => r.orderStatus);
+  }
+  final counts = <String, int>{};
+  final revenue = <String, double>{};
+  for (final entry in statusByOrder.entries) {
+    final st = entry.value;
+    counts[st] = (counts[st] ?? 0) + 1;
+    revenue[st] = (revenue[st] ?? 0) + (revenueByOrder[entry.key] ?? 0);
+  }
+  final entries = counts.entries
+      .map((e) => _StatusBreakdownEntry(e.key, e.value, revenue[e.key] ?? 0))
+      .toList()
+    ..sort((a, b) => b.orderCount.compareTo(a.orderCount));
+  return entries;
+}
+
+// Generic bounded-height report table — every cell is capped to a fixed
+// number of lines so no row can ever exceed a page (see the Job Queue report
+// for the original bug this pattern was built to prevent).
+pw.Widget _srTable({
+  required List<String> headers,
+  required List<List<String>> data,
+  required Map<int, pw.TableColumnWidth> columnWidths,
+  required pw.Font regular,
+  required pw.Font bold,
+  required PdfColor navy,
+  required PdfColor gold,
+  required PdfColor textDark,
+  required PdfColor rowAlt,
+  required PdfColor rowBorder,
+  Set<int> rightAlign = const {},
+  Set<int> wrapTwoLines = const {},
+  PdfColor? Function(int rowIndex, int colIndex, String value)? cellColor,
+}) {
+  return pw.Table(
+    border: null,
+    columnWidths: columnWidths,
+    children: [
+      pw.TableRow(
+        decoration: pw.BoxDecoration(color: navy),
+        children: headers.asMap().entries.map((h) {
+          return pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+            child: pw.Align(
+              alignment: rightAlign.contains(h.key) ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
+              child: pw.Text(h.value,
+                  style: pw.TextStyle(font: bold, fontSize: 7.5, color: gold),
+                  maxLines: 1,
+                  overflow: pw.TextOverflow.clip),
+            ),
+          );
+        }).toList(),
+      ),
+      ...data.asMap().entries.map((r) {
+        final isAlt = r.key.isOdd;
+        return pw.TableRow(
+          decoration: pw.BoxDecoration(
+            color: isAlt ? rowAlt : null,
+            border: pw.Border(bottom: pw.BorderSide(color: rowBorder, width: 0.5)),
+          ),
+          children: r.value.asMap().entries.map((c) {
+            final color = cellColor?.call(r.key, c.key, c.value) ?? textDark;
+            return pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              child: pw.Align(
+                alignment: rightAlign.contains(c.key) ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
+                child: pw.Text(c.value,
+                    style: pw.TextStyle(font: regular, fontSize: 7.5, color: color),
+                    maxLines: wrapTwoLines.contains(c.key) ? 2 : 1,
+                    overflow: pw.TextOverflow.clip),
+              ),
+            );
+          }).toList(),
+        );
+      }),
+    ],
+  );
+}
+
+Future<Uint8List> _buildSalesReportPdf({
+  required List<_SalesReportRow> rows,
+  required List<_PriceChangeRow> priceChanges,
+  required List<_GroupedRecord> groups,
+}) async {
+  final regular = await PdfGoogleFonts.notoSansRegular();
+  final bold    = await PdfGoogleFonts.notoSansBold();
+  final italic  = await PdfGoogleFonts.notoSansItalic();
+
+  final doc = pw.Document();
+  final now = DateTime.now();
+
+  const navy      = PdfColor.fromInt(0xFF0F1A2E);
+  const gold      = PdfColor.fromInt(0xFFE8B84B);
+  const white     = PdfColors.white;
+  const textDark  = PdfColor.fromInt(0xFF0F172A);
+  const textMid   = PdfColor.fromInt(0xFF475569);
+  const textLight = PdfColor.fromInt(0xFF94A3B8);
+  const rowAlt    = PdfColor.fromInt(0xFFF8FAFC);
+  const rowBorder = PdfColor.fromInt(0xFFE2E8F0);
+  const accentBg  = PdfColor.fromInt(0xFFF0F9FF);
+  const green     = PdfColor.fromInt(0xFF16A34A);
+  const red       = PdfColor.fromInt(0xFFDC2626);
+
+  pw.TextStyle s(pw.Font f, double sz, PdfColor c) => pw.TextStyle(font: f, fontSize: sz, color: c);
+  String php(double v) => '₱ ${AppTheme.fmtAmt(v)}';
+  String shorten(String text, [int maxLen = 22]) =>
+      text.length > maxLen ? '${text.substring(0, maxLen)}…' : text;
+
+  String fmtDateGenerated(DateTime d) {
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun',
+      'Jul','Aug','Sep','Oct','Nov','Dec'];
+    final h12 = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    final ampm = d.hour >= 12 ? 'PM' : 'AM';
+    return '${mo[d.month - 1]} ${d.day}, ${d.year} · '
+        '$h12:${d.minute.toString().padLeft(2, '0')} $ampm';
+  }
+
+  pw.Widget pdfMeta(String label, String value, PdfColor valueColor) => pw.Row(
+    mainAxisAlignment: pw.MainAxisAlignment.end,
+    children: [
+      pw.Text('$label  ', style: pw.TextStyle(font: regular, fontSize: 8.5,
+          color: const PdfColor.fromInt(0xFF64748B))),
+      pw.Text(value, style: pw.TextStyle(font: bold, fontSize: 8.5, color: valueColor)),
+    ],
+  );
+
+  pw.Widget summaryChip(String label, String value, PdfColor color) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    margin: const pw.EdgeInsets.only(right: 6, bottom: 4),
+    decoration: pw.BoxDecoration(
+      color: white,
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(9)),
+      border: pw.Border.all(color: color, width: 0.7),
+    ),
+    child: pw.Row(mainAxisSize: pw.MainAxisSize.min, children: [
+      pw.Container(width: 9, height: 9, decoration: pw.BoxDecoration(
+          color: color, shape: pw.BoxShape.circle)),
+      pw.SizedBox(width: 4),
+      pw.Text(value, style: s(bold, 8, textDark)),
+      pw.SizedBox(width: 2),
+      pw.Text(label, style: s(regular, 7, textMid)),
+    ]),
+  );
+
+  final totalOrders = groups.length;
+  final totalRevenue = groups.fold<double>(0, (sum, g) => sum + g.totalPaid);
+  final fullyPaidCount = groups.where((g) =>
+  g.paymentType == 'full' || (g.orderTotal > 0 && g.totalPaid >= g.orderTotal - 0.01)).length;
+  final partialCount = totalOrders - fullyPaidCount;
+
+  // ── Sales period covered — earliest/latest order date among the rows ────
+  DateTime? periodStart, periodEnd;
+  for (final r in rows) {
+    final d = r.orderDateRaw?.toDate();
+    if (d == null) continue;
+    if (periodStart == null || d.isBefore(periodStart)) periodStart = d;
+    if (periodEnd == null || d.isAfter(periodEnd)) periodEnd = d;
+  }
+  final periodLabel = (periodStart != null && periodEnd != null)
+      ? '${_fmtSalesReportDate(Timestamp.fromDate(periodStart))} – '
+      '${_fmtSalesReportDate(Timestamp.fromDate(periodEnd))}'
+      : 'No records';
+
+  // ── Price Changes table ─────────────────────────────────────────────────
+  final pcHeaders = ['PRODUCT / SERVICE', 'ADD-ON SERVICE', 'PREVIOUS PRICE',
+    'UPDATED PRICE', 'CHANGE STARTED', 'DIFFERENCE', 'RELATED ORDERS'];
+
+  final pcRows = priceChanges.map((c) => [
+    shorten(c.product, 24),
+    c.addonName.isEmpty ? '—' : shorten(c.addonName, 20),
+    php(c.previousPrice),
+    php(c.changedPrice),
+    c.orderDate,
+    '${c.difference >= 0 ? '+' : '-'}${php(c.difference.abs())}',
+    c.affectedOrderIds.isEmpty
+        ? '—'
+        : '${c.affectedOrderIds.length} order${c.affectedOrderIds.length == 1 ? '' : 's'}',
+  ]).toList();
+
+  // ── Price-change impact analysis (narrative) ─────────────────────────────
+  final increaseCount = priceChanges.where((c) => c.difference > 0).length;
+  final decreaseCount = priceChanges.where((c) => c.difference < 0).length;
+  final affectedOrdersTotal =
+      priceChanges.expand((c) => c.affectedOrderIds).toSet().length;
+  final estRevenueImpact = priceChanges.fold<double>(
+      0, (sum, c) => sum + c.difference * c.affectedOrderIds.length);
+
+  final String analysisText;
+  if (priceChanges.isEmpty) {
+    analysisText =
+    'No product, service, or add-on price changes were detected in orders '
+        'dated June 2026 or later. Sales performance in this report reflects '
+        'pricing that was already in effect before that period.';
+  } else {
+    final direction = estRevenueImpact >= 0 ? 'increased' : 'decreased';
+    analysisText =
+    'Since June 2026, ${priceChanges.length} product/service and add-on '
+        'price change${priceChanges.length == 1 ? '' : 's'} took effect — '
+        '$increaseCount price increase${increaseCount == 1 ? '' : 's'} and '
+        '$decreaseCount price decrease${decreaseCount == 1 ? '' : 's'}. '
+        'These changes are reflected in $affectedOrdersTotal order'
+        '${affectedOrdersTotal == 1 ? '' : 's'} sold at the new price, for '
+        'an estimated net revenue $direction of ${php(estRevenueImpact.abs())} '
+        'on those orders compared with pre-change pricing. See the table '
+        'above for the specific products, services, and add-ons driving '
+        'this shift, and the separate Sales Records PDF for the full '
+        'order-level detail.';
+  }
+
+  // ── Best-selling products/services, payment breakdown, order status
+  // breakdown — all derived from the same rows/groups as the tables above.
+  final bestSellers = _buildBestSellers(rows);
+  final paymentBreakdown = _buildPaymentBreakdown(groups);
+  final orderStatusBreakdown = _buildOrderStatusBreakdown(rows, groups);
+
+  // ── Remarks & Analysis (narrative synthesis of the whole report) ────────
+  final fullyPaidPct = totalOrders > 0 ? (fullyPaidCount / totalOrders * 100) : 0;
+  final topPaymentMethod = paymentBreakdown.isNotEmpty ? paymentBreakdown.first : null;
+  final topSeller = bestSellers.isNotEmpty ? bestSellers.first : null;
+  final cancelledEntry = orderStatusBreakdown.firstWhere(
+        (e) => e.label == 'Cancelled',
+    orElse: () => const _StatusBreakdownEntry('Cancelled', 0, 0),
+  );
+  final cancelledPct = totalOrders > 0 ? (cancelledEntry.orderCount / totalOrders * 100) : 0;
+
+  final remarksText = StringBuffer()
+    ..write('This report covers $totalOrders order${totalOrders == 1 ? '' : 's'} '
+        'totaling ${php(totalRevenue)} in collected revenue over $periodLabel. ')
+    ..write('$fullyPaidCount order${fullyPaidCount == 1 ? '' : 's'} '
+        '(${fullyPaidPct.toStringAsFixed(1)}%) ${fullyPaidCount == 1 ? 'is' : 'are'} fully paid, '
+        'while $partialCount remain${partialCount == 1 ? 's' : ''} partially paid or with a balance due. ');
+  if (topPaymentMethod != null) {
+    remarksText.write('${topPaymentMethod.label} is the most-used payment method, '
+        'covering ${topPaymentMethod.orderCount} order${topPaymentMethod.orderCount == 1 ? '' : 's'} '
+        'and ${php(topPaymentMethod.revenue)} in revenue. ');
+  }
+  if (topSeller != null) {
+    remarksText.write('${topSeller.product} is the top-selling product/service by revenue, '
+        'with ${topSeller.qty} unit${topSeller.qty == 1 ? '' : 's'} sold '
+        'for ${php(topSeller.revenue)}. ');
+  }
+  if (cancelledEntry.orderCount > 0) {
+    remarksText.write('${cancelledEntry.orderCount} order${cancelledEntry.orderCount == 1 ? '' : 's'} '
+        '(${cancelledPct.toStringAsFixed(1)}%) ${cancelledEntry.orderCount == 1 ? 'was' : 'were'} cancelled. ');
+  }
+  if (priceChanges.isEmpty) {
+    remarksText.write('No pricing changes were recorded from June 2026 onward, '
+        'so current pricing has remained stable throughout this period.');
+  } else {
+    final direction = estRevenueImpact >= 0 ? 'a net revenue increase' : 'a net revenue decrease';
+    remarksText.write('Pricing changes effective June 2026 onward ($increaseCount increase'
+        '${increaseCount == 1 ? '' : 's'}, $decreaseCount decrease${decreaseCount == 1 ? '' : 's'}) '
+        'have resulted in $direction of ${php(estRevenueImpact.abs())} on the '
+        '$affectedOrdersTotal order${affectedOrdersTotal == 1 ? '' : 's'} sold at the new prices.');
+  }
+
+  doc.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: pw.EdgeInsets.zero,
+      // Generous cap — "all sales records" with no date limit can legitimately
+      // span hundreds of pages once fanned out per product line.
+      maxPages: 5000,
+      header: (ctx) => ctx.pageNumber == 1
+          ? pw.SizedBox()
+          : pw.Container(
+        width: double.infinity,
+        color: navy,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 10),
+        child: pw.Text('$_srBizName  ·  Sales Report', style: s(bold, 9, gold)),
+      ),
+      footer: (ctx) => pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 10),
+        decoration: const pw.BoxDecoration(color: rowAlt),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('$_srBizName  ·  TIN: $_srBizTin', style: s(bold, 7.5, textMid)),
+            pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                style: s(regular, 7.5, textLight)),
+          ],
+        ),
+      ),
+      build: (ctx) => [
+        // ── Header band ───────────────────────────────────────────────────
+        pw.Container(
+          width: double.infinity,
+          color: navy,
+          padding: const pw.EdgeInsets.fromLTRB(36, 26, 36, 22),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(_srBizName, style: pw.TextStyle(
+                        font: bold, fontSize: 22, color: gold, letterSpacing: 1.5)),
+                    pw.SizedBox(height: 3),
+                    pw.Text(_srBizTagline, style: s(regular, 9, textLight)),
+                    pw.SizedBox(height: 9),
+                    pw.Container(height: 1, width: 160,
+                        color: const PdfColor.fromInt(0xFF334155)),
+                    pw.SizedBox(height: 9),
+                    pw.Text(_srBizAddr1, style: s(regular, 8.5,
+                        const PdfColor.fromInt(0xFFCBD5E1))),
+                    pw.Text(_srBizAddr2, style: s(regular, 8.5,
+                        const PdfColor.fromInt(0xFFCBD5E1))),
+                    pw.SizedBox(height: 5),
+                    pw.Text('TIN: $_srBizTin', style: s(regular, 8.5,
+                        const PdfColor.fromInt(0xFFCBD5E1))),
+                  ],
+                ),
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('SALES REPORT', style: pw.TextStyle(
+                      font: bold, fontSize: 17, color: gold, letterSpacing: 1.1)),
+                  pw.SizedBox(height: 10),
+                  pdfMeta('Date Generated', fmtDateGenerated(now), white),
+                  pw.SizedBox(height: 4),
+                  pdfMeta('Generated By', 'Admin', const PdfColor.fromInt(0xFFCBD5E1)),
+                  pw.SizedBox(height: 4),
+                  pdfMeta('Report Scope', 'All Sales Records', const PdfColor.fromInt(0xFFCBD5E1)),
+                  pw.SizedBox(height: 4),
+                  pdfMeta('Sales Period Covered', periodLabel, const PdfColor.fromInt(0xFFCBD5E1)),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // ── Summary strip ────────────────────────────────────────────────
+        pw.Container(
+          width: double.infinity,
+          color: accentBg,
+          padding: const pw.EdgeInsets.fromLTRB(36, 10, 36, 10),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('SUMMARY', style: s(bold, 7.5, textLight)),
+              pw.SizedBox(height: 6),
+              pw.Wrap(spacing: 0, runSpacing: 0, children: [
+                summaryChip('Total Orders', '$totalOrders', navy),
+                summaryChip('Fully Paid', '$fullyPaidCount', green),
+                summaryChip('Partial / Balance Due', '$partialCount', const PdfColor.fromInt(0xFFD97706)),
+                summaryChip('Price Changes (Jun 2026+)', '${priceChanges.length}', red),
+              ]),
+              pw.SizedBox(height: 8),
+              pw.Text('Total Revenue Collected: ${php(totalRevenue)}', style: s(bold, 9, textDark)),
+            ],
+          ),
+        ),
+
+        pw.SizedBox(height: 18),
+
+        // ── Price Change Analysis ────────────────────────────────────────
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('PRICE CHANGE ANALYSIS — JUNE 2026 ONWARD', style: pw.TextStyle(
+                  font: bold, fontSize: 13, color: navy, letterSpacing: 0.5)),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Products, services, and add-on services whose per-unit price differs from the price '
+                    'they were previously sold at, first appearing in an order dated June 2026 or later, '
+                    'together with the orders sold at each new price.',
+                style: s(regular, 8, textMid),
+              ),
+              pw.SizedBox(height: 14),
+            ],
+          ),
+        ),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: priceChanges.isEmpty
+              ? pw.Text('No price changes detected from June 2026 onward.',
+              style: s(italic, 9, textMid))
+              : _srTable(
+            headers: pcHeaders,
+            data: pcRows,
+            regular: regular,
+            bold: bold,
+            navy: navy,
+            gold: gold,
+            textDark: textDark,
+            rowAlt: rowAlt,
+            rowBorder: rowBorder,
+            rightAlign: const {2, 3, 5},
+            wrapTwoLines: const {0, 1},
+            cellColor: (rowIndex, colIndex, value) {
+              if (colIndex != 5) return null;
+              return value.startsWith('+') ? red : green;
+            },
+            columnWidths: const {
+              0: pw.FlexColumnWidth(1.9),
+              1: pw.FlexColumnWidth(1.5),
+              2: pw.FlexColumnWidth(1.0),
+              3: pw.FlexColumnWidth(1.0),
+              4: pw.FlexColumnWidth(1.2),
+              5: pw.FlexColumnWidth(1.0),
+              6: pw.FlexColumnWidth(1.1),
+            },
+          ),
+        ),
+
+        // ── Revenue Impact from Price Changes — its own section, forced
+        // onto a fresh page so the heading and stat chips stay together.
+        pw.NewPage(),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.fromLTRB(36, 26, 36, 30),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('REVENUE IMPACT FROM PRICE CHANGES', style: pw.TextStyle(
+                  font: bold, fontSize: 13, color: navy, letterSpacing: 0.5)),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Estimated effect of the price changes above on revenue, based on the orders sold at each new price.',
+                style: s(regular, 8, textMid),
+              ),
+              pw.SizedBox(height: 14),
+              pw.Wrap(spacing: 8, runSpacing: 8, children: [
+                summaryChip('Price Increases', '$increaseCount', red),
+                summaryChip('Price Decreases', '$decreaseCount', green),
+                summaryChip('Orders Affected', '$affectedOrdersTotal', navy),
+                summaryChip(
+                  'Net Revenue Impact',
+                  '${estRevenueImpact >= 0 ? '+' : '-'}${php(estRevenueImpact.abs())}',
+                  estRevenueImpact >= 0 ? green : red,
+                ),
+              ]),
+              pw.SizedBox(height: 14),
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: accentBg,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                  border: pw.Border.all(color: rowBorder, width: 0.7),
+                ),
+                child: pw.Text(analysisText, style: s(regular, 8.5, textMid)),
+              ),
+            ],
+          ),
+        ),
+
+        // ── Best-Selling Products/Services ────────────────────────────────
+        pw.NewPage(),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(height: 26),
+              pw.Text('BEST-SELLING PRODUCTS / SERVICES', style: pw.TextStyle(
+                  font: bold, fontSize: 13, color: navy, letterSpacing: 0.5)),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Top products and services in this report, ranked by revenue.',
+                style: s(regular, 8, textMid),
+              ),
+              pw.SizedBox(height: 14),
+            ],
+          ),
+        ),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: bestSellers.isEmpty
+              ? pw.Text('No product/service sales data available.',
+              style: s(italic, 9, textMid))
+              : _srTable(
+            headers: const ['#', 'PRODUCT / SERVICE', 'QTY SOLD', 'REVENUE', '% OF TOTAL REVENUE'],
+            data: bestSellers.asMap().entries.map((e) {
+              final i = e.key;
+              final b = e.value;
+              final pct = totalRevenue > 0 ? (b.revenue / totalRevenue * 100) : 0.0;
+              return [
+                '${i + 1}',
+                shorten(b.product, 40),
+                '${b.qty}',
+                php(b.revenue),
+                '${pct.toStringAsFixed(1)}%',
+              ];
+            }).toList(),
+            regular: regular,
+            bold: bold,
+            navy: navy,
+            gold: gold,
+            textDark: textDark,
+            rowAlt: rowAlt,
+            rowBorder: rowBorder,
+            rightAlign: const {2, 3, 4},
+            wrapTwoLines: const {1},
+            columnWidths: const {
+              0: pw.FixedColumnWidth(22),
+              1: pw.FlexColumnWidth(2.6),
+              2: pw.FlexColumnWidth(1.0),
+              3: pw.FlexColumnWidth(1.2),
+              4: pw.FlexColumnWidth(1.4),
+            },
+          ),
+        ),
+
+        // ── Payment Breakdown ──────────────────────────────────────────────
+        pw.NewPage(),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(height: 26),
+              pw.Text('PAYMENT BREAKDOWN', style: pw.TextStyle(
+                  font: bold, fontSize: 13, color: navy, letterSpacing: 0.5)),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Orders and revenue in this report grouped by payment method.',
+                style: s(regular, 8, textMid),
+              ),
+              pw.SizedBox(height: 14),
+            ],
+          ),
+        ),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: paymentBreakdown.isEmpty
+              ? pw.Text('No payment data available.', style: s(italic, 9, textMid))
+              : _srTable(
+            headers: const ['PAYMENT METHOD', 'ORDERS', 'REVENUE', '% OF TOTAL REVENUE'],
+            data: paymentBreakdown.map((p) {
+              final pct = totalRevenue > 0 ? (p.revenue / totalRevenue * 100) : 0.0;
+              return [
+                p.label,
+                '${p.orderCount}',
+                php(p.revenue),
+                '${pct.toStringAsFixed(1)}%',
+              ];
+            }).toList(),
+            regular: regular,
+            bold: bold,
+            navy: navy,
+            gold: gold,
+            textDark: textDark,
+            rowAlt: rowAlt,
+            rowBorder: rowBorder,
+            rightAlign: const {1, 2, 3},
+            columnWidths: const {
+              0: pw.FlexColumnWidth(1.8),
+              1: pw.FlexColumnWidth(1.0),
+              2: pw.FlexColumnWidth(1.3),
+              3: pw.FlexColumnWidth(1.4),
+            },
+          ),
+        ),
+
+        // ── Order Status Breakdown ─────────────────────────────────────────
+        pw.NewPage(),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(height: 26),
+              pw.Text('ORDER STATUS BREAKDOWN', style: pw.TextStyle(
+                  font: bold, fontSize: 13, color: navy, letterSpacing: 0.5)),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Orders in this report grouped by current order status.',
+                style: s(regular, 8, textMid),
+              ),
+              pw.SizedBox(height: 14),
+            ],
+          ),
+        ),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: orderStatusBreakdown.isEmpty
+              ? pw.Text('No order status data available.', style: s(italic, 9, textMid))
+              : _srTable(
+            headers: const ['ORDER STATUS', 'ORDERS', '% OF ORDERS', 'REVENUE'],
+            data: orderStatusBreakdown.map((o) {
+              final pct = totalOrders > 0 ? (o.orderCount / totalOrders * 100) : 0.0;
+              return [
+                o.label,
+                '${o.orderCount}',
+                '${pct.toStringAsFixed(1)}%',
+                php(o.revenue),
+              ];
+            }).toList(),
+            regular: regular,
+            bold: bold,
+            navy: navy,
+            gold: gold,
+            textDark: textDark,
+            rowAlt: rowAlt,
+            rowBorder: rowBorder,
+            rightAlign: const {1, 2, 3},
+            cellColor: (rowIndex, colIndex, value) {
+              if (colIndex != 0) return null;
+              if (value == 'Cancelled') return red;
+              if (value == 'Completed') return green;
+              return null;
+            },
+            columnWidths: const {
+              0: pw.FlexColumnWidth(1.6),
+              1: pw.FlexColumnWidth(1.0),
+              2: pw.FlexColumnWidth(1.1),
+              3: pw.FlexColumnWidth(1.3),
+            },
+          ),
+        ),
+
+        // ── Remarks & Analysis — final section, synthesizes the report ─────
+        pw.NewPage(),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.fromLTRB(36, 26, 36, 30),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('REMARKS & ANALYSIS', style: pw.TextStyle(
+                  font: bold, fontSize: 13, color: navy, letterSpacing: 0.5)),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'A brief narrative summary of overall sales performance covered by this report.',
+                style: s(regular, 8, textMid),
+              ),
+              pw.SizedBox(height: 14),
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: accentBg,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                  border: pw.Border.all(color: rowBorder, width: 0.7),
+                ),
+                child: pw.Text(remarksText.toString(), style: s(regular, 8.5, textMid)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  return Uint8List.fromList(await doc.save());
+}
+
+Future<void> generateAdminSalesReportPdf(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.showSnackBar(
+    const SnackBar(content: Text('Preparing sales report…'), duration: Duration(seconds: 2)),
+  );
+
+  try {
+    final db = FirebaseFirestore.instance;
+
+    final results = await Future.wait([
+      db.collection('Sales_Records').get(),
+      db.collection('Orders').get(),
+      db.collection('Order_Queue').get(),
+    ]);
+    final srSnap = results[0];
+    final ordSnap = results[1];
+    final oqSnap = results[2];
+
+    // Merge Orders + Order_Queue, de-duplicated by order_id (Orders preferred)
+    // so price history covers both current and archived orders.
+    final seenOrderIds = <String>{};
+    final orderDocs = [...ordSnap.docs, ...oqSnap.docs].where((d) {
+      final oid = (d.data() as Map<String, dynamic>)['order_id']?.toString() ?? d.id;
+      return seenOrderIds.add(oid);
+    }).toList();
+    final ordersById = <String, Map<String, dynamic>>{
+      for (final d in orderDocs)
+        ((d.data() as Map<String, dynamic>)['order_id']?.toString() ?? d.id):
+        d.data() as Map<String, dynamic>,
+    };
+
+    // Sort ascending by sale_date so, per order_id, the first doc encountered
+    // by _groupRecordsAsync is the earliest — used as the canonical
+    // "Sales Record ID" for that order.
+    final sortedDocs = [...srSnap.docs]..sort((a, b) {
+      final ta = (a.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
+      final tb = (b.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
+      if (ta == null && tb == null) return 0;
+      if (ta == null) return -1;
+      if (tb == null) return 1;
+      return ta.compareTo(tb);
+    });
+
+    final groups = await _groupRecordsAsync(sortedDocs);
+    // Same "real records only" rule the on-screen Sales Record list uses.
+    final realGroups = groups.where((g) => !g.isImported && !g.isXlsxImport).toList();
+
+    final rows = _buildSalesReportRows(realGroups, ordersById);
+    final priceChanges = _buildPriceChangeRows(ordersById);
+
+    final bytes = await _buildSalesReportPdf(
+      rows: rows,
+      priceChanges: priceChanges,
+      groups: realGroups,
+    );
+
+    final now = DateTime.now();
+    final stamp = '${now.year}${now.month.toString().padLeft(2, '0')}'
+        '${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}'
+        '${now.minute.toString().padLeft(2, '0')}';
+    final filename = 'sales_report_$stamp.pdf';
+
+    if (kIsWeb) {
+      await file_utils.downloadBytes(bytes, 'application/pdf', filename);
+    } else {
+      await Printing.sharePdf(bytes: bytes, filename: filename);
+    }
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to generate sales report: $e')),
+    );
+  }
+}
+
+// =============================================================================
+// Admin Sales Records — "Print Document" (PDF generation)
+// =============================================================================
+// A lean companion to the Sales Report PDF above: just the business header,
+// a compact summary strip, and the full Sales Records table — no Price
+// Change Analysis, Best-Sellers, Payment/Order-Status breakdowns, or
+// Remarks. Intended for a quick, printable listing of the raw records
+// rather than the full analytical report.
+//
+// Triggered from the admin Sales Record screen's "Print Document" button
+// while the "Sales Record" sub-tab is active (admin_logs_screen.dart).
+Future<Uint8List> _buildSalesRecordsPdf({
+  required List<_SalesReportRow> rows,
+  required List<_GroupedRecord> groups,
+}) async {
+  final regular = await PdfGoogleFonts.notoSansRegular();
+  final bold    = await PdfGoogleFonts.notoSansBold();
+  final italic  = await PdfGoogleFonts.notoSansItalic();
+
+  final doc = pw.Document();
+  final now = DateTime.now();
+
+  const navy      = PdfColor.fromInt(0xFF0F1A2E);
+  const gold      = PdfColor.fromInt(0xFFE8B84B);
+  const white     = PdfColors.white;
+  const textDark  = PdfColor.fromInt(0xFF0F172A);
+  const textMid   = PdfColor.fromInt(0xFF475569);
+  const textLight = PdfColor.fromInt(0xFF94A3B8);
+  const rowAlt    = PdfColor.fromInt(0xFFF8FAFC);
+  const rowBorder = PdfColor.fromInt(0xFFE2E8F0);
+  const accentBg  = PdfColor.fromInt(0xFFF0F9FF);
+  const green     = PdfColor.fromInt(0xFF16A34A);
+
+  pw.TextStyle s(pw.Font f, double sz, PdfColor c) => pw.TextStyle(font: f, fontSize: sz, color: c);
+  String php(double v) => '₱ ${AppTheme.fmtAmt(v)}';
+  String shorten(String text, [int maxLen = 22]) =>
+      text.length > maxLen ? '${text.substring(0, maxLen)}…' : text;
+
+  String fmtDateGenerated(DateTime d) {
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun',
+      'Jul','Aug','Sep','Oct','Nov','Dec'];
+    final h12 = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    final ampm = d.hour >= 12 ? 'PM' : 'AM';
+    return '${mo[d.month - 1]} ${d.day}, ${d.year} · '
+        '$h12:${d.minute.toString().padLeft(2, '0')} $ampm';
+  }
+
+  pw.Widget pdfMeta(String label, String value, PdfColor valueColor) => pw.Row(
+    mainAxisAlignment: pw.MainAxisAlignment.end,
+    children: [
+      pw.Text('$label  ', style: pw.TextStyle(font: regular, fontSize: 8.5,
+          color: const PdfColor.fromInt(0xFF64748B))),
+      pw.Text(value, style: pw.TextStyle(font: bold, fontSize: 8.5, color: valueColor)),
+    ],
+  );
+
+  pw.Widget summaryChip(String label, String value, PdfColor color) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    margin: const pw.EdgeInsets.only(right: 6, bottom: 4),
+    decoration: pw.BoxDecoration(
+      color: white,
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(9)),
+      border: pw.Border.all(color: color, width: 0.7),
+    ),
+    child: pw.Row(mainAxisSize: pw.MainAxisSize.min, children: [
+      pw.Container(width: 9, height: 9, decoration: pw.BoxDecoration(
+          color: color, shape: pw.BoxShape.circle)),
+      pw.SizedBox(width: 4),
+      pw.Text(value, style: s(bold, 8, textDark)),
+      pw.SizedBox(width: 2),
+      pw.Text(label, style: s(regular, 7, textMid)),
+    ]),
+  );
+
+  final totalOrders = groups.length;
+  final totalRevenue = groups.fold<double>(0, (sum, g) => sum + g.totalPaid);
+  final fullyPaidCount = groups.where((g) =>
+  g.paymentType == 'full' || (g.orderTotal > 0 && g.totalPaid >= g.orderTotal - 0.01)).length;
+  final partialCount = totalOrders - fullyPaidCount;
+
+  // ── Sales period covered — earliest/latest order date among the rows ────
+  DateTime? periodStart, periodEnd;
+  for (final r in rows) {
+    final d = r.orderDateRaw?.toDate();
+    if (d == null) continue;
+    if (periodStart == null || d.isBefore(periodStart)) periodStart = d;
+    if (periodEnd == null || d.isAfter(periodEnd)) periodEnd = d;
+  }
+  final periodLabel = (periodStart != null && periodEnd != null)
+      ? '${_fmtSalesReportDate(Timestamp.fromDate(periodStart))} – '
+      '${_fmtSalesReportDate(Timestamp.fromDate(periodEnd))}'
+      : 'No records';
+
+  final headers = ['#', 'RECORD ID', 'ORDER ID', 'CUSTOMER', 'ORDER DATE', 'PRODUCT/SERVICE',
+    'QTY', 'UNIT PRICE', 'LINE TOTAL', 'PAYMENT', 'ORDER STATUS', 'ORDER TOTAL'];
+
+  final tableRows = rows.asMap().entries.map((e) {
+    final i = e.key;
+    final r = e.value;
+    return [
+      '${i + 1}',
+      shorten(r.salesRecordId, 14),
+      shorten(r.orderId, 14),
+      shorten(r.customer, 18),
+      r.orderDate,
+      shorten(r.product, 26),
+      r.qty > 0 ? '${r.qty}' : '—',
+      r.qty > 0 ? php(r.unitPrice) : '—',
+      r.qty > 0 ? php(r.lineTotal) : '—',
+      r.paymentStatus,
+      r.orderStatus,
+      php(r.orderTotal),
+    ];
+  }).toList();
+
+  doc.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: pw.EdgeInsets.zero,
+      // Generous cap — "all sales records" with no date limit can legitimately
+      // span hundreds of pages once fanned out per product line.
+      maxPages: 5000,
+      header: (ctx) => ctx.pageNumber == 1
+          ? pw.SizedBox()
+          : pw.Container(
+        width: double.infinity,
+        color: navy,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 10),
+        child: pw.Text('$_srBizName  ·  Sales Records', style: s(bold, 9, gold)),
+      ),
+      footer: (ctx) => pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 10),
+        decoration: const pw.BoxDecoration(color: rowAlt),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('$_srBizName  ·  TIN: $_srBizTin', style: s(bold, 7.5, textMid)),
+            pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                style: s(regular, 7.5, textLight)),
+          ],
+        ),
+      ),
+      build: (ctx) => [
+        // ── Header band ───────────────────────────────────────────────────
+        pw.Container(
+          width: double.infinity,
+          color: navy,
+          padding: const pw.EdgeInsets.fromLTRB(36, 26, 36, 22),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(_srBizName, style: pw.TextStyle(
+                        font: bold, fontSize: 22, color: gold, letterSpacing: 1.5)),
+                    pw.SizedBox(height: 3),
+                    pw.Text(_srBizTagline, style: s(regular, 9, textLight)),
+                    pw.SizedBox(height: 9),
+                    pw.Container(height: 1, width: 160,
+                        color: const PdfColor.fromInt(0xFF334155)),
+                    pw.SizedBox(height: 9),
+                    pw.Text(_srBizAddr1, style: s(regular, 8.5,
+                        const PdfColor.fromInt(0xFFCBD5E1))),
+                    pw.Text(_srBizAddr2, style: s(regular, 8.5,
+                        const PdfColor.fromInt(0xFFCBD5E1))),
+                    pw.SizedBox(height: 5),
+                    pw.Text('TIN: $_srBizTin', style: s(regular, 8.5,
+                        const PdfColor.fromInt(0xFFCBD5E1))),
+                  ],
+                ),
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('SALES RECORDS', style: pw.TextStyle(
+                      font: bold, fontSize: 17, color: gold, letterSpacing: 1.1)),
+                  pw.SizedBox(height: 10),
+                  pdfMeta('Date Generated', fmtDateGenerated(now), white),
+                  pw.SizedBox(height: 4),
+                  pdfMeta('Generated By', 'Admin', const PdfColor.fromInt(0xFFCBD5E1)),
+                  pw.SizedBox(height: 4),
+                  pdfMeta('Report Scope', 'All Sales Records', const PdfColor.fromInt(0xFFCBD5E1)),
+                  pw.SizedBox(height: 4),
+                  pdfMeta('Period Covered', periodLabel, const PdfColor.fromInt(0xFFCBD5E1)),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // ── Summary strip ────────────────────────────────────────────────
+        pw.Container(
+          width: double.infinity,
+          color: accentBg,
+          padding: const pw.EdgeInsets.fromLTRB(36, 10, 36, 10),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('SUMMARY', style: s(bold, 7.5, textLight)),
+              pw.SizedBox(height: 6),
+              pw.Wrap(spacing: 0, runSpacing: 0, children: [
+                summaryChip('Total Orders', '$totalOrders', navy),
+                summaryChip('Fully Paid', '$fullyPaidCount', green),
+                summaryChip('Partial / Balance Due', '$partialCount', const PdfColor.fromInt(0xFFD97706)),
+              ]),
+              pw.SizedBox(height: 8),
+              pw.Text('Total Revenue Collected: ${php(totalRevenue)}', style: s(bold, 9, textDark)),
+            ],
+          ),
+        ),
+
+        pw.SizedBox(height: 18),
+
+        // ── Sales Records table ─────────────────────────────────────────
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: rows.isEmpty
+              ? pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(vertical: 20),
+            child: pw.Text('No sales records found.', style: s(italic, 9, textMid)),
+          )
+              : _srTable(
+            headers: headers,
+            data: tableRows,
+            regular: regular,
+            bold: bold,
+            navy: navy,
+            gold: gold,
+            textDark: textDark,
+            rowAlt: rowAlt,
+            rowBorder: rowBorder,
+            rightAlign: const {7, 8, 11},
+            wrapTwoLines: const {5},
+            columnWidths: const {
+              0: pw.FixedColumnWidth(20),
+              1: pw.FlexColumnWidth(1.1),
+              2: pw.FlexColumnWidth(1.1),
+              3: pw.FlexColumnWidth(1.3),
+              4: pw.FlexColumnWidth(1.0),
+              5: pw.FlexColumnWidth(1.8),
+              6: pw.FixedColumnWidth(30),
+              7: pw.FlexColumnWidth(0.9),
+              8: pw.FlexColumnWidth(0.9),
+              9: pw.FlexColumnWidth(1.0),
+              10: pw.FlexColumnWidth(0.9),
+              11: pw.FlexColumnWidth(1.0),
+            },
+          ),
+        ),
+      ],
+    ),
+  );
+
+  return Uint8List.fromList(await doc.save());
+}
+
+Future<void> generateAdminSalesRecordsPdf(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.showSnackBar(
+    const SnackBar(content: Text('Preparing sales records…'), duration: Duration(seconds: 2)),
+  );
+
+  try {
+    final db = FirebaseFirestore.instance;
+
+    final results = await Future.wait([
+      db.collection('Sales_Records').get(),
+      db.collection('Orders').get(),
+      db.collection('Order_Queue').get(),
+    ]);
+    final srSnap = results[0];
+    final ordSnap = results[1];
+    final oqSnap = results[2];
+
+    // Merge Orders + Order_Queue, de-duplicated by order_id (Orders preferred).
+    final seenOrderIds = <String>{};
+    final orderDocs = [...ordSnap.docs, ...oqSnap.docs].where((d) {
+      final oid = (d.data() as Map<String, dynamic>)['order_id']?.toString() ?? d.id;
+      return seenOrderIds.add(oid);
+    }).toList();
+    final ordersById = <String, Map<String, dynamic>>{
+      for (final d in orderDocs)
+        ((d.data() as Map<String, dynamic>)['order_id']?.toString() ?? d.id):
+        d.data() as Map<String, dynamic>,
+    };
+
+    // Sort ascending by sale_date so, per order_id, the first doc encountered
+    // by _groupRecordsAsync is the earliest — used as the canonical
+    // "Sales Record ID" for that order.
+    final sortedDocs = [...srSnap.docs]..sort((a, b) {
+      final ta = (a.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
+      final tb = (b.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
+      if (ta == null && tb == null) return 0;
+      if (ta == null) return -1;
+      if (tb == null) return 1;
+      return ta.compareTo(tb);
+    });
+
+    final groups = await _groupRecordsAsync(sortedDocs);
+    // Same "real records only" rule the on-screen Sales Record list uses.
+    final realGroups = groups.where((g) => !g.isImported && !g.isXlsxImport).toList();
+
+    final rows = _buildSalesReportRows(realGroups, ordersById);
+
+    final bytes = await _buildSalesRecordsPdf(
+      rows: rows,
+      groups: realGroups,
+    );
+
+    final now = DateTime.now();
+    final stamp = '${now.year}${now.month.toString().padLeft(2, '0')}'
+        '${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}'
+        '${now.minute.toString().padLeft(2, '0')}';
+    final filename = 'sales_records_$stamp.pdf';
+
+    if (kIsWeb) {
+      await file_utils.downloadBytes(bytes, 'application/pdf', filename);
+    } else {
+      await Printing.sharePdf(bytes: bytes, filename: filename);
+    }
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to generate sales records: $e')),
+    );
+  }
 }
 
 // =============================================================================
@@ -1111,11 +2564,11 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
         // Server-side date filter: query only the selected window
         q = q
             .where('sale_date',
-                isGreaterThanOrEqualTo:
-                    Timestamp.fromDate(_selectedRange!.start))
+            isGreaterThanOrEqualTo:
+            Timestamp.fromDate(_selectedRange!.start))
             .where('sale_date',
-                isLessThanOrEqualTo: Timestamp.fromDate(
-                    _selectedRange!.end.add(const Duration(days: 1))));
+            isLessThanOrEqualTo: Timestamp.fromDate(
+                _selectedRange!.end.add(const Duration(days: 1))));
         _isLimited = false;
       } else {
         // No filter: limit to 500 most recent records for fast load
@@ -1133,8 +2586,8 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
         final ordSnap = await FirebaseFirestore.instance
             .collection('Orders')
             .where('status', whereIn: [
-              'pending', 'in_production', 'ready', 'completed',
-            ])
+          'pending', 'in_production', 'ready', 'completed',
+        ])
             .get();
         for (final doc in ordSnap.docs) {
           final d = doc.data();
@@ -1145,7 +2598,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
           }
           final rem  = (d['remaining_balance'] as num?)?.toDouble() ?? 0;
           final diff = ((d['total_price']  as num?)?.toDouble() ?? 0) -
-                       ((d['amount_paid']  as num?)?.toDouble() ?? 0);
+              ((d['amount_paid']  as num?)?.toDouble() ?? 0);
           final owed = rem > 0.01 ? rem : (diff > 0.01 ? diff : 0.0);
           if (owed > 0.01) outstanding += owed;
         }
@@ -1373,12 +2826,12 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
               prefixIcon: const Icon(Icons.search, size: 16, color: _T.textMuted),
               suffixIcon: _search.isNotEmpty
                   ? GestureDetector(
-                      onTap: () {
-                        _searchCtrl.clear();
-                        setState(() => _search = '');
-                      },
-                      child: const Icon(Icons.clear, size: 16, color: _T.textMuted),
-                    )
+                onTap: () {
+                  _searchCtrl.clear();
+                  setState(() => _search = '');
+                },
+                child: const Icon(Icons.clear, size: 16, color: _T.textMuted),
+              )
                   : null,
               filled: true,
               fillColor: const Color(0xFFF9FAFB),
@@ -2072,9 +3525,9 @@ _BucketType _decideBucketType(int days) {
 
 // Build dynamic bucket list. If range is null, derives span from data.
 List<_Bucket> _buildBuckets(
-  List<QueryDocumentSnapshot> allDocs,
-  DateTimeRange? range,
-) {
+    List<QueryDocumentSnapshot> allDocs,
+    DateTimeRange? range,
+    ) {
   final now = _dateOnly(DateTime.now());
 
   DateTime start, end;
@@ -2085,7 +3538,7 @@ List<_Bucket> _buildBuckets(
     DateTime? earliest, latest;
     for (final doc in allDocs) {
       final ts =
-          (doc.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
+      (doc.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
       if (ts == null) continue;
       final dt = _dateOnly(ts.toDate().toLocal());
       if (earliest == null || dt.isBefore(earliest)) earliest = dt;
@@ -2185,6 +3638,54 @@ class _SalesReportContent extends StatefulWidget {
 class _SalesReportContentState extends State<_SalesReportContent> {
   DateTimeRange? _range;
 
+  // Price-change analysis (product/service + add-on prices changed from
+  // June 2026 onward). Loaded once — same source data the printable Sales
+  // Report PDF uses — and filtered client-side by the selected date range.
+  List<_PriceChangeRow>? _priceChanges;
+  bool _priceChangesLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPriceChanges();
+  }
+
+  Future<void> _loadPriceChanges() async {
+    try {
+      final db = FirebaseFirestore.instance;
+      final results = await Future.wait([
+        db.collection('Orders').get(),
+        db.collection('Order_Queue').get(),
+      ]);
+      final ordSnap = results[0];
+      final oqSnap = results[1];
+
+      // Merge Orders + Order_Queue, de-duplicated by order_id, so the price
+      // history covers both current and archived orders — same approach as
+      // the PDF's generateAdminSalesReportPdf.
+      final seenOrderIds = <String>{};
+      final orderDocs = [...ordSnap.docs, ...oqSnap.docs].where((d) {
+        final oid = (d.data() as Map<String, dynamic>)['order_id']?.toString() ?? d.id;
+        return seenOrderIds.add(oid);
+      }).toList();
+      final ordersById = <String, Map<String, dynamic>>{
+        for (final d in orderDocs)
+          ((d.data() as Map<String, dynamic>)['order_id']?.toString() ?? d.id):
+          d.data() as Map<String, dynamic>,
+      };
+
+      final changes = _buildPriceChangeRows(ordersById);
+      if (mounted) {
+        setState(() {
+          _priceChanges = changes;
+          _priceChangesLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _priceChangesLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
@@ -2215,8 +3716,8 @@ class _SalesReportContentState extends State<_SalesReportContent> {
           stream: FirebaseFirestore.instance
               .collection('Orders')
               .where('status', whereIn: [
-                'pending', 'in_production', 'ready', 'completed',
-              ])
+            'pending', 'in_production', 'ready', 'completed',
+          ])
               .snapshots(),
           builder: (context, ordSnap) {
             // Non-cancelled orders filtered by paid_at within the selected date range.
@@ -2295,8 +3796,8 @@ class _SalesReportContentState extends State<_SalesReportContent> {
             final spanDays = _range != null
                 ? _range!.end.difference(_range!.start).inDays + 1
                 : (buckets.length > 1
-                    ? buckets.last.end.difference(buckets.first.start).inDays + 1
-                    : 31);
+                ? buckets.last.end.difference(buckets.first.start).inDays + 1
+                : 31);
             final granLabel = _granularityLabel(_decideBucketType(spanDays));
 
             return _buildBody(
@@ -2309,6 +3810,8 @@ class _SalesReportContentState extends State<_SalesReportContent> {
               uptTotal: uptTotal,
               refundTotal: refundTotal,
               outstanding: outstanding,
+              priceChanges: _priceChanges,
+              priceChangesLoading: _priceChangesLoading,
             );
           },
         );
@@ -2326,10 +3829,20 @@ class _SalesReportContentState extends State<_SalesReportContent> {
     required double uptTotal,
     required double refundTotal,
     required double outstanding,
+    required List<_PriceChangeRow>? priceChanges,
+    required bool priceChangesLoading,
   }) {
     final l31  = _pLast31();
     final l180 = _pLast180();
     final tyr  = _pThisYear();
+
+    // Price changes whose start date falls within the selected date range
+    // (same filter the rest of the report uses); "All time" shows everything.
+    final filteredPriceChanges = (priceChanges ?? []).where((c) {
+      if (_range == null) return true;
+      if (c.orderDateRaw == null) return false;
+      return _isWithinDateRange(c.orderDateRaw!.toDate().toLocal(), _range);
+    }).toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -2492,7 +4005,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
                       color: const Color(0xFFEFF6FF),
                       borderRadius: BorderRadius.circular(8),
                       border:
-                          Border.all(color: const Color(0xFFBFDBFE)),
+                      Border.all(color: const Color(0xFFBFDBFE)),
                     ),
                     child: const Icon(Icons.bar_chart_rounded,
                         color: Color(0xFF1D4ED8), size: 16),
@@ -2514,7 +4027,7 @@ class _SalesReportContentState extends State<_SalesReportContent> {
                           _range == null
                               ? 'All time'
                               : '${_formatDateLabel(_range!.start)} – '
-                                  '${_formatDateLabel(_range!.end)}',
+                              '${_formatDateLabel(_range!.end)}',
                           style: const TextStyle(
                               color: _T.textMuted, fontSize: 11),
                         ),
@@ -2537,7 +4050,222 @@ class _SalesReportContentState extends State<_SalesReportContent> {
               ],
             ),
           ),
+
+          const SizedBox(height: 24),
+
+          // ── Price Changes card ─────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _T.divider),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x08000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFECACA)),
+                    ),
+                    child: const Icon(Icons.price_change_rounded,
+                        color: Color(0xFFDC2626), size: 15),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Price Changes — June 2026 Onward',
+                          style: TextStyle(
+                            color: _T.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const Text(
+                          'Product, service, and add-on prices updated since June 2026',
+                          style: TextStyle(color: _T.textMuted, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!priceChangesLoading)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Text(
+                        '${filteredPriceChanges.length}',
+                        style: const TextStyle(
+                          color: Color(0xFFDC2626),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                ]),
+                const SizedBox(height: 16),
+                if (priceChangesLoading)
+                  const SizedBox(
+                    height: 80,
+                    child: Center(
+                      child: SizedBox(
+                        width: 20, height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                else
+                  _priceChangeTable(filteredPriceChanges),
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  // ── Price Changes table (web view) ──────────────────────────────────────
+  Widget _priceChangeTable(List<_PriceChangeRow> changes) {
+    if (changes.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: Text(
+            'No price changes detected for this period.',
+            style: TextStyle(color: _T.textMuted, fontSize: 13),
+          ),
+        ),
+      );
+    }
+
+    const headerStyle = TextStyle(
+      color: _T.textMuted,
+      fontSize: 10.5,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.3,
+    );
+
+    Widget headCell(String text) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Text(text, style: headerStyle),
+    );
+
+    Widget cell(String text, {bool bold = false, Color? color}) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color ?? _T.textPrimary,
+          fontSize: 12.5,
+          fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+        ),
+      ),
+    );
+
+    // Shows just the affected-order count as a compact chip — hover (or
+    // long-press on touch) reveals the full list of order IDs via tooltip,
+    // so the row height stays consistent instead of stretching to fit
+    // dozens of comma-separated order IDs.
+    Widget ordersCountCell(List<String> ids) {
+      if (ids.isEmpty) return cell('—');
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Tooltip(
+            message: ids.join(', '),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Text(
+                '${ids.length} order${ids.length == 1 ? '' : 's'}',
+                style: const TextStyle(
+                  color: Color(0xFF1D4ED8),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 780),
+        child: Table(
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          columnWidths: const {
+            0: FlexColumnWidth(1.6),
+            1: FlexColumnWidth(1.3),
+            2: FlexColumnWidth(1.0),
+            3: FlexColumnWidth(1.0),
+            4: FlexColumnWidth(1.1),
+            5: FlexColumnWidth(1.0),
+            6: FlexColumnWidth(1.2),
+          },
+          children: [
+            TableRow(
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: _T.divider, width: 1.5)),
+              ),
+              children: [
+                headCell('PRODUCT / SERVICE'),
+                headCell('ADD-ON SERVICE'),
+                headCell('PREVIOUS PRICE'),
+                headCell('UPDATED PRICE'),
+                headCell('CHANGE STARTED'),
+                headCell('DIFFERENCE'),
+                headCell('RELATED ORDERS'),
+              ],
+            ),
+            ...changes.map((c) {
+              final isIncrease = c.difference > 0;
+              final diffColor =
+              isIncrease ? const Color(0xFFDC2626) : const Color(0xFF16A34A);
+              final diffText =
+                  '${isIncrease ? '+' : '-'}₱${AppTheme.fmtAmt(c.difference.abs())}';
+              return TableRow(
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: _T.divider, width: 0.7)),
+                ),
+                children: [
+                  cell(c.product, bold: true),
+                  cell(c.addonName.isEmpty ? '—' : c.addonName),
+                  cell('₱${AppTheme.fmtAmt(c.previousPrice)}'),
+                  cell('₱${AppTheme.fmtAmt(c.changedPrice)}'),
+                  cell(c.orderDate),
+                  cell(diffText, bold: true, color: diffColor),
+                  ordersCountCell(c.affectedOrderIds),
+                ],
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
@@ -2567,12 +4295,12 @@ class _PresetChip extends StatelessWidget {
           border: Border.all(color: active ? _T.navy : _T.divider),
           boxShadow: active
               ? const [
-                  BoxShadow(
-                    color: Color(0x22000000),
-                    blurRadius: 6,
-                    offset: Offset(0, 2),
-                  )
-                ]
+            BoxShadow(
+              color: Color(0x22000000),
+              blurRadius: 6,
+              offset: Offset(0, 2),
+            )
+          ]
               : [],
         ),
         child: Text(
@@ -2738,16 +4466,16 @@ class _InteractiveChartState extends State<_InteractiveChart> {
               return Expanded(
                 child: show
                     ? Text(
-                        widget.buckets[i].label,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isH ? _T.textPrimary : _T.textMuted,
-                          fontSize: 9,
-                          fontWeight:
-                              isH ? FontWeight.w700 : FontWeight.normal,
-                        ),
-                      )
+                  widget.buckets[i].label,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isH ? _T.textPrimary : _T.textMuted,
+                    fontSize: 9,
+                    fontWeight:
+                    isH ? FontWeight.w700 : FontWeight.normal,
+                  ),
+                )
                     : const SizedBox.shrink(),
               );
             }),
@@ -2767,8 +4495,8 @@ class _InteractiveChartState extends State<_InteractiveChart> {
     final dateStr = sameDay
         ? '${_shortMonth(b.start.month)} ${b.start.day}'
         : '${_shortMonth(b.start.month)} ${b.start.day}'
-            ' – '
-            '${_shortMonth(b.end.month)} ${b.end.day}';
+        ' – '
+        '${_shortMonth(b.end.month)} ${b.end.day}';
 
     return Positioned(
       left: left,
@@ -2817,7 +4545,7 @@ class _ChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (buckets.isEmpty) return;
     final maxVal =
-        buckets.map((b) => b.total).reduce((a, b) => a > b ? a : b);
+    buckets.map((b) => b.total).reduce((a, b) => a > b ? a : b);
     final effMax = maxVal == 0 ? 1.0 : maxVal;
     final n = buckets.length;
     final stepX = n <= 1 ? size.width / 2 : size.width / (n - 1);

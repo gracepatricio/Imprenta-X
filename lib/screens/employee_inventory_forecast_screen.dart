@@ -1,7 +1,14 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import '../services/file_utils.dart' as file_utils;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DOUBLE EXPONENTIAL SMOOTHING  — Holt's Linear Trend method
@@ -29,6 +36,20 @@ const _muted   = Color(0x880F172A);
 const _border  = Color(0x30000000);
 const _indigo  = Color(0xFF6366F1);
 
+// ── Report / PDF constants ──────────────────────────────────────────────────
+const _bizName    = 'IMPRENTA INC.';
+const _bizTagline = 'Professional Printing Services';
+const _bizAddr1   = '5th Street Pacita Avenue, Office 1 Rongavilla Building';
+const _bizAddr2   = 'San Pedro, Laguna, 4023, Philippines';
+const _bizTin     = '010-253-357-000';
+
+// Shared numeric formatter (mirrors _MatCardState._fmt) used by both the
+// in-app cards and the PDF report builder.
+String _fmtNum(double v) {
+  if (v.isInfinite || v.isNaN) return '—';
+  if (v == v.truncateToDouble()) return v.toInt().toString();
+  return v < 1 ? v.toStringAsFixed(3) : v.toStringAsFixed(2);
+}
 
 // ── DES algorithm ─────────────────────────────────────────────────────────────
 
@@ -165,7 +186,7 @@ class _Material {
   double get forecastUnits => forecast30d;
 
   _Status get status {
-    if (dailyRate < 0.001) return _Status.noDemand;
+    if (dailyRate < 0.001 && sources.isEmpty) return _Status.noDemand;
     if (stock <= 0) return synthetic ? _Status.atRisk : _Status.critical;
     if (daysLeft > 90 && stock > restock * 2 && restock > 0) return _Status.overstock;
     if (daysLeft <= 7) return _Status.critical;
@@ -242,11 +263,40 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
   bool   _filtersVisible = true;
   final _searchCtrl = TextEditingController();
 
+  // Whether the signed-in user is allowed to generate the PDF report.
+  // Defaults to false (locked down) until the role check resolves.
+  bool _isAdmin = false;
+
   static const _nPeriods   = 36;
   static const _periodDays = 30;
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _checkAdminAccess();
+    _load();
+  }
+
+  // ── Role check (Admin-only report access) ───────────────────────────────────
+  // Mirrors the role lookup used in UserRoleAccessScreenEmbedded: the role is
+  // stored on the signed-in user's doc in the 'User' collection, field
+  // 'user_role' ('customer' | 'employee' | 'admin').
+  Future<void> _checkAdminAccess() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final doc = await FirebaseFirestore.instance
+          .collection('User')
+          .doc(uid)
+          .get();
+      final role = (doc.data()?['user_role'] ?? 'customer')
+          .toString()
+          .toLowerCase();
+      if (mounted) setState(() => _isAdmin = role == 'admin');
+    } catch (_) {
+      // Fail closed — if the role can't be verified, keep the report hidden.
+    }
+  }
 
   @override
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
@@ -338,8 +388,8 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
       final productUnitsTotal = <String, double>{};
 
       void addSale(String key, String label,
-                   List<Map<String, dynamic>> bom, int idx, double qty,
-                   {double? actualSqft}) {
+          List<Map<String, dynamic>> bom, int idx, double qty,
+          {double? actualSqft}) {
         sales.putIfAbsent(key, () => List.filled(_nPeriods, 0.0));
         display.putIfAbsent(key, () => label);
         bomKey.putIfAbsent(key, () => bom);
@@ -360,9 +410,9 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
       final seen   = <String>{};
       final allOrd = [...ordSnap.docs, ...oqSnap.docs]
           .where((d) {
-            final oid = d.data()['order_id']?.toString() ?? d.id;
-            return seen.add(oid);
-          }).toList();
+        final oid = d.data()['order_id']?.toString() ?? d.id;
+        return seen.add(oid);
+      }).toList();
 
       for (final doc in allOrd) {
         final ts = doc.data()['created_at'] as Timestamp?;
@@ -508,7 +558,7 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
             isSynthetic = true;
           } else if (rawRestock > 0.001) {
             final synth = List.generate(_nPeriods, (i) =>
-                i < _nPeriods - 12 ? 0.0 : rawRestock);
+            i < _nPeriods - 12 ? 0.0 : rawRestock);
             fRaw30 = _bestFit(synth).forecast(1);
             isSynthetic = true;
           }
@@ -640,18 +690,18 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
           Expanded(
             child: _visible.isEmpty
                 ? Center(child: Text(
-                    _search.isNotEmpty
-                        ? 'No materials matching "$_search".'
-                        : 'No "$_filter" materials.',
-                    style: const TextStyle(color: _muted)))
+                _search.isNotEmpty
+                    ? 'No materials matching "$_search".'
+                    : 'No "$_filter" materials.',
+                style: const TextStyle(color: _muted)))
                 : RefreshIndicator(
-                    onRefresh: _load, color: _navy,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                      itemCount: _visible.length,
-                      separatorBuilder: (ctx, idx) => const SizedBox(height: 8),
-                      itemBuilder: (ctx, i) => _MatCard(mat: _visible[i]),
-                    )),
+                onRefresh: _load, color: _navy,
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                  itemCount: _visible.length,
+                  separatorBuilder: (ctx, idx) => const SizedBox(height: 8),
+                  itemBuilder: (ctx, i) => _MatCard(mat: _visible[i]),
+                )),
           ),
         ]),
       ),
@@ -678,6 +728,26 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
                   style: TextStyle(color: _muted, fontSize: 10)),
             ],
           )),
+          // Print / download PDF report (Admin-only)
+          if (_isAdmin)
+            GestureDetector(
+              onTap: _loading ? null : _openReportDialog,
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _navy,
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(color: _navy.withValues(alpha: 0.85)),
+                ),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.picture_as_pdf_rounded, size: 14, color: Colors.white),
+                  SizedBox(width: 6),
+                  Text('Report', style: TextStyle(color: Colors.white,
+                      fontSize: 11, fontWeight: FontWeight.w700)),
+                ]),
+              ),
+            ),
           // Collapse / expand search + filter
           GestureDetector(
             onTap: () => setState(() => _filtersVisible = !_filtersVisible),
@@ -707,56 +777,56 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
           curve: Curves.easeInOut,
           child: _filtersVisible
               ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const SizedBox(height: 10),
+            const SizedBox(height: 10),
 
-                  // Search bar
-                  Container(
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                    ),
-                    child: TextField(
-                      controller: _searchCtrl,
-                      style: const TextStyle(color: _navy, fontSize: 12),
-                      textAlignVertical: TextAlignVertical.center,
-                      onChanged: (v) => setState(() => _search = v),
-                      decoration: InputDecoration(
-                        hintText: 'Search materials…',
-                        hintStyle: TextStyle(color: _slate.withValues(alpha: 0.5), fontSize: 12),
-                        prefixIcon: const Icon(Icons.search_rounded, size: 16, color: _slate),
-                        suffixIcon: _search.isNotEmpty
-                            ? GestureDetector(
-                                onTap: () { _searchCtrl.clear(); setState(() => _search = ''); },
-                                child: const Icon(Icons.close_rounded, size: 14, color: _slate))
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+            // Search bar
+            Container(
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: TextField(
+                controller: _searchCtrl,
+                style: const TextStyle(color: _navy, fontSize: 12),
+                textAlignVertical: TextAlignVertical.center,
+                onChanged: (v) => setState(() => _search = v),
+                decoration: InputDecoration(
+                  hintText: 'Search materials…',
+                  hintStyle: TextStyle(color: _slate.withValues(alpha: 0.5), fontSize: 12),
+                  prefixIcon: const Icon(Icons.search_rounded, size: 16, color: _slate),
+                  suffixIcon: _search.isNotEmpty
+                      ? GestureDetector(
+                      onTap: () { _searchCtrl.clear(); setState(() => _search = ''); },
+                      child: const Icon(Icons.close_rounded, size: 14, color: _slate))
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
 
-                  // Status summary chips (All + each status)
-                  SingleChildScrollView(scrollDirection: Axis.horizontal,
-                    child: Row(children: [
-                      _SChip('All',       _all.length,              _navy,    _filter == 'All',
-                          () => _setFilter('All')),
-                      _SChip('Critical',  _cnt(_Status.critical),   _rose,    _filter == 'Critical',
-                          () => _setFilter('Critical')),
-                      _SChip('At Risk',   _cnt(_Status.atRisk),     _amber,   _filter == 'At Risk',
-                          () => _setFilter('At Risk')),
-                      _SChip('Healthy',   _cnt(_Status.healthy),    _emerald, _filter == 'Healthy',
-                          () => _setFilter('Healthy')),
-                      _SChip('Overstock', _cnt(_Status.overstock),  _indigo,  _filter == 'Overstock',
-                          () => _setFilter('Overstock')),
-                      _SChip('No Demand', _cnt(_Status.noDemand),   _slate,   _filter == 'No Demand',
-                          () => _setFilter('No Demand')),
-                    ]),
-                  ),
-                ])
+            // Status summary chips (All + each status)
+            SingleChildScrollView(scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                _SChip('All',       _all.length,              _navy,    _filter == 'All',
+                        () => _setFilter('All')),
+                _SChip('Critical',  _cnt(_Status.critical),   _rose,    _filter == 'Critical',
+                        () => _setFilter('Critical')),
+                _SChip('At Risk',   _cnt(_Status.atRisk),     _amber,   _filter == 'At Risk',
+                        () => _setFilter('At Risk')),
+                _SChip('Healthy',   _cnt(_Status.healthy),    _emerald, _filter == 'Healthy',
+                        () => _setFilter('Healthy')),
+                _SChip('Overstock', _cnt(_Status.overstock),  _indigo,  _filter == 'Overstock',
+                        () => _setFilter('Overstock')),
+                _SChip('No Demand', _cnt(_Status.noDemand),   _slate,   _filter == 'No Demand',
+                        () => _setFilter('No Demand')),
+              ]),
+            ),
+          ])
               : const SizedBox.shrink(),
         ),
       ]),
@@ -765,6 +835,425 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
 
   void _setFilter(String f) => setState(() => _filter = f);
 
+  // ── Report generation (Admin) ───────────────────────────────────────────────
+
+  Future<void> _openReportDialog() async {
+    // Defense-in-depth: block report generation for non-admins even if this
+    // is ever triggered by something other than the (already hidden) button.
+    if (!_isAdmin) return;
+    final result = await showDialog<_ReportSelection>(
+      context: context,
+      builder: (_) => _ForecastReportDialog(materials: _all),
+    );
+    if (result == null) return;
+
+    if (result.materials.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No materials matched your selection.')));
+      return;
+    }
+    await _downloadForecastPdf(result);
+  }
+
+  Future<void> _downloadForecastPdf(_ReportSelection selection) async {
+    try {
+      final bytes = await _buildForecastPdf(selection);
+      final now = DateTime.now();
+      final stamp = '${now.year}${now.month.toString().padLeft(2, '0')}'
+          '${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}'
+          '${now.minute.toString().padLeft(2, '0')}';
+      final filename = 'inventory_forecast_report_$stamp.pdf';
+
+      if (kIsWeb) {
+        await file_utils.downloadBytes(bytes, 'application/pdf', filename);
+      } else {
+        await Printing.sharePdf(bytes: bytes, filename: filename);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to generate report: $e')));
+    }
+  }
+
+  // ── PDF builder ──────────────────────────────────────────────────────────────
+
+  static PdfColor _statusPdfColor(_Status s) {
+    switch (s) {
+      case _Status.critical:  return const PdfColor.fromInt(0xFFEF4444);
+      case _Status.atRisk:    return const PdfColor.fromInt(0xFFB45309);
+      case _Status.healthy:   return const PdfColor.fromInt(0xFF10B981);
+      case _Status.overstock: return const PdfColor.fromInt(0xFF6366F1);
+      case _Status.noDemand:  return const PdfColor.fromInt(0xFF475569);
+    }
+  }
+
+  static String _trendPdfLabel(_TrendDir d) {
+    switch (d) {
+      case _TrendDir.up:   return '\u25B2 Up';
+      case _TrendDir.down: return '\u25BC Down';
+      case _TrendDir.flat: return '\u25B6 Stable';
+    }
+  }
+
+  static String _fmtDateGenerated(DateTime d) {
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun',
+      'Jul','Aug','Sep','Oct','Nov','Dec'];
+    final h12 = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    final ampm = d.hour >= 12 ? 'PM' : 'AM';
+    return '${mo[d.month - 1]} ${d.day}, ${d.year} · '
+        '$h12:${d.minute.toString().padLeft(2, '0')} $ampm';
+  }
+
+  static Future<Uint8List> _buildForecastPdf(_ReportSelection selection) async {
+    final regular = await PdfGoogleFonts.notoSansRegular();
+    final bold    = await PdfGoogleFonts.notoSansBold();
+    final italic  = await PdfGoogleFonts.notoSansItalic();
+
+    final doc = pw.Document();
+    final materials = selection.materials;
+    final now = DateTime.now();
+
+    // ── Colours (mirrors invoice_screen.dart palette) ─────────────────────────
+    const navy      = PdfColor.fromInt(0xFF0F1A2E);
+    const gold      = PdfColor.fromInt(0xFFE8B84B);
+    const white     = PdfColors.white;
+    const textDark  = PdfColor.fromInt(0xFF0F172A);
+    const textMid   = PdfColor.fromInt(0xFF475569);
+    const textLight = PdfColor.fromInt(0xFF94A3B8);
+    const rowAlt    = PdfColor.fromInt(0xFFF8FAFC);
+    const rowBorder = PdfColor.fromInt(0xFFE2E8F0);
+    const accentBg  = PdfColor.fromInt(0xFFF0F9FF);
+    const emerald   = PdfColor.fromInt(0xFF16A34A);
+
+    pw.TextStyle s(pw.Font f, double sz, PdfColor c) =>
+        pw.TextStyle(font: f, fontSize: sz, color: c);
+
+    // ── Grouping for summary + recommendations ─────────────────────────────────
+    int countOf(_Status st) => materials.where((m) => m.status == st).length;
+    final needsRestock = materials
+        .where((m) => m.status == _Status.critical || m.status == _Status.atRisk)
+        .toList()
+      ..sort((a, b) => a.daysLeft.compareTo(b.daysLeft));
+    final needsMonitoring = materials
+        .where((m) => m.status == _Status.overstock || m.status == _Status.noDemand)
+        .toList();
+    final noActionNeeded =
+    materials.where((m) => m.status == _Status.healthy).toList();
+
+    String restockReason(_Material m) {
+      if (m.status == _Status.critical) {
+        return m.stock <= 0
+            ? 'Out of stock — reorder immediately.'
+            : 'Est. stockout in ${m.daysLeft.isInfinite ? '—' : m.daysLeft.toStringAsFixed(0)} day(s).';
+      }
+      return 'At/near restock threshold — plan a reorder soon.';
+    }
+
+    String monitorReason(_Material m) => m.status == _Status.overstock
+        ? 'Overstocked relative to demand — hold future orders.'
+        : 'No recent demand signal — verify before reordering.';
+
+    pw.Widget recGroup(String title, PdfColor color, PdfColor bgColor,
+        List<_Material> list,
+        String Function(_Material) reason, String emptyText) {
+      return pw.Container(
+        width: double.infinity,
+        margin: const pw.EdgeInsets.only(bottom: 10),
+        padding: const pw.EdgeInsets.all(12),
+        decoration: pw.BoxDecoration(
+          color: bgColor,
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+          border: pw.Border.all(color: color, width: 0.8),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text('$title  (${list.length})',
+                style: s(bold, 9.5, color)),
+            pw.SizedBox(height: 6),
+            if (list.isEmpty)
+              pw.Text(emptyText, style: s(italic, 8.5, textMid))
+            else
+              ...list.map((m) => pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 3),
+                child: pw.RichText(
+                  text: pw.TextSpan(children: [
+                    pw.TextSpan(text: '${m.name}  ',
+                        style: s(bold, 8.5, textDark)),
+                    pw.TextSpan(text: reason(m),
+                        style: s(regular, 8.5, textMid)),
+                  ]),
+                ),
+              )),
+          ],
+        ),
+      );
+    }
+
+    pw.Widget summaryChip(String label, int count, PdfColor color) =>
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          margin: const pw.EdgeInsets.only(right: 6, bottom: 4),
+          decoration: pw.BoxDecoration(
+            color: white,
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(9)),
+            border: pw.Border.all(color: color, width: 0.7),
+          ),
+          child: pw.Row(mainAxisSize: pw.MainAxisSize.min, children: [
+            pw.Container(width: 9, height: 9, decoration: pw.BoxDecoration(
+                color: color, shape: pw.BoxShape.circle)),
+            pw.SizedBox(width: 4),
+            pw.Text('$count', style: s(bold, 8, textDark)),
+            pw.SizedBox(width: 2),
+            pw.Text(label, style: s(regular, 7, textMid)),
+          ]),
+        );
+
+    // ── Table rows ───────────────────────────────────────────────────────────
+    final headers = ['MATERIAL', 'STATUS', 'CURRENT STOCK', 'RESTOCK LEVEL',
+      '7-DAY', '30-DAY', '90-DAY', 'REORDER QTY', 'TREND', 'MAPE'];
+
+    final rows = materials.map((m) => [
+      m.name,
+      m.statusLabel,
+      m.unit.isEmpty ? _fmtNum(m.stock) : '${_fmtNum(m.stock)} ${m.unit}',
+      m.unit.isEmpty ? _fmtNum(m.restock) : '${_fmtNum(m.restock)} ${m.unit}',
+      _fmtNum(m.forecast7d),
+      _fmtNum(m.forecast30d),
+      _fmtNum(m.forecast90d),
+      m.reorderQty < 0.001 ? 'None' : _fmtNum(m.reorderQty),
+      _trendPdfLabel(m.trendDir),
+      m.mapeText,
+    ]).toList();
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: pw.EdgeInsets.zero,
+        header: (ctx) => ctx.pageNumber == 1
+            ? pw.SizedBox()
+            : pw.Container(
+          width: double.infinity,
+          color: navy,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 10),
+          child: pw.Text('$_bizName  ·  Inventory Forecast Report',
+              style: s(bold, 9, gold)),
+        ),
+        footer: (ctx) => pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 10),
+          decoration: const pw.BoxDecoration(color: rowAlt),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('$_bizName  ·  TIN: $_bizTin', style: s(bold, 7.5, textMid)),
+              pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                  style: s(regular, 7.5, textLight)),
+            ],
+          ),
+        ),
+        build: (ctx) => [
+          // ── Header band (first page only, but included once in flow) ────────
+          pw.Container(
+            width: double.infinity,
+            color: navy,
+            padding: const pw.EdgeInsets.fromLTRB(36, 26, 36, 22),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(_bizName, style: pw.TextStyle(
+                          font: bold, fontSize: 22, color: gold,
+                          letterSpacing: 1.5)),
+                      pw.SizedBox(height: 3),
+                      pw.Text(_bizTagline, style: s(regular, 9, textLight)),
+                      pw.SizedBox(height: 9),
+                      pw.Container(height: 1, width: 160,
+                          color: const PdfColor.fromInt(0xFF334155)),
+                      pw.SizedBox(height: 9),
+                      pw.Text(_bizAddr1, style: s(regular, 8.5,
+                          const PdfColor.fromInt(0xFFCBD5E1))),
+                      pw.Text(_bizAddr2, style: s(regular, 8.5,
+                          const PdfColor.fromInt(0xFFCBD5E1))),
+                      pw.SizedBox(height: 5),
+                      pw.Text('TIN: $_bizTin', style: s(regular, 8.5,
+                          const PdfColor.fromInt(0xFFCBD5E1))),
+                    ],
+                  ),
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('INVENTORY FORECAST REPORT', style: pw.TextStyle(
+                        font: bold, fontSize: 18, color: gold, letterSpacing: 1.2)),
+                    pw.SizedBox(height: 10),
+                    _pdfMeta('Date Generated', _fmtDateGenerated(now), bold, regular, white),
+                    pw.SizedBox(height: 4),
+                    _pdfMeta('Generated By', 'Admin', bold, regular,
+                        const PdfColor.fromInt(0xFFCBD5E1)),
+                    pw.SizedBox(height: 4),
+                    _pdfMeta('Report Scope', selection.label, bold, regular,
+                        const PdfColor.fromInt(0xFFCBD5E1)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // ── Summary strip ──────────────────────────────────────────────────
+          pw.Container(
+            width: double.infinity,
+            color: accentBg,
+            padding: const pw.EdgeInsets.fromLTRB(36, 10, 36, 10),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('SUMMARY OF INCLUDED MATERIALS',
+                    style: s(bold, 7.5, textLight)),
+                pw.SizedBox(height: 6),
+                pw.Wrap(
+                  spacing: 0,
+                  runSpacing: 0,
+                  children: [
+                    summaryChip('Total Included', materials.length, navy),
+                    summaryChip('Critical', countOf(_Status.critical),
+                        _statusPdfColor(_Status.critical)),
+                    summaryChip('At Risk', countOf(_Status.atRisk),
+                        _statusPdfColor(_Status.atRisk)),
+                    summaryChip('Healthy', countOf(_Status.healthy),
+                        _statusPdfColor(_Status.healthy)),
+                    summaryChip('Overstock', countOf(_Status.overstock),
+                        _statusPdfColor(_Status.overstock)),
+                    summaryChip('No Demand', countOf(_Status.noDemand),
+                        _statusPdfColor(_Status.noDemand)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 18),
+
+          // Avoid stranding the "FORECAST TABLE" heading alone at the bottom
+          // of a page with the table itself pushed to the next page.
+          pw.NewPage(freeSpace: 150),
+
+          // ── Forecast table ──────────────────────────────────────────────────
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('FORECAST TABLE', style: s(bold, 7.5, textLight)),
+                pw.SizedBox(height: 8),
+                pw.TableHelper.fromTextArray(
+                  headers: headers,
+                  data: rows,
+                  border: null,
+                  headerDecoration: const pw.BoxDecoration(color: navy),
+                  headerStyle: pw.TextStyle(font: bold, fontSize: 7.5, color: gold),
+                  headerPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+                  cellStyle: pw.TextStyle(font: regular, fontSize: 8, color: textDark),
+                  cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                  rowDecoration: const pw.BoxDecoration(
+                    border: pw.Border(bottom: pw.BorderSide(color: rowBorder, width: 0.5)),
+                  ),
+                  oddRowDecoration: const pw.BoxDecoration(color: rowAlt),
+                  cellAlignments: {
+                    0: pw.Alignment.centerLeft,
+                    1: pw.Alignment.centerLeft,
+                    2: pw.Alignment.centerRight,
+                    3: pw.Alignment.centerRight,
+                    4: pw.Alignment.centerRight,
+                    5: pw.Alignment.centerRight,
+                    6: pw.Alignment.centerRight,
+                    7: pw.Alignment.centerRight,
+                    8: pw.Alignment.centerLeft,
+                    9: pw.Alignment.centerRight,
+                  },
+                  columnWidths: {
+                    0: const pw.FlexColumnWidth(2.6),
+                    1: const pw.FlexColumnWidth(1.5),
+                    2: const pw.FlexColumnWidth(1.6),
+                    3: const pw.FlexColumnWidth(1.6),
+                    4: const pw.FlexColumnWidth(1.1),
+                    5: const pw.FlexColumnWidth(1.1),
+                    6: const pw.FlexColumnWidth(1.1),
+                    7: const pw.FlexColumnWidth(1.4),
+                    8: const pw.FlexColumnWidth(1.2),
+                    9: const pw.FlexColumnWidth(1.0),
+                  },
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  '* MAPE (Mean Absolute Percentage Error) reflects forecast '
+                      'accuracy where available; "—" indicates insufficient history '
+                      '(estimated / synthetic baseline).',
+                  style: s(italic, 7, textLight),
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 22),
+
+          // Avoid stranding the "RECOMMENDATIONS" heading alone at the bottom
+          // of a page with its content pushed to the next page.
+          pw.NewPage(freeSpace: 170),
+
+          // ── Recommendations ─────────────────────────────────────────────────
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('RECOMMENDATIONS', style: s(bold, 7.5, textLight)),
+                pw.SizedBox(height: 8),
+                recGroup('Needs Restocking',
+                    _statusPdfColor(_Status.critical),
+                    const PdfColor.fromInt(0xFFFEF2F2),
+                    needsRestock,
+                    restockReason,
+                    'No materials currently need restocking.'),
+                recGroup('Needs Monitoring',
+                    _statusPdfColor(_Status.overstock),
+                    const PdfColor.fromInt(0xFFEEF2FF),
+                    needsMonitoring,
+                    monitorReason,
+                    'No materials currently require monitoring.'),
+                recGroup('No Immediate Action',
+                    emerald,
+                    const PdfColor.fromInt(0xFFF0FDF4),
+                    noActionNeeded,
+                        (m) => 'Stock and demand are within healthy range.',
+                    'None of the included materials are currently healthy.'),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 20),
+        ],
+      ),
+    );
+
+    return Uint8List.fromList(await doc.save());
+  }
+
+  static pw.Widget _pdfMeta(String label, String value, pw.Font bold,
+      pw.Font regular, PdfColor valueColor) => pw.Row(
+    mainAxisAlignment: pw.MainAxisAlignment.end,
+    children: [
+      pw.Text('$label  ', style: pw.TextStyle(font: regular, fontSize: 8.5,
+          color: const PdfColor.fromInt(0xFF64748B))),
+      pw.Text(value, style: pw.TextStyle(font: bold, fontSize: 8.5,
+          color: valueColor)),
+    ],
+  );
 
   Widget _splash(String msg) => ClipRRect(
     borderRadius: BorderRadius.circular(20),
@@ -896,21 +1385,21 @@ class _MatCardState extends State<_MatCard> {
                   // Stock numbers + MAPE badge
                   Row(children: [
                     Text(
-                      m.unit.isEmpty
-                          ? 'Stock: ${_fmt(m.stock)}'
-                          : 'Stock: ${_fmt(m.stock)} ${m.unit}',
-                      style: const TextStyle(color: _slate, fontSize: 11)),
+                        m.unit.isEmpty
+                            ? 'Stock: ${_fmt(m.stock)}'
+                            : 'Stock: ${_fmt(m.stock)} ${m.unit}',
+                        style: const TextStyle(color: _slate, fontSize: 11)),
                     const Spacer(),
                     if (m.status != _Status.noDemand && m.weightedMape != null)
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 7, vertical: 2),
                         decoration: BoxDecoration(
-                          color: m.mapeColor.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                              color: m.mapeColor.withValues(alpha: 0.35),
-                              width: 0.7)),
+                            color: m.mapeColor.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                                color: m.mapeColor.withValues(alpha: 0.35),
+                                width: 0.7)),
                         child: Text('MAPE ${m.mapeText}',
                             style: TextStyle(color: m.mapeColor,
                                 fontSize: 10, fontWeight: FontWeight.w700)),
@@ -921,25 +1410,25 @@ class _MatCardState extends State<_MatCard> {
                   if (m.forecast30d > 0.001) ...[
                     const SizedBox(height: 4),
                     Text(
-                      '${m.synthetic ? 'Est. baseline' : 'Forecast'} next 30d: '
-                      '${_fmt(m.forecast30d)}'
-                      '${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
-                      style: TextStyle(
-                          color: m.synthetic
-                              ? _slate.withValues(alpha: 0.7)
-                              : _navy.withValues(alpha: 0.65),
-                          fontSize: 11, fontWeight: FontWeight.w600)),
+                        '${m.synthetic ? 'Est. baseline' : 'Forecast'} next 30d: '
+                            '${_fmt(m.forecast30d)}'
+                            '${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
+                        style: TextStyle(
+                            color: m.synthetic
+                                ? _slate.withValues(alpha: 0.7)
+                                : _navy.withValues(alpha: 0.65),
+                            fontSize: 11, fontWeight: FontWeight.w600)),
                   ],
                 ],
               )),
 
               // Chevron
               Padding(padding: const EdgeInsets.only(left: 4, top: 2),
-                child: AnimatedRotation(
-                  turns: _open ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: const Icon(Icons.expand_more,
-                      color: _muted, size: 18))),
+                  child: AnimatedRotation(
+                      turns: _open ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: const Icon(Icons.expand_more,
+                          color: _muted, size: 18))),
             ]),
           ),
 
@@ -951,91 +1440,91 @@ class _MatCardState extends State<_MatCard> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
 
-                // ── Multi-horizon forecast strip ───────────────────────────
-                Row(children: [
-                  Expanded(child: _HorizonBox('7-day',
-                      '${_fmt(m.forecast7d)}${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
-                      _slate)),
-                  const SizedBox(width: 6),
-                  Expanded(child: _HorizonBox('30-day',
-                      '${_fmt(m.forecast30d)}${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
-                      _navy)),
-                  const SizedBox(width: 6),
-                  Expanded(child: _HorizonBox('90-day',
-                      '${_fmt(m.forecast90d)}${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
-                      _indigo)),
-                ]),
-                const SizedBox(height: 10),
+                    // ── Multi-horizon forecast strip ───────────────────────────
+                    Row(children: [
+                      Expanded(child: _HorizonBox('7-day',
+                          '${_fmt(m.forecast7d)}${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
+                          _slate)),
+                      const SizedBox(width: 6),
+                      Expanded(child: _HorizonBox('30-day',
+                          '${_fmt(m.forecast30d)}${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
+                          _navy)),
+                      const SizedBox(width: 6),
+                      Expanded(child: _HorizonBox('90-day',
+                          '${_fmt(m.forecast90d)}${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
+                          _indigo)),
+                    ]),
+                    const SizedBox(height: 10),
 
-                // ── Key stats grid ─────────────────────────────────────────
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  _StatBox('Restock Level',
-                    '${_fmt(m.restock)} ${m.unit}', _slate),
-                  if (m.status != _Status.noDemand && m.weightedMape != null)
-                    _StatBox('MAPE', '${m.mapeText}  ${m.mapeGrade}',
-                      m.mapeColor),
-                  _StatBox('Suggest Reorder',
-                    m.reorderQty < 0.001
-                        ? 'None' : '${_fmt(m.reorderQty)} ${m.unit}',
-                    _emerald),
-                  _StatBox('Trend',
-                    m.trendDir == _TrendDir.up   ? '↑ Rising'
-                      : m.trendDir == _TrendDir.down ? '↓ Falling'
-                      : '→ Stable',
-                    m.trendDir == _TrendDir.up   ? _rose
-                      : m.trendDir == _TrendDir.down ? _emerald
-                      : _slate),
-                ]),
-                const SizedBox(height: 12),
+                    // ── Key stats grid ─────────────────────────────────────────
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      _StatBox('Restock Level',
+                          '${_fmt(m.restock)} ${m.unit}', _slate),
+                      if (m.status != _Status.noDemand && m.weightedMape != null)
+                        _StatBox('MAPE', '${m.mapeText}  ${m.mapeGrade}',
+                            m.mapeColor),
+                      _StatBox('Suggest Reorder',
+                          m.reorderQty < 0.001
+                              ? 'None' : '${_fmt(m.reorderQty)} ${m.unit}',
+                          _emerald),
+                      _StatBox('Trend',
+                          m.trendDir == _TrendDir.up   ? '↑ Rising'
+                              : m.trendDir == _TrendDir.down ? '↓ Falling'
+                              : '→ Stable',
+                          m.trendDir == _TrendDir.up   ? _rose
+                              : m.trendDir == _TrendDir.down ? _emerald
+                              : _slate),
+                    ]),
+                    const SizedBox(height: 12),
 
-                // ── DES explanation ────────────────────────────────────────
-                sectionLabel('Double Exponential Smoothing  (Holt\'s Linear Trend)'),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(8)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                    _mono('Init:     L₁ = X₁,  T₁ = X₂ − X₁'),
-                    _mono('Level:    Lₜ = α·Xₜ + (1−α)·(Lₜ₋₁ + Tₜ₋₁)'),
-                    _mono('Trend:    Tₜ = β·(Lₜ − Lₜ₋₁) + (1−β)·Tₜ₋₁'),
-                    _mono('Forecast: F{t+m} = Lₜ + m·Tₜ'),
-                    _mono('MAPE: mean(|Xₜ−Fₜ|/Xₜ)×100  over non-zero periods'),
-                    const SizedBox(height: 4),
-                    Text('α and β auto-selected per product (56-pt grid) to minimise MAPE.',
-                        style: TextStyle(color: _slate.withValues(alpha: 0.7),
-                            fontSize: 9, fontStyle: FontStyle.italic)),
+                    // ── DES explanation ────────────────────────────────────────
+                    sectionLabel('Double Exponential Smoothing  (Holt\'s Linear Trend)'),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8)),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _mono('Init:     L₁ = X₁,  T₁ = X₂ − X₁'),
+                            _mono('Level:    Lₜ = α·Xₜ + (1−α)·(Lₜ₋₁ + Tₜ₋₁)'),
+                            _mono('Trend:    Tₜ = β·(Lₜ − Lₜ₋₁) + (1−β)·Tₜ₋₁'),
+                            _mono('Forecast: F{t+m} = Lₜ + m·Tₜ'),
+                            _mono('MAPE: mean(|Xₜ−Fₜ|/Xₜ)×100  over non-zero periods'),
+                            const SizedBox(height: 4),
+                            Text('α and β auto-selected per product (56-pt grid) to minimise MAPE.',
+                                style: TextStyle(color: _slate.withValues(alpha: 0.7),
+                                    fontSize: 9, fontStyle: FontStyle.italic)),
+                          ]),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── BOM source products ────────────────────────────────────
+                    sectionLabel('BOM Explosion — Contributing Products'),
+                    const SizedBox(height: 6),
+                    if (m.sources.isEmpty)
+                      m.synthetic ? _syntheticNote(m) : _noDemandNote()
+                    else
+                      _sourcesTable(m),
+                    const SizedBox(height: 12),
+
+                    // ── Forecast vs Actual ────────────────────────────────────
+                    if (m.accActuals.isNotEmpty) ...[
+                      sectionLabel('Forecast vs Actual  (last ${m.accActuals.length} periods)'),
+                      const SizedBox(height: 6),
+                      _accuracyTable(m),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // ── Period history table ───────────────────────────────────
+                    sectionLabel('Consumption History  (last 12 of 36 periods)'),
+                    const SizedBox(height: 6),
+                    _periodTable(m),
+                    const SizedBox(height: 8),
+
                   ]),
-                ),
-                const SizedBox(height: 12),
-
-                // ── BOM source products ────────────────────────────────────
-                sectionLabel('BOM Explosion — Contributing Products'),
-                const SizedBox(height: 6),
-                if (m.sources.isEmpty)
-                  m.synthetic ? _syntheticNote(m) : _noDemandNote()
-                else
-                  _sourcesTable(m),
-                const SizedBox(height: 12),
-
-                // ── Forecast vs Actual ────────────────────────────────────
-                if (m.accActuals.isNotEmpty) ...[
-                  sectionLabel('Forecast vs Actual  (last ${m.accActuals.length} periods)'),
-                  const SizedBox(height: 6),
-                  _accuracyTable(m),
-                  const SizedBox(height: 12),
-                ],
-
-                // ── Period history table ───────────────────────────────────
-                sectionLabel('Consumption History  (last 12 of 36 periods)'),
-                const SizedBox(height: 6),
-                _periodTable(m),
-                const SizedBox(height: 8),
-
-              ]),
             ),
           ],
         ]),
@@ -1133,14 +1622,14 @@ class _MatCardState extends State<_MatCard> {
   Widget _sourcesTable(_Material m) {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        borderRadius: BorderRadius.circular(8)),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          borderRadius: BorderRadius.circular(8)),
       child: Column(children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: const BoxDecoration(
-            color: Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
+              color: Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
           child: Row(children: [
             _th('Product', flex: 4),
             _th('α / β',   flex: 2),
@@ -1156,26 +1645,26 @@ class _MatCardState extends State<_MatCard> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-              Row(children: [
-                _td(m.sources[i].name, flex: 4, bold: true),
-                _td('${m.sources[i].alpha}/${m.sources[i].beta}',
-                    flex: 2, mono: true),
-                _td(m.sources[i].forecastQty.toStringAsFixed(1),
-                    flex: 2, right: true),
-                _td('× ${m.sources[i].qpu.toStringAsFixed(2)}',
-                    flex: 2, right: true),
-                _td(m.sources[i].contribution.toStringAsFixed(2),
-                    flex: 2, right: true, bold: true),
-                _td(m.sources[i].mape == null
-                    ? '—'
-                    : '${m.sources[i].mape!.toStringAsFixed(1)}%',
-                    flex: 2, right: true,
-                    color: m.sources[i].mape == null ? _muted
-                        : m.sources[i].mape! < 10 ? _emerald
-                        : m.sources[i].mape! < 25 ? _lime
-                        : m.sources[i].mape! < 50 ? _amber : _rose),
-              ]),
-            ]),
+                  Row(children: [
+                    _td(m.sources[i].name, flex: 4, bold: true),
+                    _td('${m.sources[i].alpha}/${m.sources[i].beta}',
+                        flex: 2, mono: true),
+                    _td(m.sources[i].forecastQty.toStringAsFixed(1),
+                        flex: 2, right: true),
+                    _td('× ${m.sources[i].qpu.toStringAsFixed(2)}',
+                        flex: 2, right: true),
+                    _td(m.sources[i].contribution.toStringAsFixed(2),
+                        flex: 2, right: true, bold: true),
+                    _td(m.sources[i].mape == null
+                        ? '—'
+                        : '${m.sources[i].mape!.toStringAsFixed(1)}%',
+                        flex: 2, right: true,
+                        color: m.sources[i].mape == null ? _muted
+                            : m.sources[i].mape! < 10 ? _emerald
+                            : m.sources[i].mape! < 25 ? _lime
+                            : m.sources[i].mape! < 50 ? _amber : _rose),
+                  ]),
+                ]),
           ),
           if (i < m.sources.length - 1)
             const Divider(height: 1, color: Color(0xFFF1F5F9)),
@@ -1183,8 +1672,8 @@ class _MatCardState extends State<_MatCard> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: const BoxDecoration(
-            color: Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.vertical(bottom: Radius.circular(8))),
+              color: Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(8))),
           child: Row(children: [
             const Expanded(flex: 4,
                 child: Text('Total forecast need',
@@ -1200,11 +1689,11 @@ class _MatCardState extends State<_MatCard> {
                         fontSize: 11, fontWeight: FontWeight.w800))),
             Expanded(flex: 2,
                 child: Text(
-                  m.weightedMape == null ? '—'
-                      : '${m.weightedMape!.toStringAsFixed(1)}%',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(color: m.mapeColor,
-                      fontSize: 10, fontWeight: FontWeight.w700))),
+                    m.weightedMape == null ? '—'
+                        : '${m.weightedMape!.toStringAsFixed(1)}%',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(color: m.mapeColor,
+                        fontSize: 10, fontWeight: FontWeight.w700))),
           ]),
         ),
       ]),
@@ -1249,18 +1738,18 @@ class _MatCardState extends State<_MatCard> {
               child: Row(children: [
                 Expanded(flex: 3, child: Text(label,
                     style: TextStyle(
-                      color: fromEnd < 3 ? _navy.withValues(alpha: 0.75) : _slate,
-                      fontSize: 10,
-                      fontWeight: fromEnd < 3
-                          ? FontWeight.w700 : FontWeight.w400))),
+                        color: fromEnd < 3 ? _navy.withValues(alpha: 0.75) : _slate,
+                        fontSize: 10,
+                        fontWeight: fromEnd < 3
+                            ? FontWeight.w700 : FontWeight.w400))),
                 Expanded(flex: 4, child: Text(
                     v < 0.001 ? '—' : _fmt(v),
                     textAlign: TextAlign.right,
                     style: TextStyle(
-                      color: v > 0.001 ? _navy : _muted,
-                      fontSize: 10,
-                      fontWeight: v > 0.001
-                          ? FontWeight.w600 : FontWeight.w400))),
+                        color: v > 0.001 ? _navy : _muted,
+                        fontSize: 10,
+                        fontWeight: v > 0.001
+                            ? FontWeight.w600 : FontWeight.w400))),
                 // Mini bar
                 Expanded(flex: 3, child: Padding(
                   padding: const EdgeInsets.only(left: 8),
@@ -1314,10 +1803,10 @@ class _MatCardState extends State<_MatCard> {
       const Icon(Icons.auto_graph_rounded, color: _slate, size: 14),
       const SizedBox(width: 8),
       Expanded(child: Text(
-        'No BOM-linked sales found. This forecast is a DES baseline derived '
-        'from the restock level (${_fmt(m.restock)} ${m.unit}/month). '
-        'Import real sales data or complete orders to replace this estimate.',
-        style: const TextStyle(color: _slate, fontSize: 10, height: 1.4))),
+          'No BOM-linked sales found. This forecast is a DES baseline derived '
+              'from the restock level (${_fmt(m.restock)} ${m.unit}/month). '
+              'Import real sales data or complete orders to replace this estimate.',
+          style: const TextStyle(color: _slate, fontSize: 10, height: 1.4))),
     ]),
   );
 
@@ -1331,10 +1820,10 @@ class _MatCardState extends State<_MatCard> {
       const Icon(Icons.info_outline, color: _muted, size: 14),
       const SizedBox(width: 8),
       const Expanded(child: Text(
-        'No product in the catalog has a BOM entry for this material, '
-        'or no sales exist for products that use it. '
-        'Check Admin → Products → Bill of Materials.',
-        style: TextStyle(color: _slate, fontSize: 10, height: 1.4))),
+          'No product in the catalog has a BOM entry for this material, '
+              'or no sales exist for products that use it. '
+              'Check Admin → Products → Bill of Materials.',
+          style: TextStyle(color: _slate, fontSize: 10, height: 1.4))),
     ]),
   );
 
@@ -1350,19 +1839,334 @@ class _MatCardState extends State<_MatCard> {
           textAlign: right ? TextAlign.right : TextAlign.left,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: color ?? _slate,
-            fontSize: 10,
-            fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
-            fontFamily: mono ? 'monospace' : null)));
+              color: color ?? _slate,
+              fontSize: 10,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+              fontFamily: mono ? 'monospace' : null)));
 
   static Widget _mono(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 2),
-    child: Text(t, style: const TextStyle(
-        color: _slate, fontSize: 9.5, fontFamily: 'monospace', height: 1.5)));
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Text(t, style: const TextStyle(
+          color: _slate, fontSize: 9.5, fontFamily: 'monospace', height: 1.5)));
 
   static Widget sectionLabel(String t) => Text(t,
       style: const TextStyle(color: _navy, fontSize: 11,
           fontWeight: FontWeight.w700));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Report selection dialog (Admin) — manual pick or status-filter pick
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum _ReportMode { manual, filter }
+
+class _ReportSelection {
+  final List<_Material> materials;
+  final String label;
+  const _ReportSelection({required this.materials, required this.label});
+}
+
+String _statusLabel(_Status s) {
+  switch (s) {
+    case _Status.critical:  return 'Critical';
+    case _Status.atRisk:    return 'At Risk';
+    case _Status.healthy:   return 'Healthy';
+    case _Status.overstock: return 'Overstock';
+    case _Status.noDemand:  return 'No Demand';
+  }
+}
+
+Color _statusFlutterColor(_Status s) {
+  switch (s) {
+    case _Status.critical:  return _rose;
+    case _Status.atRisk:    return _amber;
+    case _Status.healthy:   return _emerald;
+    case _Status.overstock: return _indigo;
+    case _Status.noDemand:  return _slate;
+  }
+}
+
+class _ForecastReportDialog extends StatefulWidget {
+  final List<_Material> materials;
+  const _ForecastReportDialog({required this.materials});
+
+  @override
+  State<_ForecastReportDialog> createState() => _ForecastReportDialogState();
+}
+
+class _ForecastReportDialogState extends State<_ForecastReportDialog> {
+  _ReportMode _mode = _ReportMode.filter;
+  late final Set<String> _selectedIds =
+  widget.materials.map((m) => m.id).toSet();
+  final Set<_Status> _selectedStatuses = {..._Status.values};
+  String _search = '';
+
+  int _countOf(_Status s) =>
+      widget.materials.where((m) => m.status == s).length;
+
+  List<_Material> get _searchResults => widget.materials
+      .where((m) =>
+  _search.isEmpty || m.name.toLowerCase().contains(_search.toLowerCase()))
+      .toList()
+    ..sort((a, b) => a.name.compareTo(b.name));
+
+  _ReportSelection _buildSelection() {
+    if (_mode == _ReportMode.manual) {
+      final chosen =
+      widget.materials.where((m) => _selectedIds.contains(m.id)).toList();
+      final label = chosen.length == widget.materials.length
+          ? 'All materials (${chosen.length}) — manually selected'
+          : '${chosen.length} material(s) manually selected';
+      return _ReportSelection(materials: chosen, label: label);
+    }
+    final chosen = widget.materials
+        .where((m) => _selectedStatuses.contains(m.status))
+        .toList();
+    final label = _selectedStatuses.length == _Status.values.length
+        ? 'All forecast statuses'
+        : 'Status filter: ${_selectedStatuses.map(_statusLabel).join(', ')}';
+    return _ReportSelection(materials: chosen, label: label);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 620),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // ── Header ──────────────────────────────────────────────────────────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+            decoration: const BoxDecoration(
+              color: _navy,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.picture_as_pdf_rounded,
+                  color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Generate Inventory Forecast Report',
+                  style: TextStyle(color: Colors.white, fontSize: 14,
+                      fontWeight: FontWeight.w700))),
+              GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: const Icon(Icons.close_rounded,
+                    color: Colors.white70, size: 18),
+              ),
+            ]),
+          ),
+
+          // ── Mode toggle ─────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(children: [
+              Expanded(child: _ModeTab(
+                label: 'Filter by Status',
+                icon: Icons.filter_alt_rounded,
+                active: _mode == _ReportMode.filter,
+                onTap: () => setState(() => _mode = _ReportMode.filter),
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: _ModeTab(
+                label: 'Select Manually',
+                icon: Icons.checklist_rounded,
+                active: _mode == _ReportMode.manual,
+                onTap: () => setState(() => _mode = _ReportMode.manual),
+              )),
+            ]),
+          ),
+
+          // ── Content ─────────────────────────────────────────────────────────
+          Flexible(
+            child: _mode == _ReportMode.filter
+                ? _filterContent()
+                : _manualContent(),
+          ),
+
+          // ── Actions ─────────────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+            ),
+            child: Row(children: [
+              Expanded(child: Text(
+                  _mode == _ReportMode.manual
+                      ? '${_selectedIds.length} of ${widget.materials.length} selected'
+                      : '${widget.materials.where((m) => _selectedStatuses.contains(m.status)).length} material(s) match',
+                  style: const TextStyle(color: _slate, fontSize: 11))),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 4),
+              ElevatedButton.icon(
+                onPressed: () =>
+                    Navigator.of(context).pop(_buildSelection()),
+                icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                label: const Text('Generate Report'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _navy, foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  // ── Filter-by-status content ──────────────────────────────────────────────
+  Widget _filterContent() => SingleChildScrollView(
+    padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Include materials whose forecast status is:',
+          style: TextStyle(color: _slate, fontSize: 12)),
+      const SizedBox(height: 10),
+      ..._Status.values.map((s) => CheckboxListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _selectedStatuses.contains(s),
+        activeColor: _statusFlutterColor(s),
+        onChanged: (v) => setState(() {
+          if (v == true) {
+            _selectedStatuses.add(s);
+          } else {
+            _selectedStatuses.remove(s);
+          }
+        }),
+        title: Row(children: [
+          Container(width: 8, height: 8,
+              decoration: BoxDecoration(
+                  color: _statusFlutterColor(s), shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Text(_statusLabel(s),
+              style: const TextStyle(color: _navy, fontSize: 13,
+                  fontWeight: FontWeight.w600)),
+        ]),
+        subtitle: Text('${_countOf(s)} material(s)',
+            style: const TextStyle(color: _muted, fontSize: 10)),
+      )),
+      const SizedBox(height: 4),
+      Row(children: [
+        TextButton(
+          onPressed: () =>
+              setState(() => _selectedStatuses..addAll(_Status.values)),
+          child: const Text('Select All'),
+        ),
+        TextButton(
+          onPressed: () => setState(() => _selectedStatuses.clear()),
+          child: const Text('Clear'),
+        ),
+      ]),
+    ]),
+  );
+
+  // ── Manual selection content ──────────────────────────────────────────────
+  Widget _manualContent() => Column(children: [
+    Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+      child: Column(children: [
+        Container(
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: TextField(
+            style: const TextStyle(color: _navy, fontSize: 12),
+            textAlignVertical: TextAlignVertical.center,
+            onChanged: (v) => setState(() => _search = v),
+            decoration: const InputDecoration(
+              hintText: 'Search materials…',
+              hintStyle: TextStyle(color: _muted, fontSize: 12),
+              prefixIcon: Icon(Icons.search_rounded, size: 16, color: _slate),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+              isDense: true,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          TextButton(
+            onPressed: () => setState(() =>
+                _selectedIds.addAll(widget.materials.map((m) => m.id))),
+            child: const Text('Select All'),
+          ),
+          TextButton(
+            onPressed: () => setState(() => _selectedIds.clear()),
+            child: const Text('Clear'),
+          ),
+        ]),
+      ]),
+    ),
+    Expanded(
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+        itemCount: _searchResults.length,
+        itemBuilder: (ctx, i) {
+          final m = _searchResults[i];
+          final color = _statusFlutterColor(m.status);
+          return CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: _selectedIds.contains(m.id),
+            activeColor: _navy,
+            onChanged: (v) => setState(() {
+              if (v == true) {
+                _selectedIds.add(m.id);
+              } else {
+                _selectedIds.remove(m.id);
+              }
+            }),
+            title: Text(m.name, style: const TextStyle(color: _navy,
+                fontSize: 12.5, fontWeight: FontWeight.w600)),
+            subtitle: Text(
+                'Stock: ${_fmtNum(m.stock)}${m.unit.isNotEmpty ? ' ${m.unit}' : ''}',
+                style: const TextStyle(color: _muted, fontSize: 10)),
+            secondary: _Badge(m.statusLabel, color),
+          );
+        },
+      ),
+    ),
+  ]);
+}
+
+class _ModeTab extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+  const _ModeTab({required this.label, required this.icon,
+    required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: active ? _navy : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: active ? _navy : const Color(0xFFE2E8F0)),
+      ),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(icon, size: 14, color: active ? Colors.white : _slate),
+        const SizedBox(width: 6),
+        Text(label, style: TextStyle(
+            color: active ? Colors.white : _slate,
+            fontSize: 11.5, fontWeight: FontWeight.w700)),
+      ]),
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1440,9 +2244,9 @@ class _HorizonBox extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.06),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: color.withValues(alpha: 0.20))),
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.20))),
     child: Column(children: [
       Text(label, style: TextStyle(
           color: color.withValues(alpha: 0.7),
@@ -1472,32 +2276,32 @@ class _SChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(onTap: onTap,
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: active ? _navy : Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: active ? _navy : const Color(0xFFE2E8F0))),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: 8, height: 8,
-            decoration: BoxDecoration(
-                color: active ? color.withValues(alpha: 0.8) : color,
-                shape: BoxShape.circle)),
-        const SizedBox(width: 7),
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('$count', style: TextStyle(
-            color: active ? Colors.white : _navy,
-            fontSize: 15, fontWeight: FontWeight.w800, height: 1)),
-          Text(label, style: TextStyle(
-            color: active
-                ? Colors.white.withValues(alpha: 0.7) : _slate,
-            fontSize: 9)),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+            color: active ? _navy : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: active ? _navy : const Color(0xFFE2E8F0))),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 8, height: 8,
+              decoration: BoxDecoration(
+                  color: active ? color.withValues(alpha: 0.8) : color,
+                  shape: BoxShape.circle)),
+          const SizedBox(width: 7),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('$count', style: TextStyle(
+                color: active ? Colors.white : _navy,
+                fontSize: 15, fontWeight: FontWeight.w800, height: 1)),
+            Text(label, style: TextStyle(
+                color: active
+                    ? Colors.white.withValues(alpha: 0.7) : _slate,
+                fontSize: 9)),
+          ]),
         ]),
-      ]),
-    ));
+      ));
 }
 
 class _Badge extends StatelessWidget {
@@ -1506,13 +2310,13 @@ class _Badge extends StatelessWidget {
   const _Badge(this.label, this.color);
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-    decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: color.withValues(alpha: 0.40))),
-    child: Text(label, style: TextStyle(
-        color: color, fontSize: 9, fontWeight: FontWeight.w700)));
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: color.withValues(alpha: 0.40))),
+      child: Text(label, style: TextStyle(
+          color: color, fontSize: 9, fontWeight: FontWeight.w700)));
 }
 
 class _StatBox extends StatelessWidget {
@@ -1521,18 +2325,17 @@ class _StatBox extends StatelessWidget {
   const _StatBox(this.label, this.value, this.color);
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-    decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.20))),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: TextStyle(
-          color: color.withValues(alpha: 0.7),
-          fontSize: 9, fontWeight: FontWeight.w600)),
-      const SizedBox(height: 2),
-      Text(value, style: TextStyle(
-          color: color, fontSize: 12, fontWeight: FontWeight.w700)),
-    ]));
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.20))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: TextStyle(
+            color: color.withValues(alpha: 0.7),
+            fontSize: 9, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 2),
+        Text(value, style: TextStyle(
+            color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+      ]));
 }
-

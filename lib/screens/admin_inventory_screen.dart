@@ -1,11 +1,17 @@
 ﻿import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' show ImageFilter;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'app_theme.dart';
 import 'employee_inventory_forecast_screen.dart';
 import '../services/inventory_service.dart';
+import '../services/file_utils.dart' as file_utils;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 // â”€â”€ Breakpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const double _kTableMinWidth = 628.0;
@@ -13,6 +19,14 @@ const double _kTableMinWidth = 628.0;
 // â”€â”€ Shared colour constants (same as product management & admin logs) â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const Color _amber = Color(0xFFB45309);
 const Color _navyBlue = Color(0xFF0F1A2E);
+
+// ── Business constants (kept in sync with invoice_screen.dart so every
+//    printed document shares the same letterhead) ──────────────────────────
+const _bizName = 'IMPRENTA INC.';
+const _bizTagline = 'Professional Printing Services';
+const _bizAddr1 = '5th Street Pacita Avenue, Office 1 Rongavilla Building';
+const _bizAddr2 = 'San Pedro, Laguna, 4023, Philippines';
+const _bizTin = '010-253-357-000';
 
 // â”€â”€ Liquid Glass Design Tokens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _Glass {
@@ -111,8 +125,8 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
       // Full replacement in batches of 400 (Firestore cap is 500 per batch).
       const batchSize = 400;
       for (int start = 0;
-          start < _kNewMaterials.length;
-          start += batchSize) {
+      start < _kNewMaterials.length;
+      start += batchSize) {
         final batch = FirebaseFirestore.instance.batch();
         final chunk = _kNewMaterials.sublist(
             start,
@@ -288,7 +302,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
       if (matProd.isEmpty) {
         _snack(
           'No products with BOM entries found — '
-          'add Bill of Materials to products first.',
+              'add Bill of Materials to products first.',
           _Glass.accentRose,
         );
         return;
@@ -318,31 +332,31 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
 
           final docId = 'hs-$safeId-p${(p + 1).toString().padLeft(2, '0')}';
           writes.add((
-            id: docId,
-            data: {
-              'order_id'       : docId,
-              'invoice_number' : 'HIST-${mid.toUpperCase()}-P${p + 1}',
-              'customer_name'  : 'Historical Seed',
-              'order_total'    : 0.0,
-              'sale_amount'    : 0.0,
-              'payment_method' : 'seed',
-              'payment_type'   : 'full',
-              'sale_date'      : Timestamp.fromDate(saleDate),
-              'order_status'   : 'completed',
-              'payment_status' : 'paid',
-              'is_historical'  : true,
-              'import_source'  : 'historical_seed',
-              'products'       : [
-                {
-                  'name'      : prod.productName,
-                  'type'      : prod.variant,
-                  'size'      : '',
-                  'qty'       : qty,
-                  'unit_price': 0.0,
-                  'item_total': 0.0,
-                }
-              ],
-            },
+          id: docId,
+          data: {
+            'order_id'       : docId,
+            'invoice_number' : 'HIST-${mid.toUpperCase()}-P${p + 1}',
+            'customer_name'  : 'Historical Seed',
+            'order_total'    : 0.0,
+            'sale_amount'    : 0.0,
+            'payment_method' : 'seed',
+            'payment_type'   : 'full',
+            'sale_date'      : Timestamp.fromDate(saleDate),
+            'order_status'   : 'completed',
+            'payment_status' : 'paid',
+            'is_historical'  : true,
+            'import_source'  : 'historical_seed',
+            'products'       : [
+              {
+                'name'      : prod.productName,
+                'type'      : prod.variant,
+                'size'      : '',
+                'qty'       : qty,
+                'unit_price': 0.0,
+                'item_total': 0.0,
+              }
+            ],
+          },
           ));
         }
       }
@@ -360,7 +374,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
       if (mounted) {
         _snack(
           '${matProd.length} materials × 12 periods seeded — '
-          'refresh the Forecast tab to see MAPE.',
+              'refresh the Forecast tab to see MAPE.',
           _Glass.accentEmerald,
         );
       }
@@ -403,7 +417,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                 fontWeight: FontWeight.w800)),
         content: const Text(
           'Deletes all auto-seeded records.\n'
-          'Real imported or system orders are NOT affected.',
+              'Real imported or system orders are NOT affected.',
           style: TextStyle(
               color: _Glass.textSecondary, fontSize: 13, height: 1.5),
         ),
@@ -451,6 +465,420 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
       data: m,
       onSaved: (msg) => _snack(msg, _Glass.accentEmerald),
     ),
+  );
+
+  // ── Print report ────────────────────────────────────────────────────────
+
+  // Opens the "Print Report" dialog. Pulls a fresh snapshot of RawMaterials
+  // (rather than reusing the live stream) so the report always reflects the
+  // latest stock counts at the moment the Admin opens the dialog.
+  Future<void> _handlePrintReport() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('RawMaterials')
+          .orderBy('material_id')
+          .get();
+
+      if (!mounted) return;
+
+      if (snap.docs.isEmpty) {
+        _snack('No inventory data to print', _Glass.accentRose);
+        return;
+      }
+
+      final materials = snap.docs.map((d) {
+        final data = d.data();
+        final current = (data['current_stock'] as num?) ?? 0;
+        final restock = (data['restock_level'] as num?) ?? 1;
+        return {
+          ...data,
+          'doc_id': d.id,
+          '_status': _computeStatus(current, restock),
+        };
+      }).toList();
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black.withValues(alpha: 0.25),
+        builder: (_) => _PrintReportDialog(
+          materials: materials,
+          statusColor: _statusColor,
+          onGenerate: _generateInventoryReport,
+        ),
+      );
+    } catch (e) {
+      if (mounted) _snack('Error loading inventory: $e', _Glass.accentRose);
+    }
+  }
+
+  // Builds a PDF from the selected materials, then downloads it (web) or
+  // hands off to the native share/print sheet (mobile/desktop) — same
+  // pattern used by invoice_screen.dart's PDF export.
+  Future<void> _generateInventoryReport(
+      List<Map<String, dynamic>> selected,
+      String scopeLabel,
+      ) async {
+    if (selected.isEmpty) return;
+    try {
+      // Sort alphabetically by material name for a cleaner printed report.
+      final rows = [...selected]..sort((a, b) => (a['material_name'] ?? '')
+          .toString()
+          .compareTo((b['material_name'] ?? '').toString()));
+
+      final bytes = await _buildInventoryReportPdf(rows, scopeLabel);
+      final filename =
+          'Inventory_Report_${DateTime.now().millisecondsSinceEpoch}.pdf';
+
+      // Same web-vs-native branch used by invoice_screen.dart: on web we
+      // trigger a browser download, elsewhere we hand off to the native
+      // share/print sheet.
+      if (kIsWeb) {
+        await file_utils.downloadBytes(bytes, 'application/pdf', filename);
+      } else {
+        await Printing.sharePdf(bytes: bytes, filename: filename);
+      }
+    } catch (e) {
+      if (mounted) _snack('Print error: $e', _Glass.accentRose);
+    }
+  }
+
+  // ── Inventory report PDF builder ────────────────────────────────────────
+  // Mirrors the letterhead / colour language of invoice_screen.dart's
+  // _buildPdf so every document generated by the app looks consistent.
+  static Future<Uint8List> _buildInventoryReportPdf(
+      List<Map<String, dynamic>> rows,
+      String scopeLabel,
+      ) async {
+    final regular = await PdfGoogleFonts.notoSansRegular();
+    final bold = await PdfGoogleFonts.notoSansBold();
+    final italic = await PdfGoogleFonts.notoSansItalic();
+
+    final doc = pw.Document();
+    final now = DateTime.now();
+
+    String fmtDate(DateTime d) {
+      const mo = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      ];
+      return '${mo[d.month - 1]} ${d.day}, ${d.year}';
+    }
+
+    String fmtTime(DateTime d) {
+      final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+      final mm = d.minute.toString().padLeft(2, '0');
+      final ampm = d.hour >= 12 ? 'PM' : 'AM';
+      return '$h:$mm $ampm';
+    }
+
+    // ── Colours (mirrors invoice_screen.dart) ────────────────────────────
+    const navy = PdfColor.fromInt(0xFF0F1A2E);
+    const gold = PdfColor.fromInt(0xFFE8B84B);
+    const textDark = PdfColor.fromInt(0xFF0F172A);
+    const textMid = PdfColor.fromInt(0xFF475569);
+    const textLight = PdfColor.fromInt(0xFF94A3B8);
+    const rowAlt = PdfColor.fromInt(0xFFF8FAFC);
+    const rowBorder = PdfColor.fromInt(0xFFE2E8F0);
+    const accentBg = PdfColor.fromInt(0xFFF0F9FF);
+
+    pw.TextStyle s(pw.Font f, double sz, PdfColor c) =>
+        pw.TextStyle(font: f, fontSize: sz, color: c);
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: pw.EdgeInsets.zero,
+        header: (context) {
+          // Full letterhead band only on page 1 — later pages get a slim
+          // continuation header so the table has more room to breathe.
+          if (context.pageNumber == 1) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // ── Header band ──────────────────────────────────────
+                pw.Container(
+                  width: double.infinity,
+                  color: navy,
+                  padding: const pw.EdgeInsets.fromLTRB(36, 28, 36, 24),
+                  child: pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      // Left — company info
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(
+                              _bizName,
+                              style: pw.TextStyle(
+                                font: bold,
+                                fontSize: 24,
+                                color: gold,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                            pw.SizedBox(height: 3),
+                            pw.Text(_bizTagline, style: s(regular, 9, textLight)),
+                            pw.SizedBox(height: 10),
+                            pw.Container(
+                              height: 1,
+                              width: 160,
+                              color: const PdfColor.fromInt(0xFF334155),
+                            ),
+                            pw.SizedBox(height: 10),
+                            pw.Text(
+                              _bizAddr1,
+                              style: s(regular, 8.5, const PdfColor.fromInt(0xFFCBD5E1)),
+                            ),
+                            pw.Text(
+                              _bizAddr2,
+                              style: s(regular, 8.5, const PdfColor.fromInt(0xFFCBD5E1)),
+                            ),
+                            pw.SizedBox(height: 5),
+                            pw.Row(
+                              children: [
+                                pw.Text('TIN: ', style: s(bold, 8.5, textLight)),
+                                pw.Text(
+                                  _bizTin,
+                                  style: s(regular, 8.5, const PdfColor.fromInt(0xFFCBD5E1)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Right — report meta
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          pw.Text(
+                            'INVENTORY REPORT',
+                            style: pw.TextStyle(
+                              font: bold,
+                              fontSize: 20,
+                              color: gold,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                          pw.SizedBox(height: 10),
+                          _pdfReportMetaRow('Scope', scopeLabel, bold, regular, PdfColors.white),
+                          pw.SizedBox(height: 4),
+                          _pdfReportMetaRow(
+                            'Date Generated',
+                            fmtDate(now),
+                            bold,
+                            regular,
+                            const PdfColor.fromInt(0xFFCBD5E1),
+                          ),
+                          pw.SizedBox(height: 4),
+                          _pdfReportMetaRow(
+                            'Time',
+                            fmtTime(now),
+                            bold,
+                            regular,
+                            const PdfColor.fromInt(0xFFCBD5E1),
+                          ),
+                          pw.SizedBox(height: 12),
+                          pw.Container(
+                            padding: const pw.EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 6,
+                            ),
+                            decoration: pw.BoxDecoration(
+                              color: const PdfColor.fromInt(0xFF14532D),
+                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                            ),
+                            child: pw.Text(
+                              '${rows.length} ITEM(S)',
+                              style: pw.TextStyle(
+                                font: bold,
+                                fontSize: 9,
+                                color: const PdfColor.fromInt(0xFF86EFAC),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // ── Issued-by / scope strip ─────────────────────────────
+                pw.Container(
+                  width: double.infinity,
+                  color: accentBg,
+                  padding: const pw.EdgeInsets.fromLTRB(36, 16, 36, 16),
+                  child: pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('ISSUED BY', style: s(bold, 7.5, textLight)),
+                            pw.SizedBox(height: 5),
+                            pw.Text(_bizName, style: s(bold, 11, textDark)),
+                            pw.Text(
+                              'Raw Materials Inventory — Admin',
+                              style: s(regular, 8.5, textMid),
+                            ),
+                          ],
+                        ),
+                      ),
+                      pw.SizedBox(width: 20),
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('REPORT SCOPE', style: s(bold, 7.5, textLight)),
+                            pw.SizedBox(height: 5),
+                            pw.Text(scopeLabel, style: s(bold, 11, textDark)),
+                            pw.Text(
+                              '${rows.length} material(s) included',
+                              style: s(regular, 8.5, textMid),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 16),
+              ],
+            );
+          }
+          // Slim continuation header for page 2+
+          return pw.Padding(
+            padding: const pw.EdgeInsets.fromLTRB(36, 20, 36, 8),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(_bizName, style: s(bold, 9, textMid)),
+                pw.Text('Inventory Report (cont.)', style: s(italic, 8.5, textLight)),
+              ],
+            ),
+          );
+        },
+        footer: (context) => pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 10),
+          decoration: const pw.BoxDecoration(color: rowAlt),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('$_bizName  ·  TIN: $_bizTin', style: s(bold, 8, textMid)),
+              pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: s(regular, 7.5, textLight),
+              ),
+            ],
+          ),
+        ),
+        build: (context) => [
+          pw.Padding(
+            padding: const pw.EdgeInsets.fromLTRB(36, 0, 36, 8),
+            child: pw.Text('MATERIALS', style: s(bold, 7.5, textLight)),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.fromLTRB(36, 0, 36, 24),
+            child: pw.Table(
+              columnWidths: {
+                0: const pw.FixedColumnWidth(58),
+                1: const pw.FlexColumnWidth(3.6),
+                2: const pw.FlexColumnWidth(2.6),
+                3: const pw.FlexColumnWidth(2.2),
+              },
+              children: [
+                // Header row
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: navy),
+                  children: [
+                    'CODE',
+                    'MATERIAL',
+                    'AVAILABLE STOCK',
+                    'RESTOCK LEVEL',
+                  ]
+                      .map(
+                        (h) => pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      child: pw.Text(
+                        h,
+                        style: pw.TextStyle(font: bold, fontSize: 7.5, color: gold),
+                      ),
+                    ),
+                  )
+                      .toList(),
+                ),
+                // Material rows
+                ...rows.asMap().entries.map((e) {
+                  final idx = e.key;
+                  final m = e.value;
+                  final id = m['material_id']?.toString() ?? '';
+                  final name = m['material_name']?.toString() ?? '';
+                  final bg = idx.isEven ? PdfColors.white : rowAlt;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: bg,
+                      border: const pw.Border(
+                        bottom: pw.BorderSide(color: rowBorder, width: 0.5),
+                      ),
+                    ),
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                        child: pw.Text(id, style: s(regular, 8, textMid)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                        child: pw.Text(name, style: s(bold, 9, textDark)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                        child: pw.Text(_reportStockText(m), style: s(regular, 8.5, textDark)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                        child: pw.Text(_reportRestockText(m), style: s(regular, 8.5, textMid)),
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Uint8List.fromList(await doc.save());
+  }
+
+  static pw.Widget _pdfReportMetaRow(
+      String label,
+      String value,
+      pw.Font bold,
+      pw.Font regular,
+      PdfColor valueColor,
+      ) => pw.Row(
+    mainAxisAlignment: pw.MainAxisAlignment.end,
+    children: [
+      pw.Text(
+        '$label  ',
+        style: pw.TextStyle(
+          font: regular,
+          fontSize: 8.5,
+          color: const PdfColor.fromInt(0xFF64748B),
+        ),
+      ),
+      pw.Text(
+        value,
+        style: pw.TextStyle(font: bold, fontSize: 8.5, color: valueColor),
+      ),
+    ],
   );
 
   // â”€â”€ build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -518,6 +946,20 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                       ),
 
                       if (_activeTab == _InventoryTab.inventory) ...[
+                        // Print Report pill
+                        GestureDetector(
+                          onTap: _handlePrintReport,
+                          child: Container(
+                            padding: const EdgeInsets.all(9),
+                            decoration: _Glass.glass(radius: 99),
+                            child: const Icon(
+                              Icons.print_outlined,
+                              size: 16,
+                              color: _Glass.textSecondary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         // Add Material primary pill
                         GestureDetector(
                           onTap: _handleAddMaterial,
@@ -557,7 +999,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                         icon: Icons.inventory_2_outlined,
                         isActive: _activeTab == _InventoryTab.inventory,
                         onTap: () => setState(
-                          () => _activeTab = _InventoryTab.inventory,
+                              () => _activeTab = _InventoryTab.inventory,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -589,13 +1031,13 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                             onTap: () => setState(() => _statusFilter = null),
                           ),
                           ..._statuses.map(
-                            (s) => _FilterPill(
+                                (s) => _FilterPill(
                               label: s,
                               count: _counts[s],
                               isActive: _statusFilter == s,
                               dotColor: _statusColor(s),
                               onTap: () => setState(
-                                () => _statusFilter = _statusFilter == s
+                                    () => _statusFilter = _statusFilter == s
                                     ? null
                                     : s,
                               ),
@@ -794,38 +1236,38 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                   }
                   final tableScrollCtrl = ScrollController();
                   Widget buildTable() => Scrollbar(
-                    controller: tableScrollCtrl,
-                    thumbVisibility: true,
-                    trackVisibility: true,
-                    child: ListView.builder(
-                    controller: tableScrollCtrl,
-                    padding: EdgeInsets.zero,
-                    itemCount: filtered.length + 1,
-                    itemBuilder: (_, i) {
-                      if (i == 0) {
-                        return Container(
-                          decoration: const BoxDecoration(
-                            color: Color(0xF2F4F6F8),
-                            border: Border(
-                              bottom: BorderSide(color: _Glass.borderDim, width: 0.8),
+                      controller: tableScrollCtrl,
+                      thumbVisibility: true,
+                      trackVisibility: true,
+                      child: ListView.builder(
+                        controller: tableScrollCtrl,
+                        padding: EdgeInsets.zero,
+                        itemCount: filtered.length + 1,
+                        itemBuilder: (_, i) {
+                          if (i == 0) {
+                            return Container(
+                              decoration: const BoxDecoration(
+                                color: Color(0xF2F4F6F8),
+                                border: Border(
+                                  bottom: BorderSide(color: _Glass.borderDim, width: 0.8),
+                                ),
+                              ),
+                              child: const _TableHeader(),
+                            );
+                          }
+                          final idx = i - 1;
+                          return _MaterialRow(
+                            data: filtered[idx],
+                            isLast: idx == filtered.length - 1,
+                            statusColor: _statusColor(
+                              filtered[idx]['_status'] as String,
                             ),
-                          ),
-                          child: const _TableHeader(),
-                        );
-                      }
-                      final idx = i - 1;
-                      return _MaterialRow(
-                        data: filtered[idx],
-                        isLast: idx == filtered.length - 1,
-                        statusColor: _statusColor(
-                          filtered[idx]['_status'] as String,
-                        ),
-                        onQrTap: () => _showQr(context, filtered[idx]),
-                        onEditTap: () => _handleEditMaterial(filtered[idx]),
-                        onDeleteTap: () => _confirmDelete(context, filtered[idx]),
-                      );
-                    },
-                  ));  // closes Scrollbar child + Scrollbar
+                            onQrTap: () => _showQr(context, filtered[idx]),
+                            onEditTap: () => _handleEditMaterial(filtered[idx]),
+                            onDeleteTap: () => _confirmDelete(context, filtered[idx]),
+                          );
+                        },
+                      ));  // closes Scrollbar child + Scrollbar
                   if (c.maxWidth < _kTableMinWidth) {
                     return SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -1056,10 +1498,10 @@ class _TabPill extends StatelessWidget {
       decoration: isActive
           ? _Glass.solidPill(_navyBlue, glow: true)
           : BoxDecoration(
-              color: _Glass.surfaceThin,
-              borderRadius: BorderRadius.circular(99),
-              border: Border.all(color: _Glass.borderMid, width: 0.9),
-            ),
+        color: _Glass.surfaceThin,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: _Glass.borderMid, width: 0.9),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1121,10 +1563,10 @@ class _FilterPill extends StatelessWidget {
         decoration: isActive
             ? _Glass.solidPill(_navyBlue, glow: true)
             : BoxDecoration(
-                color: _Glass.surfaceThin,
-                borderRadius: BorderRadius.circular(99),
-                border: Border.all(color: _Glass.borderMid, width: 0.9),
-              ),
+          color: _Glass.surfaceThin,
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: _Glass.borderMid, width: 0.9),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1138,9 +1580,9 @@ class _FilterPill extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: isActive
                     ? Border.all(
-                        color: Colors.white.withValues(alpha: 0.55),
-                        width: 1.5,
-                      )
+                  color: Colors.white.withValues(alpha: 0.55),
+                  width: 1.5,
+                )
                     : null,
               ),
             ),
@@ -1459,6 +1901,413 @@ class _IconAction extends StatelessWidget {
         icon,
         color: color == _navyBlue ? Colors.white : color,
         size: 13,
+      ),
+    ),
+  );
+}
+
+// =============================================================================
+// Print Report Dialog
+// =============================================================================
+enum _ReportMode { manual, filter }
+
+class _PrintReportDialog extends StatefulWidget {
+  final List<Map<String, dynamic>> materials;
+  final Color Function(String) statusColor;
+  final Future<void> Function(
+      List<Map<String, dynamic>> selected,
+      String scopeLabel,
+      ) onGenerate;
+
+  const _PrintReportDialog({
+    required this.materials,
+    required this.statusColor,
+    required this.onGenerate,
+  });
+
+  @override
+  State<_PrintReportDialog> createState() => _PrintReportDialogState();
+}
+
+class _PrintReportDialogState extends State<_PrintReportDialog> {
+  _ReportMode _mode = _ReportMode.manual;
+  final Set<String> _selectedIds = {};
+  final Set<String> _selectedStatuses = {};
+  final _searchCtrl = TextEditingController();
+  String _search = '';
+  bool _generating = false;
+
+  // Internal status values (must match _computeStatus) paired with the
+  // Admin-facing labels requested for the filter list.
+  static const _filterStatuses = <String, String>{
+    'Low Stock': 'Low Stock',
+    'Critical': 'Critical Stock',
+    'Out of Stock': 'Out of Stock',
+  };
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _visibleManualList {
+    if (_search.isEmpty) return widget.materials;
+    final q = _search.toLowerCase();
+    return widget.materials.where((m) {
+      final name = (m['material_name']?.toString() ?? '').toLowerCase();
+      final id = (m['material_id']?.toString() ?? '').toLowerCase();
+      return name.contains(q) || id.contains(q);
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> get _selectedMaterials {
+    if (_mode == _ReportMode.manual) {
+      return widget.materials
+          .where((m) => _selectedIds.contains(m['doc_id']?.toString()))
+          .toList();
+    }
+    return widget.materials
+        .where((m) => _selectedStatuses.contains(m['_status']?.toString()))
+        .toList();
+  }
+
+  String get _scopeLabel {
+    if (_mode == _ReportMode.manual) {
+      return 'Manually Selected (${_selectedIds.length} item(s))';
+    }
+    if (_selectedStatuses.isEmpty) return 'No filter selected';
+    return _selectedStatuses
+        .map((s) => _filterStatuses[s] ?? s)
+        .join(', ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedCount = _selectedMaterials.length;
+    return AlertDialog(
+      backgroundColor: _Glass.surface,
+      elevation: 32,
+      shadowColor: Colors.black.withValues(alpha: 0.3),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: _Glass.borderMid, width: 1),
+      ),
+      insetPadding: const EdgeInsets.all(24),
+      title: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: _navyBlue.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _navyBlue.withValues(alpha: 0.30)),
+            ),
+            child: const Icon(Icons.print_outlined, color: _navyBlue, size: 18),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Print Inventory Report',
+              style: TextStyle(
+                color: _Glass.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Mode toggle ──────────────────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: _ModeButton(
+                    label: 'Select Materials',
+                    icon: Icons.checklist_rounded,
+                    isActive: _mode == _ReportMode.manual,
+                    onTap: () => setState(() => _mode = _ReportMode.manual),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _ModeButton(
+                    label: 'Filter by Status',
+                    icon: Icons.filter_alt_outlined,
+                    isActive: _mode == _ReportMode.filter,
+                    onTap: () => setState(() => _mode = _ReportMode.filter),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // ── Manual selection mode ───────────────────────────────────
+            if (_mode == _ReportMode.manual) ...[
+              TextField(
+                controller: _searchCtrl,
+                onChanged: (v) => setState(() => _search = v),
+                style: const TextStyle(fontSize: 13, color: _Glass.textPrimary),
+                decoration: InputDecoration(
+                  hintText: 'Search materials…',
+                  hintStyle: const TextStyle(color: _Glass.textMuted, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search_rounded,
+                      size: 18, color: _Glass.textMuted),
+                  isDense: true,
+                  filled: true,
+                  fillColor: _Glass.surfaceThin,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: _Glass.borderDim),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: _Glass.borderDim),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: _navyBlue),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Text(
+                    '$selectedCount selected',
+                    style: const TextStyle(
+                      color: _Glass.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => setState(() => _selectedIds.addAll(
+                        _visibleManualList.map((m) => m['doc_id'].toString()))),
+                    child: const Text(
+                      'Select All',
+                      style: TextStyle(
+                          color: _navyBlue, fontSize: 11, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () => setState(() => _selectedIds.clear()),
+                    child: const Text(
+                      'Clear',
+                      style: TextStyle(
+                          color: _Glass.accentRose,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Container(
+                height: 260,
+                decoration: BoxDecoration(
+                  border: Border.all(color: _Glass.borderDim),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: _visibleManualList.isEmpty
+                    ? const Center(
+                  child: Text('No matches',
+                      style: TextStyle(color: _Glass.textMuted, fontSize: 12)),
+                )
+                    : ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: _visibleManualList.length,
+                  itemBuilder: (_, i) {
+                    final m = _visibleManualList[i];
+                    final id = m['doc_id'].toString();
+                    final status = m['_status']?.toString() ?? '';
+                    final checked = _selectedIds.contains(id);
+                    return CheckboxListTile(
+                      dense: true,
+                      value: checked,
+                      activeColor: _navyBlue,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      onChanged: (v) => setState(() {
+                        if (v == true) {
+                          _selectedIds.add(id);
+                        } else {
+                          _selectedIds.remove(id);
+                        }
+                      }),
+                      title: Text(
+                        m['material_name']?.toString() ?? '',
+                        style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: _Glass.textPrimary),
+                      ),
+                      subtitle: Text(
+                        '${m['material_id'] ?? ''} · $status',
+                        style: const TextStyle(
+                            fontSize: 10.5, color: _Glass.textMuted),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ]
+
+            // ── Status-filter mode ──────────────────────────────────────
+            else ...[
+              const Text(
+                'Include materials matching:',
+                style: TextStyle(
+                    color: _Glass.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              ..._filterStatuses.entries.map((entry) {
+                final statusKey = entry.key;
+                final displayLabel = entry.value;
+                final matchCount = widget.materials
+                    .where((m) => m['_status'] == statusKey)
+                    .length;
+                final checked = _selectedStatuses.contains(statusKey);
+                return CheckboxListTile(
+                  dense: true,
+                  value: checked,
+                  activeColor: widget.statusColor(statusKey),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  onChanged: (v) => setState(() {
+                    if (v == true) {
+                      _selectedStatuses.add(statusKey);
+                    } else {
+                      _selectedStatuses.remove(statusKey);
+                    }
+                  }),
+                  title: Text(
+                    displayLabel,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: _Glass.textPrimary),
+                  ),
+                  secondary: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: widget.statusColor(statusKey).withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      '$matchCount',
+                      style: TextStyle(
+                          color: widget.statusColor(statusKey),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 4),
+              Text(
+                '$selectedCount material(s) match the selected filter(s)',
+                style: const TextStyle(color: _Glass.textMuted, fontSize: 11),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        GestureDetector(
+          onTap: _generating ? null : () => Navigator.pop(context),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+            decoration: _Glass.glass(radius: 99),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                  color: _Glass.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        GestureDetector(
+          onTap: (_generating || selectedCount == 0)
+              ? null
+              : () async {
+            setState(() => _generating = true);
+            final selected = _selectedMaterials;
+            final label = _scopeLabel;
+            Navigator.pop(context);
+            await widget.onGenerate(selected, label);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+            decoration: _Glass.solidPill(
+              selectedCount == 0 ? _Glass.textMuted : _navyBlue,
+              glow: selectedCount > 0,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.picture_as_pdf_outlined, size: 14, color: Colors.white),
+                const SizedBox(width: 6),
+                Text(
+                  'Generate Report ($selectedCount)',
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ModeButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isActive;
+  final VoidCallback onTap;
+  const _ModeButton({
+    required this.label,
+    required this.icon,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: isActive ? _navyBlue : _Glass.surfaceThin,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: isActive ? _navyBlue : _Glass.borderDim),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 14, color: isActive ? Colors.white : _Glass.textSecondary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: isActive ? Colors.white : _Glass.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     ),
   );
@@ -1921,10 +2770,10 @@ class _EditMaterialDialogState extends State<_EditMaterialDialog> {
     final d = widget.data;
     _nameCtrl = TextEditingController(text: d['material_name']?.toString() ?? '');
     _su       = d['stocking_unit']?.toString().isNotEmpty == true
-                  ? d['stocking_unit'] as String : 'Roll';
+        ? d['stocking_unit'] as String : 'Roll';
     _baseUom  = d['base_uom']?.toString().isNotEmpty == true
-                  ? d['base_uom'] as String
-                  : (_su == 'Piece' ? 'pc' : 'sqft');
+        ? d['base_uom'] as String
+        : (_su == 'Piece' ? 'pc' : 'sqft');
     _wCtrl    = TextEditingController(text: (d['width_value']  as num?)?.toString() ?? '');
     _wUnit    = d['width_unit']?.toString().isNotEmpty  == true ? d['width_unit']  as String : 'ft';
     _lCtrl    = TextEditingController(text: (d['length_value'] as num?)?.toString() ?? '');
@@ -2460,6 +3309,57 @@ String _stockUnitLabel(String su) {
   if (su == 'Sheet') return 'sheet';
   if (su == 'Roll') return 'roll';
   return 'pc';
+}
+
+// =============================================================================
+// Print-report text formatters (mirror the on-screen table formatting in
+// _MaterialRow, but as plain text for the PDF cells).
+// =============================================================================
+String _reportStockText(Map<String, dynamic> data) {
+  final current = (data['current_stock'] as num?)?.toDouble() ?? 0;
+  final su = data['stocking_unit']?.toString() ?? '';
+  final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
+  final baseUom =
+      data['base_uom']?.toString() ?? (su == 'Piece' ? 'pc' : 'sqft');
+  final isStructured = su.isNotEmpty;
+  final isPiece = su == 'Piece';
+
+  if (!isStructured) return _fmtNum(current);
+  if (isPiece) {
+    if (baseUom == 'sheet' && unitSqft > 1) {
+      final packs = unitSqft > 0 ? current / unitSqft : 0.0;
+      return '${_fmtNum(current)} sheets (${_fmtNum(packs)} packs)';
+    }
+    final label = baseUom == 'sheet' ? 'sheets' : 'pcs';
+    return '${_fmtNum(current)} $label';
+  }
+  final stockUnits = unitSqft > 0 ? current / unitSqft : 0.0;
+  final label = _stockUnitLabel(su);
+  return '${_fmtNum(current)} $baseUom (${_fmtNum(stockUnits)} ${label}s)';
+}
+
+String _reportRestockText(Map<String, dynamic> data) {
+  final restock = (data['restock_level'] as num?)?.toDouble() ?? 0;
+  if (restock <= 0) return '—';
+  final su = data['stocking_unit']?.toString() ?? '';
+  final unitSqft = (data['unit_size_sqft'] as num?)?.toDouble() ?? 0;
+  final baseUom =
+      data['base_uom']?.toString() ?? (su == 'Piece' ? 'pc' : 'sqft');
+  final isStructured = su.isNotEmpty;
+  final isPiece = su == 'Piece';
+
+  if (!isStructured) return _fmtNum(restock);
+  if (isPiece) {
+    if (baseUom == 'sheet' && unitSqft > 1) {
+      final packs = unitSqft > 0 ? restock / unitSqft : 0.0;
+      return '${_fmtNum(restock)} sh / ${_fmtNum(packs)} pk';
+    }
+    final label = baseUom == 'sheet' ? 'sh' : 'pcs';
+    return '${_fmtNum(restock)} $label';
+  }
+  final stockUnits = unitSqft > 0 ? restock / unitSqft : 0.0;
+  final label = _stockUnitLabel(su);
+  return '${_fmtNum(stockUnits)} ${label}s';
 }
 
 // Builds the sub-line shown under the material name in the table.
