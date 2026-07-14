@@ -522,10 +522,10 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
       ) async {
     if (selected.isEmpty) return;
     try {
-      // Sort alphabetically by material name for a cleaner printed report.
-      final rows = [...selected]..sort((a, b) => (a['material_name'] ?? '')
+      // Sort by material code for a cleaner printed report.
+      final rows = [...selected]..sort((a, b) => (a['material_id'] ?? '')
           .toString()
-          .compareTo((b['material_name'] ?? '').toString()));
+          .compareTo((b['material_id'] ?? '').toString()));
 
       final bytes = await _buildInventoryReportPdf(rows, scopeLabel);
       final filename =
@@ -785,9 +785,10 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
             child: pw.Table(
               columnWidths: {
                 0: const pw.FixedColumnWidth(58),
-                1: const pw.FlexColumnWidth(3.6),
-                2: const pw.FlexColumnWidth(2.6),
-                3: const pw.FlexColumnWidth(2.2),
+                1: const pw.FlexColumnWidth(3.2),
+                2: const pw.FlexColumnWidth(2.4),
+                3: const pw.FlexColumnWidth(2.0),
+                4: const pw.FlexColumnWidth(2.0),
               },
               children: [
                 // Header row
@@ -798,6 +799,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                     'MATERIAL',
                     'AVAILABLE STOCK',
                     'RESTOCK LEVEL',
+                    'STATUS',
                   ]
                       .map(
                         (h) => pw.Padding(
@@ -819,6 +821,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                   final m = e.value;
                   final id = m['material_id']?.toString() ?? '';
                   final name = m['material_name']?.toString() ?? '';
+                  final status = m['_status']?.toString() ?? '';
                   final bg = idx.isEven ? PdfColors.white : rowAlt;
                   return pw.TableRow(
                     decoration: pw.BoxDecoration(
@@ -843,6 +846,13 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                       pw.Padding(
                         padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                         child: pw.Text(_reportRestockText(m), style: s(regular, 8.5, textMid)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                        child: pw.Text(
+                          status.isEmpty ? '—' : status,
+                          style: s(regular, 8.5, textDark),
+                        ),
                       ),
                     ],
                   );

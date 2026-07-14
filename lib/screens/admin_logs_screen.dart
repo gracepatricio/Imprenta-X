@@ -421,7 +421,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
 // Mirrors the employee _JobQueueSection exactly (same Orders collection query)
 // but strips all action buttons / status-change logic.
 // =============================================================================
-enum _AdminQueueSubTab { pending, active, ready, cancelled, uncollected, history }
+enum _AdminQueueSubTab { pending, active, ready, cancelled, history }
 
 class AdminReadOnlyJobQueueTab extends StatefulWidget {
   const AdminReadOnlyJobQueueTab({super.key, this.initialStatus});
@@ -462,12 +462,6 @@ class _AdminReadOnlyJobQueueTabState extends State<AdminReadOnlyJobQueueTab> {
     Icons.cancel_outlined,
     Color(0xFFDC2626),
     ),
-    (
-    _AdminQueueSubTab.uncollected,
-    'Uncollected',
-    Icons.inventory_2_outlined,
-    Color(0xFFB45309),
-    ),
   ];
 
   String get _ordersStatus {
@@ -480,8 +474,6 @@ class _AdminReadOnlyJobQueueTabState extends State<AdminReadOnlyJobQueueTab> {
         return 'ready';
       case _AdminQueueSubTab.cancelled:
         return 'cancelled';
-      case _AdminQueueSubTab.uncollected:
-        return 'uncollected';
       case _AdminQueueSubTab.history:
         return 'pending'; // unused when history is active
     }
@@ -496,7 +488,6 @@ class _AdminReadOnlyJobQueueTabState extends State<AdminReadOnlyJobQueueTab> {
     _subscribeCount(_AdminQueueSubTab.active, 'in_production');
     _subscribeCount(_AdminQueueSubTab.ready, 'ready');
     _subscribeCount(_AdminQueueSubTab.cancelled, 'cancelled');
-    _subscribeCount(_AdminQueueSubTab.uncollected, 'uncollected');
   }
 
   static _AdminQueueSubTab _subFromStatus(String? s) {
@@ -507,9 +498,8 @@ class _AdminReadOnlyJobQueueTabState extends State<AdminReadOnlyJobQueueTab> {
       case 'ready':
         return _AdminQueueSubTab.ready;
       case 'cancelled':
-        return _AdminQueueSubTab.cancelled;
       case 'uncollected':
-        return _AdminQueueSubTab.uncollected;
+        return _AdminQueueSubTab.cancelled;
       case 'pending':
       default:
         return _AdminQueueSubTab.pending;
@@ -536,15 +526,9 @@ class _AdminReadOnlyJobQueueTabState extends State<AdminReadOnlyJobQueueTab> {
 
   // ── Print Document (Job Queue Orders Report) ────────────────────────────
   Future<void> _openPrintDialog() async {
-    final currentLabel = _statusTabs
-        .firstWhere((t) => t.$1 == _sub, orElse: () => _statusTabs.first)
-        .$2;
     final selection = await showDialog<_JobQueuePrintSelection>(
       context: context,
-      builder: (_) => _JobQueuePrintDialog(
-        currentStatus: _ordersStatus,
-        currentStatusLabel: currentLabel,
-      ),
+      builder: (_) => const _JobQueuePrintDialog(),
     );
     if (selection == null || selection.orders.isEmpty) return;
     if (!mounted) return;
@@ -774,8 +758,6 @@ class _AdminReadOnlyJobQueueTabState extends State<AdminReadOnlyJobQueueTab> {
 // Job Queue "Print Document" — order selection dialog + PDF report builder
 // =============================================================================
 
-enum _PrintMode { byDate, byDateOrders, last30, last30Filter, last30Completed }
-
 class _JobQueuePrintSelection {
   final List<Map<String, dynamic>> orders; // each includes a '_docId' key
   final String label;
@@ -788,60 +770,69 @@ String _fmtPrintDate(DateTime d) {
   return '${mo[d.month - 1]} ${d.day}, ${d.year}';
 }
 
+String _fmtPrintDateRange(DateTimeRange r) {
+  final startDay = DateTime(r.start.year, r.start.month, r.start.day);
+  final endDay = DateTime(r.end.year, r.end.month, r.end.day);
+  if (startDay == endDay) return _fmtPrintDate(startDay);
+  return '${_fmtPrintDate(startDay)} – ${_fmtPrintDate(endDay)}';
+}
+
+// Job-queue statuses selectable for the "specific job queue" filter — mirrors
+// the Firestore status values used by the on-screen queue tabs.
+const _jobQueueStatusOptions = [
+  ('pending', 'Pending'),
+  ('in_production', 'Active'),
+  ('ready', 'Ready'),
+  ('cancelled', 'Cancelled'),
+  ('completed', 'Completed'),
+];
+
 class _JobQueuePrintDialog extends StatefulWidget {
-  /// Firestore status value of the Job Queue tab currently open on screen
-  /// (used by the "Last 100 orders — current filter" option).
-  final String currentStatus;
-  final String currentStatusLabel;
-  const _JobQueuePrintDialog({
-    required this.currentStatus,
-    required this.currentStatusLabel,
-  });
+  const _JobQueuePrintDialog();
 
   @override
   State<_JobQueuePrintDialog> createState() => _JobQueuePrintDialogState();
 }
 
 class _JobQueuePrintDialogState extends State<_JobQueuePrintDialog> {
-  _PrintMode _mode = _PrintMode.last30Filter;
-  DateTime? _selectedDate;
-  bool _loadingOrders = false;
-  List<QueryDocumentSnapshot>? _dateOrders;
-  final Set<String> _selectedOrderIds = {};
+  DateTimeRange? _range;
+  String? _statusFilter; // null = All Job Queues
   bool _generating = false;
   String? _error;
 
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? now,
-      firstDate: DateTime(now.year - 5),
-      lastDate: now,
-    );
-    if (picked == null) return;
-    setState(() {
-      _selectedDate = picked;
-      _dateOrders = null;
-      _selectedOrderIds.clear();
-      _error = null;
-    });
-    if (_mode == _PrintMode.byDateOrders) {
-      await _loadOrdersForDate(picked);
-    }
+  @override
+  void initState() {
+    super.initState();
+    final today = DateTime.now();
+    final day = DateTime(today.year, today.month, today.day);
+    _range = DateTimeRange(start: day, end: day); // defaults to today only
   }
 
-  Future<void> _loadOrdersForDate(DateTime date) async {
-    setState(() { _loadingOrders = true; _error = null; });
+  Future<_JobQueuePrintSelection?> _buildSelection() async {
+    final range = _range;
+    if (range == null) {
+      setState(() => _error = 'Please select a date range.');
+      return null;
+    }
+    setState(() { _generating = true; _error = null; });
     try {
-      final dayStart = DateTime(date.year, date.month, date.day);
-      final dayEnd = dayStart.add(const Duration(days: 1));
+      final dayStart = DateTime(range.start.year, range.start.month, range.start.day);
+      final dayEnd = DateTime(range.end.year, range.end.month, range.end.day)
+          .add(const Duration(days: 1));
+      // Range filter on created_at only — status is filtered client-side so
+      // this never needs a composite Firestore index.
       final snap = await FirebaseFirestore.instance
           .collection('Orders')
           .where('created_at', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
           .where('created_at', isLessThan: Timestamp.fromDate(dayEnd))
           .get();
-      final docs = [...snap.docs]..sort((a, b) {
+      var docs = [...snap.docs];
+      final statusFilter = _statusFilter;
+      if (statusFilter != null) {
+        docs = docs.where((d) =>
+        (d.data() as Map<String, dynamic>)['status']?.toString() == statusFilter).toList();
+      }
+      docs.sort((a, b) {
         final ta = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
         final tb = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
         if (ta == null && tb == null) return 0;
@@ -849,150 +840,20 @@ class _JobQueuePrintDialogState extends State<_JobQueuePrintDialog> {
         if (tb == null) return -1;
         return ta.compareTo(tb);
       });
-      if (!mounted) return;
-      setState(() {
-        _dateOrders = docs;
-        _selectedOrderIds
-          ..clear()
-          ..addAll(docs.map((d) => d.id));
-        _loadingOrders = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() { _loadingOrders = false; _error = 'Failed to load orders: $e'; });
-    }
-  }
-
-  Future<_JobQueuePrintSelection?> _buildSelection() async {
-    switch (_mode) {
-      case _PrintMode.byDate:
-        if (_selectedDate == null) {
-          setState(() => _error = 'Please select a date.');
-          return null;
-        }
-        setState(() { _generating = true; _error = null; });
-        try {
-          final dayStart = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
-          final dayEnd = dayStart.add(const Duration(days: 1));
-          final snap = await FirebaseFirestore.instance
-              .collection('Orders')
-              .where('created_at', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
-              .where('created_at', isLessThan: Timestamp.fromDate(dayEnd))
-              .get();
-          final orders = snap.docs
-              .map((d) => {...d.data() as Map<String, dynamic>, '_docId': d.id})
-              .toList();
-          return _JobQueuePrintSelection(
-            orders: orders,
-            label: 'All orders on ${_fmtPrintDate(_selectedDate!)}',
-          );
-        } finally {
-          if (mounted) setState(() => _generating = false);
-        }
-
-      case _PrintMode.byDateOrders:
-        if (_selectedDate == null) {
-          setState(() => _error = 'Please select a date.');
-          return null;
-        }
-        if (_dateOrders == null) {
-          setState(() => _error = 'Please wait for orders to finish loading.');
-          return null;
-        }
-        if (_selectedOrderIds.isEmpty) {
-          setState(() => _error = 'Select at least one order.');
-          return null;
-        }
-        final chosen = _dateOrders!
-            .where((d) => _selectedOrderIds.contains(d.id))
-            .map((d) => {...d.data() as Map<String, dynamic>, '_docId': d.id})
-            .toList();
-        return _JobQueuePrintSelection(
-          orders: chosen,
-          label: chosen.length == _dateOrders!.length
-              ? 'All orders on ${_fmtPrintDate(_selectedDate!)} (${chosen.length})'
-              : '${chosen.length} selected order(s) on ${_fmtPrintDate(_selectedDate!)}',
-        );
-
-      case _PrintMode.last30:
-        setState(() { _generating = true; _error = null; });
-        try {
-          // Single-field orderBy + limit — no composite index required.
-          final snap = await FirebaseFirestore.instance
-              .collection('Orders')
-              .orderBy('created_at', descending: true)
-              .limit(30)
-              .get();
-          final orders = snap.docs
-              .map((d) => {...d.data() as Map<String, dynamic>, '_docId': d.id})
-              .toList();
-          return _JobQueuePrintSelection(
-            orders: orders,
-            label: 'Last ${orders.length} order(s) (no status filtering)',
-          );
-        } finally {
-          if (mounted) setState(() => _generating = false);
-        }
-
-      case _PrintMode.last30Filter:
-        setState(() { _generating = true; _error = null; });
-        try {
-          // Equality filter only (no orderBy on a different field) so this
-          // never needs a composite Firestore index — sort/trim client-side,
-          // same pattern already used by the on-screen queue list.
-          final snap = await FirebaseFirestore.instance
-              .collection('Orders')
-              .where('status', isEqualTo: widget.currentStatus)
-              .get();
-          final docs = [...snap.docs]..sort((a, b) {
-            final ta = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
-            final tb = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
-            if (ta == null && tb == null) return 0;
-            if (ta == null) return 1;
-            if (tb == null) return -1;
-            return tb.compareTo(ta); // newest first
-          });
-          final orders = docs
-              .take(30)
-              .map((d) => {...d.data() as Map<String, dynamic>, '_docId': d.id})
-              .toList();
-          return _JobQueuePrintSelection(
-            orders: orders,
-            label: 'Last ${orders.length} order(s) — Job Queue filter: ${widget.currentStatusLabel}',
-          );
-        } finally {
-          if (mounted) setState(() => _generating = false);
-        }
-
-      case _PrintMode.last30Completed:
-        setState(() { _generating = true; _error = null; });
-        try {
-          // Same equality-only + client-sort pattern as last30Filter, but
-          // hardcoded to 'completed' regardless of whatever status tab is
-          // currently open on screen.
-          final snap = await FirebaseFirestore.instance
-              .collection('Orders')
-              .where('status', isEqualTo: 'completed')
-              .get();
-          final docs = [...snap.docs]..sort((a, b) {
-            final ta = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
-            final tb = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
-            if (ta == null && tb == null) return 0;
-            if (ta == null) return 1;
-            if (tb == null) return -1;
-            return tb.compareTo(ta); // newest first
-          });
-          final orders = docs
-              .take(30)
-              .map((d) => {...d.data() as Map<String, dynamic>, '_docId': d.id})
-              .toList();
-          return _JobQueuePrintSelection(
-            orders: orders,
-            label: 'Last ${orders.length} completed order(s)',
-          );
-        } finally {
-          if (mounted) setState(() => _generating = false);
-        }
+      final orders = docs
+          .map((d) => {...d.data() as Map<String, dynamic>, '_docId': d.id})
+          .toList();
+      final scopeLabel = statusFilter == null
+          ? 'All Job Queues'
+          : _jobQueueStatusOptions
+          .firstWhere((s) => s.$1 == statusFilter, orElse: () => ('', statusFilter))
+          .$2;
+      return _JobQueuePrintSelection(
+        orders: orders,
+        label: '$scopeLabel · ${_fmtPrintDateRange(range)}',
+      );
+    } finally {
+      if (mounted) setState(() => _generating = false);
     }
   }
 
@@ -1012,7 +873,7 @@ class _JobQueuePrintDialogState extends State<_JobQueuePrintDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 640),
+        constraints: const BoxConstraints(maxWidth: 440, maxHeight: 560),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           // ── Header ────────────────────────────────────────────────────
           Container(
@@ -1035,165 +896,41 @@ class _JobQueuePrintDialogState extends State<_JobQueuePrintDialog> {
             ]),
           ),
 
-          // ── Options + date/order pickers ─────────────────────────────
+          // ── Filters ──────────────────────────────────────────────────
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Choose what to include in the report:',
-                    style: TextStyle(color: _G.textSecondary, fontSize: 12)),
-                const SizedBox(height: 10),
+                const Text('Date range',
+                    style: TextStyle(color: _G.textSecondary, fontSize: 12,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                DateFilterButton(
+                  selectedRange: _range,
+                  onChanged: (r) => setState(() { _range = r; _error = null; }),
+                ),
+                const SizedBox(height: 18),
 
-                _PrintModeOption(
-                  icon: Icons.event_rounded,
-                  title: 'Orders from a specific date',
-                  subtitle: 'Includes every order placed on the chosen date.',
-                  active: _mode == _PrintMode.byDate,
-                  onTap: () => setState(() { _mode = _PrintMode.byDate; _error = null; }),
-                ),
+                const Text('Job queue',
+                    style: TextStyle(color: _G.textSecondary, fontSize: 12,
+                        fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
-                _PrintModeOption(
-                  icon: Icons.checklist_rounded,
-                  title: 'Specific orders from a date',
-                  subtitle: 'Pick a date, then choose which of its orders to include.',
-                  active: _mode == _PrintMode.byDateOrders,
-                  onTap: () async {
-                    setState(() { _mode = _PrintMode.byDateOrders; _error = null; });
-                    if (_selectedDate != null && _dateOrders == null) {
-                      await _loadOrdersForDate(_selectedDate!);
-                    }
-                  },
-                ),
-                const SizedBox(height: 8),
-                _PrintModeOption(
-                  icon: Icons.history_rounded,
-                  title: 'Last 30 orders',
-                  subtitle: 'Includes the 30 most recently placed orders — no status filtering.',
-                  active: _mode == _PrintMode.last30,
-                  onTap: () => setState(() { _mode = _PrintMode.last30; _error = null; }),
-                ),
-                const SizedBox(height: 8),
-                _PrintModeOption(
-                  icon: Icons.filter_alt_rounded,
-                  title: 'Last 30 orders — current filter',
-                  subtitle:
-                  'Includes the 30 most recent orders matching "${widget.currentStatusLabel}" — the status currently open on screen.',
-                  active: _mode == _PrintMode.last30Filter,
-                  onTap: () => setState(() { _mode = _PrintMode.last30Filter; _error = null; }),
-                ),
-                const SizedBox(height: 8),
-                _PrintModeOption(
-                  icon: Icons.task_alt_rounded,
-                  title: 'Last 30 completed orders',
-                  subtitle: 'Includes the 30 most recently completed orders, regardless of the status tab open on screen.',
-                  active: _mode == _PrintMode.last30Completed,
-                  onTap: () => setState(() { _mode = _PrintMode.last30Completed; _error = null; }),
-                ),
-
-                // Date picker for modes that need one
-                if (_mode == _PrintMode.byDate || _mode == _PrintMode.byDateOrders) ...[
-                  const SizedBox(height: 14),
-                  GestureDetector(
-                    onTap: _pickDate,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _G.surface,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: _G.borderSolid),
-                      ),
-                      child: Row(children: [
-                        const Icon(Icons.calendar_today_outlined, size: 15, color: _G.navyBlue),
-                        const SizedBox(width: 8),
-                        Text(
-                          _selectedDate == null ? 'Select a date' : _fmtPrintDate(_selectedDate!),
-                          style: TextStyle(
-                            color: _selectedDate == null ? _G.textMuted : _G.textPrimary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        const Icon(Icons.expand_more_rounded, size: 16, color: _G.textMuted),
-                      ]),
-                    ),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  _JobQueueScopeChip(
+                    label: 'All Job Queues',
+                    active: _statusFilter == null,
+                    onTap: () => setState(() { _statusFilter = null; _error = null; }),
                   ),
-                ],
-
-                // Per-order checkbox list for "specific orders from a date"
-                if (_mode == _PrintMode.byDateOrders && _selectedDate != null) ...[
-                  const SizedBox(height: 12),
-                  if (_loadingOrders)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 20),
-                      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                    )
-                  else if (_dateOrders == null || _dateOrders!.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Text('No orders found on ${_fmtPrintDate(_selectedDate!)}.',
-                          style: const TextStyle(color: _G.textMuted, fontSize: 12)),
-                    )
-                  else ...[
-                      Row(children: [
-                        Text('${_selectedOrderIds.length} of ${_dateOrders!.length} selected',
-                            style: const TextStyle(color: _G.textMuted, fontSize: 11)),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => setState(() {
-                            if (_selectedOrderIds.length == _dateOrders!.length) {
-                              _selectedOrderIds.clear();
-                            } else {
-                              _selectedOrderIds
-                                ..clear()
-                                ..addAll(_dateOrders!.map((d) => d.id));
-                            }
-                          }),
-                          child: Text(_selectedOrderIds.length == _dateOrders!.length
-                              ? 'Clear all' : 'Select all'),
-                        ),
-                      ]),
-                      Container(
-                        constraints: const BoxConstraints(maxHeight: 220),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: _G.borderSolid),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: _dateOrders!.length,
-                          separatorBuilder: (_, __) => Divider(height: 1, color: _G.borderDim),
-                          itemBuilder: (_, i) {
-                            final doc = _dateOrders![i];
-                            final data = doc.data() as Map<String, dynamic>;
-                            final label = data['order_id']?.toString() ?? doc.id;
-                            final customer = data['customer_name']?.toString() ?? 'Customer';
-                            final status = data['status']?.toString() ?? 'pending';
-                            return CheckboxListTile(
-                              dense: true,
-                              controlAffinity: ListTileControlAffinity.leading,
-                              value: _selectedOrderIds.contains(doc.id),
-                              activeColor: _G.navyBlue,
-                              title: Text(label, style: const TextStyle(
-                                  fontSize: 12.5, fontWeight: FontWeight.w600, color: _G.textPrimary)),
-                              subtitle: Text('$customer · $status', style: const TextStyle(
-                                  fontSize: 10.5, color: _G.textMuted)),
-                              onChanged: (v) => setState(() {
-                                if (v == true) {
-                                  _selectedOrderIds.add(doc.id);
-                                } else {
-                                  _selectedOrderIds.remove(doc.id);
-                                }
-                              }),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                ],
+                  for (final opt in _jobQueueStatusOptions)
+                    _JobQueueScopeChip(
+                      label: opt.$2,
+                      active: _statusFilter == opt.$1,
+                      onTap: () => setState(() { _statusFilter = opt.$1; _error = null; }),
+                    ),
+                ]),
 
                 if (_error != null) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
                   Text(_error!, style: const TextStyle(color: _G.accentRose, fontSize: 12)),
                 ],
               ]),
@@ -1236,6 +973,35 @@ class _JobQueuePrintDialogState extends State<_JobQueuePrintDialog> {
   }
 }
 
+class _JobQueueScopeChip extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _JobQueueScopeChip({
+    required this.label, required this.active, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: active ? _G.navyBlue.withValues(alpha: 0.08) : Colors.white,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(
+            color: active ? _G.navyBlue : _G.borderSolid,
+            width: active ? 1.3 : 0.9),
+      ),
+      child: Text(label, style: TextStyle(
+          color: active ? _G.navyBlue : _G.textSecondary,
+          fontSize: 12, fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
+    ),
+  );
+}
+
+// Shared radio-style option tile — reused by the Employee Activity and
+// Feedback print dialogs elsewhere in this file.
 class _PrintModeOption extends StatelessWidget {
   final IconData icon;
   final String title, subtitle;
@@ -1364,6 +1130,11 @@ Future<Uint8List> _buildJobQueuePdf(_JobQueuePrintSelection selection) async {
       orders.where((o) => (o['status']?.toString() ?? '') == st).length;
   final grandTotal = orders.fold<double>(
       0, (sum, o) => sum + ((o['total_price'] as num?)?.toDouble() ?? 0));
+  final grandRemaining = orders.fold<double>(0, (sum, o) {
+    final total = (o['total_price'] as num?)?.toDouble() ?? 0;
+    final paid = (o['amount_paid'] as num?)?.toDouble() ?? 0;
+    return sum + ((o['remaining_balance'] as num?)?.toDouble() ?? (total - paid));
+  });
 
   pw.Widget summaryChip(String label, int count, PdfColor color) =>
       pw.Container(
@@ -1394,7 +1165,7 @@ Future<Uint8List> _buildJobQueuePdf(_JobQueuePrintSelection selection) async {
   );
 
   // ── Table rows ───────────────────────────────────────────────────────────
-  final headers = ['#', 'ORDER ID', 'CUSTOMER', 'STATUS', 'DATE CREATED', 'ITEMS', 'TOTAL'];
+  final headers = ['#', 'ORDER ID', 'CUSTOMER', 'STATUS', 'DATE CREATED', 'ITEMS', 'TOTAL', 'REMAINING'];
 
   // Bounds the ITEMS cell so a single order can never produce a row taller
   // than a page. An unbounded join of every product name (orders with many
@@ -1421,6 +1192,8 @@ Future<Uint8List> _buildJobQueuePdf(_JobQueuePrintSelection selection) async {
     final products = (o['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final itemsSummary = _summarizeItems(products);
     final total = (o['total_price'] as num?)?.toDouble() ?? 0;
+    final paid = (o['amount_paid'] as num?)?.toDouble() ?? 0;
+    final remaining = (o['remaining_balance'] as num?)?.toDouble() ?? (total - paid);
     return [
       '${i + 1}',
       _shorten(o['order_id']?.toString() ?? o['_docId']?.toString() ?? '—', 16),
@@ -1429,6 +1202,7 @@ Future<Uint8List> _buildJobQueuePdf(_JobQueuePrintSelection selection) async {
       fmtDate(o['created_at']),
       itemsSummary,
       php(total),
+      remaining > 0.004 ? php(remaining) : '—',
     ];
   }).toList();
 
@@ -1524,12 +1298,16 @@ Future<Uint8List> _buildJobQueuePdf(_JobQueuePrintSelection selection) async {
                 summaryChip('Pending', countStatus('pending'), statusPdfColor('pending')),
                 summaryChip('Active', countStatus('in_production'), statusPdfColor('in_production')),
                 summaryChip('Ready', countStatus('ready'), statusPdfColor('ready')),
-                summaryChip('Uncollected', countStatus('uncollected'), statusPdfColor('uncollected')),
                 summaryChip('Cancelled', countStatus('cancelled'), statusPdfColor('cancelled')),
                 summaryChip('Completed', countStatus('completed'), statusPdfColor('completed')),
               ]),
               pw.SizedBox(height: 8),
               pw.Text('Combined Order Value: ${php(grandTotal)}', style: s(bold, 9, textDark)),
+              if (grandRemaining > 0.004) ...[
+                pw.SizedBox(height: 2),
+                pw.Text('Combined Remaining Balance: ${php(grandRemaining)}',
+                    style: s(bold, 9, const PdfColor.fromInt(0xFFDC2626))),
+              ],
             ],
           ),
         ),
@@ -1559,8 +1337,9 @@ Future<Uint8List> _buildJobQueuePdf(_JobQueuePrintSelection selection) async {
               2: pw.FlexColumnWidth(1.7),
               3: pw.FlexColumnWidth(1.0),
               4: pw.FlexColumnWidth(1.3),
-              5: pw.FlexColumnWidth(2.6),
+              5: pw.FlexColumnWidth(2.3),
               6: pw.FlexColumnWidth(1.1),
+              7: pw.FlexColumnWidth(1.2),
             },
             children: [
               // Header row
@@ -1570,7 +1349,7 @@ Future<Uint8List> _buildJobQueuePdf(_JobQueuePrintSelection selection) async {
                   return pw.Padding(
                     padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
                     child: pw.Align(
-                      alignment: h.key == 6 ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
+                      alignment: (h.key == 6 || h.key == 7) ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
                       child: pw.Text(h.value,
                           style: pw.TextStyle(font: bold, fontSize: 7.5, color: gold),
                           maxLines: 1,
@@ -1592,7 +1371,7 @@ Future<Uint8List> _buildJobQueuePdf(_JobQueuePrintSelection selection) async {
                   ),
                   children: r.value.asMap().entries.map((c) {
                     final isItemsCol = c.key == 5;
-                    final isTotalCol = c.key == 6;
+                    final isTotalCol = c.key == 6 || c.key == 7;
                     return pw.Padding(
                       padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                       child: pw.Align(
@@ -4086,7 +3865,6 @@ class _AdminHistoryViewState extends State<_AdminHistoryView> {
     ('pending', 'Pending'),
     ('active', 'Active'),
     ('ready', 'Ready'),
-    ('uncollected', 'Uncollected'),
     ('completed', 'Completed'),
     ('cancelled', 'Cancelled'),
   ];
@@ -4139,7 +3917,7 @@ class _AdminHistoryViewState extends State<_AdminHistoryView> {
   Stream<List<QueryDocumentSnapshot>> _stream() {
     Query q = FirebaseFirestore.instance.collection('Orders');
     if (_statusFilter == 'all') {
-      q = q.where('status', whereIn: ['pending', 'in_production', 'ready', 'uncollected', 'completed', 'cancelled']);
+      q = q.where('status', whereIn: ['pending', 'in_production', 'ready', 'uncollected', 'completed', 'cancelled']); // 'uncollected' kept for legacy orders predating auto-cancel
     } else if (_statusFilter == 'active') {
       q = q.where('status', isEqualTo: 'in_production');
     } else if (_statusFilter == 'ready') {
@@ -4342,9 +4120,13 @@ class _SalesRecordSubTabState extends State<_SalesRecordSubTab> {
       // records, price change analysis, revenue impact, best sellers,
       // payment/order-status breakdowns, remarks).
       if (_sub == _SalesSubTab.record) {
-        await generateAdminSalesRecordsPdf(context);
+        // Matches whatever date range is currently selected on the Sales
+        // Record view, kept in sync via adminSalesRecordsRange.
+        await generateAdminSalesRecordsPdf(context, range: adminSalesRecordsRange.value);
       } else {
-        await generateAdminSalesReportPdf(context);
+        // Matches whatever date range is currently selected on the Sales
+        // Report view, kept in sync via adminSalesReportRange.
+        await generateAdminSalesReportPdf(context, range: adminSalesReportRange.value);
       }
     } finally {
       if (mounted) setState(() => _printing = false);

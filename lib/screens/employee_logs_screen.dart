@@ -606,7 +606,7 @@ class EmployeeJobQueueScreen extends StatelessWidget {
 // =============================================================================
 // _JobQueueSection
 // =============================================================================
-enum _QueueSubTab { pending, active, ready, cancelled, uncollected, history }
+enum _QueueSubTab { pending, active, ready, cancelled, history }
 
 class _JobQueueSection extends StatefulWidget {
   final int initialTab;
@@ -644,31 +644,24 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
     Icons.cancel_outlined,
     Color(0xFFDC2626),
     ),
-    (
-    _QueueSubTab.uncollected,
-    'Uncollected',
-    Icons.inventory_2_outlined,
-    Color(0xFFB45309),
-    ),
   ];
 
   @override
   void initState() {
     super.initState();
-    final idx = widget.initialTab.clamp(0, 5);
+    final idx = widget.initialTab.clamp(0, _QueueSubTab.values.length - 1);
     _sub = _QueueSubTab.values[idx];
     _subscribeCount(_QueueSubTab.pending, 'pending');
     _subscribeCount(_QueueSubTab.active, 'in_production');
     _subscribeCount(_QueueSubTab.ready, 'ready');
     _subscribeCount(_QueueSubTab.cancelled, 'cancelled');
-    _subscribeCount(_QueueSubTab.uncollected, 'uncollected');
   }
 
   @override
   void didUpdateWidget(_JobQueueSection oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.initialTab != oldWidget.initialTab) {
-      final idx = widget.initialTab.clamp(0, 5);
+      final idx = widget.initialTab.clamp(0, _QueueSubTab.values.length - 1);
       setState(() => _sub = _QueueSubTab.values[idx]);
     }
   }
@@ -887,8 +880,6 @@ class _JobQueueSectionState extends State<_JobQueueSection> {
         return _ReadyForPickupList(searchQuery: _searchQuery);
       case _QueueSubTab.cancelled:
         return _QueueList(jobStatus: 'cancelled', searchQuery: _searchQuery);
-      case _QueueSubTab.uncollected:
-        return _UncollectedList(searchQuery: _searchQuery);
       case _QueueSubTab.history:
         return _EmployeeOrderHistory(
           onBack: () => setState(() => _sub = _QueueSubTab.pending),
@@ -4789,11 +4780,32 @@ class _ReadyForPickupList extends StatefulWidget {
 
 class _ReadyForPickupListState extends State<_ReadyForPickupList> {
   final _scrollCtrl = ScrollController();
+  final Set<String> _autoCancelling = {};
 
   @override
   void dispose() {
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  DateTime? _pickupExpiresAtOf(Map<String, dynamic> data) {
+    final ts = data['pickup_expires_at'] as Timestamp?;
+    if (ts != null) return ts.toDate().toLocal();
+    final readyAt = (data['ready_at'] as Timestamp?)?.toDate().toLocal();
+    if (readyAt != null) return readyAt.add(const Duration(days: 30));
+    final createdAt = (data['created_at'] as Timestamp?)?.toDate().toLocal();
+    if (createdAt != null) return createdAt.add(const Duration(days: 30));
+    return null;
+  }
+
+  void _autoCancelExpired(List<QueryDocumentSnapshot> docs) {
+    for (final doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final expiresAt = _pickupExpiresAtOf(data);
+      if (expiresAt == null || !DateTime.now().isAfter(expiresAt)) continue;
+      if (!_autoCancelling.add(doc.id)) continue;
+      _autoCancelUncollectedOrder(doc.id, data);
+    }
   }
 
   @override
@@ -4822,7 +4834,7 @@ class _ReadyForPickupListState extends State<_ReadyForPickupList> {
           );
         }
 
-        final allDocs = [...(snap.data?.docs ?? [])]
+        final allDocs = <QueryDocumentSnapshot>[...(snap.data?.docs ?? [])]
           ..sort((a, b) {
             final ta =
             (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
@@ -4833,6 +4845,9 @@ class _ReadyForPickupListState extends State<_ReadyForPickupList> {
             if (tb == null) return -1;
             return ta.compareTo(tb);
           });
+
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _autoCancelExpired(allDocs));
 
         final q = widget.searchQuery;
         final docs = q.isEmpty
@@ -5082,155 +5097,6 @@ class _ReadyOrderCard extends StatelessWidget {
         SnackBar(
           content: Text('Order $orderId marked as completed'),
           backgroundColor: _Glass.accentEmerald,
-        ),
-      );
-    }
-  }
-
-  DateTime? get _pickupExpiresAtValue {
-    final ts = data['pickup_expires_at'] as Timestamp?;
-    if (ts != null) return ts.toDate().toLocal();
-    final readyAt = (data['ready_at'] as Timestamp?)?.toDate().toLocal();
-    if (readyAt != null) return readyAt.add(const Duration(days: 30));
-    final createdAt = (data['created_at'] as Timestamp?)?.toDate().toLocal();
-    if (createdAt != null) return createdAt.add(const Duration(days: 30));
-    return null;
-  }
-
-  Future<void> _markUncollected(BuildContext context) async {
-    final expiresAt = _pickupExpiresAtValue;
-    if (expiresAt == null || !DateTime.now().isAfter(expiresAt)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            expiresAt != null
-                ? 'This order can be marked uncollected after its pickup '
-                'window expires on ${_fmtExpiryDate(expiresAt)}.'
-                : 'This order can be marked uncollected after its pickup '
-                'window expires.',
-          ),
-          backgroundColor: _Glass.textMuted,
-        ),
-      );
-      return;
-    }
-
-    final customerUid = data['customer_uid']?.toString();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: _Glass.surface,
-        elevation: 24,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: _Glass.borderMid, width: 1),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Mark as Uncollected?',
-                style: TextStyle(
-                  color: _Glass.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Order $orderId will move to the Uncollected list. '
-                    'Use this when the customer did not claim the order '
-                    'within the pickup window.',
-                style: const TextStyle(
-                  color: _Glass.textSecondary,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(ctx, false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 9,
-                      ),
-                      decoration: _Glass.glass(radius: 99),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          color: _Glass.textSecondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(ctx, true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 9,
-                      ),
-                      decoration: _Glass.solidPill(_amber, glow: true),
-                      child: const Text(
-                        'Mark Uncollected',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (confirmed != true) return;
-
-    final db = FirebaseFirestore.instance;
-    await db.collection('Orders').doc(orderId).update({
-      'status': 'uncollected',
-      'uncollected_at': FieldValue.serverTimestamp(),
-    });
-    await _logJobQueueActivity(orderId: orderId, action: 'marked_uncollected');
-
-    if (customerUid != null && customerUid.isNotEmpty) {
-      final threadRef = FirebaseFirestore.instance
-          .collection('Messages')
-          .doc('chat_$customerUid');
-      await threadRef.collection('chat').add({
-        'sender_uid': 'system',
-        'sender_role': 'system',
-        'text':
-        'Order $orderId was not picked up within the pickup window and '
-            'is now marked as uncollected. Please contact us to arrange pickup.',
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-      await threadRef.set({
-        'last_message': 'Order $orderId marked as uncollected',
-        'last_updated': FieldValue.serverTimestamp(),
-        'unread_customer': FieldValue.increment(1),
-      }, SetOptions(merge: true));
-    }
-
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Order $orderId marked as uncollected'),
-          backgroundColor: _amber,
         ),
       );
     }
@@ -5607,59 +5473,6 @@ class _ReadyOrderCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Builder(
-                  builder: (context) {
-                    final isPickupExpired = _pickupExpiresAt != null &&
-                        DateTime.now().isAfter(_pickupExpiresAt!);
-                    final tintColor = isPickupExpired ? _amber : _Glass.textMuted;
-
-                    return Tooltip(
-                      message: isPickupExpired
-                          ? 'Mark as uncollected'
-                          : _pickupExpiresAt != null
-                          ? 'Available once the pickup window expires '
-                          '(${_fmtExpiryDate(_pickupExpiresAt!)})'
-                          : 'Available once the pickup window expires',
-                      child: GestureDetector(
-                        onTap: () {
-                          if (isPickupExpired) {
-                            _markUncollected(context);
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  _pickupExpiresAt != null
-                                      ? 'This order can be marked uncollected '
-                                      'after its pickup window expires on '
-                                      '${_fmtExpiryDate(_pickupExpiresAt!)}.'
-                                      : 'This order can be marked uncollected '
-                                      'after its pickup window expires.',
-                                ),
-                                backgroundColor: _Glass.textMuted,
-                              ),
-                            );
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: _Glass.glass(
-                            radius: 99,
-                            tintBorder: tintColor.withValues(alpha: 0.35),
-                          ),
-                          child: Icon(
-                            Icons.inventory_2_outlined,
-                            size: 18,
-                            color: tintColor,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
               ],
             ),
           ],
@@ -5681,714 +5494,41 @@ String _fmtExpiryDate(DateTime d) {
 }
 
 // =============================================================================
-// _UncollectedList
+// _autoCancelUncollectedOrder — auto-cancels a "ready" order once its pickup
+// window has expired without the customer collecting it.
 // =============================================================================
-class _UncollectedList extends StatefulWidget {
-  final String searchQuery;
-  const _UncollectedList({this.searchQuery = ''});
+Future<void> _autoCancelUncollectedOrder(
+    String orderId, Map<String, dynamic> data) async {
+  final db = FirebaseFirestore.instance;
+  await db.collection('Orders').doc(orderId).update({
+    'status': 'cancelled',
+    'cancel_reason': 'Uncollected Order',
+    'uncollected_at': FieldValue.serverTimestamp(),
+  });
+  await _logJobQueueActivity(
+    orderId: orderId,
+    action: 'auto_cancelled_uncollected',
+    cancelReason: 'Uncollected Order',
+  );
 
-  @override
-  State<_UncollectedList> createState() => _UncollectedListState();
-}
-
-class _UncollectedListState extends State<_UncollectedList> {
-  final _scrollCtrl = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final query = FirebaseFirestore.instance
-        .collection('Orders')
-        .where('status', isEqualTo: 'uncollected');
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: query.snapshots(),
-      builder: (ctx, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return Center(
-            child: CircularProgressIndicator(
-              color: _navyBlue.withValues(alpha: 0.4),
-              strokeWidth: 2,
-            ),
-          );
-        }
-        if (snap.hasError) {
-          return Center(
-            child: Text(
-              'Error: ${snap.error}',
-              style: const TextStyle(color: _Glass.accentRose, fontSize: 12),
-            ),
-          );
-        }
-
-        final allDocs = [...(snap.data?.docs ?? [])]
-          ..sort((a, b) {
-            final ta =
-            (a.data() as Map<String, dynamic>)['uncollected_at']
-            as Timestamp?;
-            final tb =
-            (b.data() as Map<String, dynamic>)['uncollected_at']
-            as Timestamp?;
-            if (ta == null && tb == null) return 0;
-            if (ta == null) return 1;
-            if (tb == null) return -1;
-            return tb.compareTo(ta); // most recently uncollected first
-          });
-
-        final q = widget.searchQuery;
-        final docs = q.isEmpty
-            ? allDocs
-            : allDocs.where((doc) {
-          final d = doc.data() as Map<String, dynamic>;
-          final orderId = (d['order_id']?.toString() ?? '').toLowerCase();
-          final name = (d['customer_name']?.toString() ?? '').toLowerCase();
-          final customerId = (d['customer_id']?.toString() ?? '').toLowerCase();
-          return orderId.contains(q) || name.contains(q) || customerId.contains(q);
-        }).toList();
-
-        if (allDocs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: _Glass.glass(radius: 20, elevated: true),
-                  child: const Icon(
-                    Icons.inventory_2_outlined,
-                    size: 28,
-                    color: _Glass.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'No uncollected orders',
-                  style: TextStyle(
-                    color: _Glass.textSecondary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        if (docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: _Glass.glass(radius: 20, elevated: true),
-                  child: const Icon(Icons.search_off_rounded, size: 28, color: _Glass.textMuted),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'No orders match your search',
-                  style: TextStyle(
-                    color: _Glass.textSecondary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Try searching by Order ID, Customer Name, or Customer ID',
-                  style: TextStyle(color: _Glass.textMuted, fontSize: 11),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          );
-        }
-
-        return Scrollbar(
-          controller: _scrollCtrl,
-          thumbVisibility: true,
-          child: ListView.builder(
-            controller: _scrollCtrl,
-            padding: const EdgeInsets.only(bottom: 16),
-            itemCount: docs.length,
-            itemBuilder: (_, i) {
-              final doc = docs[i];
-              final data = doc.data() as Map<String, dynamic>;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: _amber.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: _amber.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          '${i + 1}',
-                          style: const TextStyle(
-                            color: _amber,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _UncollectedOrderCard(orderId: doc.id, data: data),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-}
-
-// =============================================================================
-// _UncollectedOrderCard
-// =============================================================================
-class _UncollectedOrderCard extends StatelessWidget {
-  final String orderId;
-  final Map<String, dynamic> data;
-  const _UncollectedOrderCard({required this.orderId, required this.data});
-
-  String _fmtDate(dynamic ts) {
-    if (ts == null) return '—';
-    try {
-      final d = (ts as Timestamp).toDate().toLocal();
-      const m = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-      ];
-      return '${m[d.month - 1]} ${d.day}, ${d.year} '
-          '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return '—';
-    }
-  }
-
-  Future<void> _restoreToReady(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: _Glass.surface,
-        elevation: 24,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: _Glass.borderMid, width: 1),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Restore to Ready for Pickup?',
-                style: TextStyle(
-                  color: _Glass.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Order $orderId will move back to Ready for Pickup with a '
-                    'fresh 30-day pickup window.',
-                style: const TextStyle(
-                  color: _Glass.textSecondary,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(ctx, false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 9,
-                      ),
-                      decoration: _Glass.glass(radius: 99),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          color: _Glass.textSecondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(ctx, true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 9,
-                      ),
-                      decoration: _Glass.solidPill(
-                        _Glass.accentEmerald,
-                        glow: true,
-                      ),
-                      child: const Text(
-                        'Restore',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (confirmed != true) return;
-
-    final readyAt = DateTime.now();
-    final pickupExpiresAt = readyAt.add(const Duration(days: 30));
-
-    final db = FirebaseFirestore.instance;
-    await db.collection('Orders').doc(orderId).update({
-      'status': 'ready',
-      'ready_at': Timestamp.fromDate(readyAt),
-      'pickup_expires_at': Timestamp.fromDate(pickupExpiresAt),
+  final customerUid = data['customer_uid']?.toString();
+  if (customerUid != null && customerUid.isNotEmpty) {
+    final threadRef =
+        FirebaseFirestore.instance.collection('Messages').doc('chat_$customerUid');
+    await threadRef.collection('chat').add({
+      'sender_uid': 'system',
+      'sender_role': 'system',
+      'text':
+      'Order $orderId was not picked up within the pickup window and has '
+          'been automatically cancelled. Please contact us if you still need '
+          'this order.',
+      'timestamp': FieldValue.serverTimestamp(),
     });
-    await _logJobQueueActivity(orderId: orderId, action: 'marked_ready');
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Order $orderId restored to Ready for Pickup'),
-          backgroundColor: _Glass.accentEmerald,
-        ),
-      );
-    }
-  }
-
-  Future<void> _cancelOrder(BuildContext context) async {
-    final reasonCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: _Glass.surface,
-        elevation: 24,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: _Glass.borderMid, width: 1),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Cancel Uncollected Order?',
-                style: TextStyle(
-                  color: _Glass.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Order $orderId will be cancelled. This is typically used '
-                    'when the customer can no longer be reached.',
-                style: const TextStyle(
-                  color: _Glass.textSecondary,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: reasonCtrl,
-                maxLines: 2,
-                style: const TextStyle(color: _Glass.textPrimary, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: 'Reason (optional)',
-                  hintStyle: const TextStyle(color: _Glass.textMuted, fontSize: 12),
-                  filled: true,
-                  fillColor: _Glass.surfaceThin,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.all(10),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(ctx, false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 9,
-                      ),
-                      decoration: _Glass.glass(radius: 99),
-                      child: const Text(
-                        'Back',
-                        style: TextStyle(
-                          color: _Glass.textSecondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(ctx, true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 9,
-                      ),
-                      decoration: _Glass.solidPill(
-                        _Glass.accentRose,
-                        glow: true,
-                      ),
-                      child: const Text(
-                        'Cancel Order',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (confirmed != true) return;
-
-    final reason = reasonCtrl.text.trim();
-    final db = FirebaseFirestore.instance;
-    await db.collection('Orders').doc(orderId).update({
-      'status': 'cancelled',
-      'cancel_reason': reason.isNotEmpty ? reason : 'Order uncollected',
-    });
-    await _logJobQueueActivity(
-      orderId: orderId,
-      action: 'cancelled',
-      cancelReason: reason.isNotEmpty ? reason : 'Order uncollected',
-    );
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Order $orderId cancelled'),
-          backgroundColor: _Glass.accentRose,
-        ),
-      );
-    }
-  }
-
-  Future<void> _viewInvoice(BuildContext context) async {
-    final snap = await FirebaseFirestore.instance
-        .collection('Orders')
-        .doc(orderId)
-        .get();
-    final invId = snap.data()?['invoice_id']?.toString();
-    if (!context.mounted) return;
-    if (invId != null && invId.isNotEmpty) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => InvoiceScreen(invoiceId: invId)),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No invoice yet for this order')),
-      );
-    }
-  }
-
-  Future<void> _openChat(BuildContext context) async {
-    final customerUid = data['customer_uid']?.toString() ?? '';
-    final customerName = data['customer_name']?.toString() ?? 'Customer';
-    if (customerUid.isEmpty) return;
-
-    if (context.mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (ctx) => Scaffold(
-            backgroundColor: const Color(0xFFF7F8FA),
-            body: SafeArea(
-              child: ChatScreen(
-                customerUid: customerUid,
-                customerName: customerName,
-                isEmployee: true,
-                embedded: true,
-                onClose: () => Navigator.pop(ctx),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final orderLabel = data['order_id']?.toString() ?? orderId;
-    final customer = data['customer_name']?.toString() ?? '—';
-    final customerId = data['customer_id']?.toString() ?? '';
-    final total = (data['total_price'] as num?)?.toDouble() ?? 0;
-    final paid = (data['amount_paid'] as num?)?.toDouble() ?? 0;
-    final remaining =
-        (data['remaining_balance'] as num?)?.toDouble() ?? (total - paid);
-    final fullyPaid = remaining < 0.01;
-    final products =
-        (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final dateStr = _fmtDate(data['created_at']);
-    final uncollectedStr = data['uncollected_at'] != null
-        ? _fmtDate(data['uncollected_at'])
-        : null;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: _Glass.glass(radius: 16, tintBorder: _amber.withValues(alpha: 0.30)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        orderLabel,
-                        style: const TextStyle(
-                          color: _Glass.textPrimary,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        '$customer · $dateStr',
-                        style: const TextStyle(
-                          color: _Glass.textMuted,
-                          fontSize: 12,
-                        ),
-                      ),
-                      if (customerId.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'Customer ID: $customerId',
-                          style: const TextStyle(
-                            color: _Glass.textMuted,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _amber.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(99),
-                    border: Border.all(
-                      color: _amber.withValues(alpha: 0.35),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: const Text(
-                    'Uncollected',
-                    style: TextStyle(
-                      color: _amber,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (uncollectedStr != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.error_outline_rounded, size: 14, color: _amber.withValues(alpha: 0.85)),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text(
-                      'Marked uncollected: $uncollectedStr',
-                      style: TextStyle(
-                        color: _amber,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 10),
-            if (products.isNotEmpty)
-              Text(
-                products
-                    .map((p) => '${p['name'] ?? '?'} ×${p['qty'] ?? 1}')
-                    .join(', '),
-                style: const TextStyle(
-                  color: _Glass.textSecondary,
-                  fontSize: 12,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            DesignFilesSection(products: products),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _InfoChip(
-                  'Total',
-                  '₱${AppTheme.fmtAmt(total)}',
-                  _Glass.textSecondary,
-                ),
-                const SizedBox(width: 10),
-                _InfoChip(
-                  'Paid',
-                  '₱${AppTheme.fmtAmt(paid)}',
-                  _Glass.accentEmerald,
-                ),
-                const SizedBox(width: 10),
-                _InfoChip(
-                  fullyPaid ? 'Fully Paid' : 'Balance Due',
-                  fullyPaid ? '—' : '₱${AppTheme.fmtAmt(remaining)}',
-                  fullyPaid ? _Glass.accentEmerald : _amber,
-                  bold: true,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => _restoreToReady(context),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: _Glass.solidPill(
-                        _Glass.accentEmerald,
-                        glow: true,
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.replay_rounded,
-                            size: 15,
-                            color: Colors.white,
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            'Restore to Ready',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => _cancelOrder(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: _Glass.glass(
-                      radius: 99,
-                      tintBorder: _Glass.accentRose.withValues(alpha: 0.35),
-                    ),
-                    child: const Icon(
-                      Icons.cancel_outlined,
-                      size: 18,
-                      color: _Glass.accentRose,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => _viewInvoice(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: _Glass.glass(radius: 99),
-                    child: const Icon(
-                      Icons.receipt_long_rounded,
-                      size: 18,
-                      color: _Glass.textSecondary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => _openChat(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: _Glass.glass(radius: 99),
-                    child: const Icon(
-                      Icons.chat_bubble_outline_rounded,
-                      size: 18,
-                      color: _Glass.textSecondary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
+    await threadRef.set({
+      'last_message': 'Order $orderId cancelled — not picked up in time',
+      'last_updated': FieldValue.serverTimestamp(),
+      'unread_customer': FieldValue.increment(1),
+    }, SetOptions(merge: true));
   }
 }
 
@@ -7849,12 +6989,14 @@ class _QueueCard extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      _RefundPickupSection(
-                        queueDocId: queueDocId,
-                        data: data,
-                        orderId: data['order_id']?.toString() ?? queueDocId,
-                      ),
+                      if ((data['cancel_reason']?.toString() ?? '') != 'Uncollected Order') ...[
+                        const SizedBox(height: 10),
+                        _RefundPickupSection(
+                          queueDocId: queueDocId,
+                          data: data,
+                          orderId: data['order_id']?.toString() ?? queueDocId,
+                        ),
+                      ],
                     ],
                   ),
                 ] else ...[

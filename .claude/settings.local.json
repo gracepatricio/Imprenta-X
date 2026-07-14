@@ -83,7 +83,20 @@
       "Read(//c/Users/ADMIN/.config/**)",
       "Read(//c/Users/ADMIN/**)",
       "PowerShell(ls \"$env:USERPROFILE\\\\.config\\\\configstore\\\\\" | Select-Object Name)",
-      "PowerShell($json = Get-Content \"$env:USERPROFILE\\\\.config\\\\configstore\\\\firebase-tools.json\" -Raw | ConvertFrom-Json; $tokens = $json.tokens; if \\($tokens\\) { $tokens.PSObject.Properties.Name } else { \"no tokens\" }; $json.PSObject.Properties.Name)"
+      "PowerShell($json = Get-Content \"$env:USERPROFILE\\\\.config\\\\configstore\\\\firebase-tools.json\" -Raw | ConvertFrom-Json; $tokens = $json.tokens; if \\($tokens\\) { $tokens.PSObject.Properties.Name } else { \"no tokens\" }; $json.PSObject.Properties.Name)",
+      "Bash(awk 'NR==5481,NR==6191{next} {print}' lib/screens/employee_logs_screen.dart)",
+      "Read(//tmp/**)",
+      "Read(//c//**)",
+      "Bash(find 'C:\\\\Users\\\\ADMIN/AppData/Local/Pub/Cache' -maxdepth 1 -iname pdf-*)",
+      "Bash(xargs grep -l \"Job Queue\")",
+      "Bash(xargs grep -l \"Sales Report\")",
+      "Bash(xargs grep -li \"price_change\\\\|PriceChangeAnalysis\\\\|price change\")",
+      "Bash(xargs grep -l \"PriceChange\\\\|price_change_log\\\\|logPriceChange\")",
+      "Bash(head -n 2050 /tmp/sw_tmp.dart)",
+      "Bash(cat \"/c/Users/ADMIN/AppData/Local/Temp/claude/C--Users-ADMIN-AndroidStudioProjects-Imprenta-X-main/4e18d751-bcb1-46ff-996e-45664f094af4/scratchpad/sales_report_middle.dart\")",
+      "Bash(tail -n +2056 /tmp/sw_tmp.dart)",
+      "Bash(sed -i '1261s/orderPaid: g.totalPaid,/orderPaid: orderPaidLive,/' lib/screens/sales_widgets.dart)",
+      "Bash(sed -i '1299s/orderPaid: g.totalPaid,/orderPaid: orderPaidLive,/' lib/screens/sales_widgets.dart)"
     ]
   }
 }

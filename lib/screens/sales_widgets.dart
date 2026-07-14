@@ -62,6 +62,15 @@ bool _isWithinDateRange(DateTime date, DateTimeRange? range) {
   return !day.isBefore(start) && !day.isAfter(end);
 }
 
+// Mirrors the date range currently selected on the on-screen Sales Report
+// view, so the "Print Report" button (owned by a sibling widget in
+// admin_logs_screen.dart) can generate a PDF that matches what's on screen.
+final ValueNotifier<DateTimeRange?> adminSalesReportRange = ValueNotifier<DateTimeRange?>(null);
+
+// Same idea for the Sales Record tab (defaults to "Last 31 days" instead of
+// "All time" — matches _SalesRecordTableState.initState).
+final ValueNotifier<DateTimeRange?> adminSalesRecordsRange = ValueNotifier<DateTimeRange?>(null);
+
 String _normalizedPaymentType(Map<String, dynamic> data) {
   final raw = data['payment_type']?.toString().toLowerCase() ?? '';
   if (raw == 'partial') return 'downpayment';
@@ -785,12 +794,12 @@ class _DayCell extends StatelessWidget {
 }
 
 // ── Date filter button (trigger chip) ─────────────────────────────────────────
-class _DateFilterButton extends StatelessWidget {
+class DateFilterButton extends StatelessWidget {
   final DateTimeRange? selectedRange;
   final ValueChanged<DateTimeRange?> onChanged;
   final bool dark;
 
-  const _DateFilterButton({
+  const DateFilterButton({
     required this.selectedRange,
     required this.onChanged,
     this.dark = false,
@@ -1113,6 +1122,17 @@ class _SalesReportRow {
   final String paymentStatus;
   final String orderStatus;
   final double orderTotal;
+  // Amount actually collected on the parent order (not this line alone) —
+  // used to proportionally allocate collected/remaining per product.
+  final double orderPaid;
+  // Ordered area in sqft for size-based products (width_ft * height_ft),
+  // null for flat per-piece/per-qty items with no size dimensions.
+  final double? areaSqft;
+  // lineTotal minus the plain unit-price × qty[× area] base — positive when
+  // add-on services pushed the line above the base price, negative when a
+  // discount pulled it below. Lets a report reconcile BASE + ADJUSTMENT =
+  // TOTAL AMOUNT exactly, instead of leaving unexplained gaps.
+  final double adjustmentAmount;
   const _SalesReportRow({
     required this.salesRecordId,
     required this.orderId,
@@ -1126,8 +1146,13 @@ class _SalesReportRow {
     required this.paymentStatus,
     required this.orderStatus,
     required this.orderTotal,
+    required this.orderPaid,
+    this.areaSqft,
+    this.adjustmentAmount = 0,
   });
 }
+
+enum _PriceChangeType { priceIncrease, priceDecrease, discountApplied, discountRemoved }
 
 class _PriceChangeRow {
   final String orderId;
@@ -1142,6 +1167,10 @@ class _PriceChangeRow {
   final double changedPrice;
   final double difference;
   final String customer;
+  // Whether the *listed* unit_price itself moved (a deliberate price edit)
+  // vs. the listed price staying put while the effective price moved solely
+  // because a discount was applied or removed on top of it.
+  final _PriceChangeType changeType;
   // Every order (by order_id) sold at `changedPrice`, starting from the
   // order where the new price first appeared through to the order right
   // before the next detected change (or the most recent order, if none).
@@ -1156,12 +1185,25 @@ class _PriceChangeRow {
     required this.changedPrice,
     required this.difference,
     required this.customer,
+    required this.changeType,
     required this.affectedOrderIds,
   });
 
   bool get hasAddon => addonName.isNotEmpty;
   // Display label combining product/service with its add-on, when present.
   String get itemLabel => hasAddon ? '$product — $addonName' : product;
+
+  bool get isDiscountEvent =>
+      changeType == _PriceChangeType.discountApplied || changeType == _PriceChangeType.discountRemoved;
+
+  String get typeLabel {
+    switch (changeType) {
+      case _PriceChangeType.priceIncrease:  return 'Price Increase';
+      case _PriceChangeType.priceDecrease:  return 'Price Decrease';
+      case _PriceChangeType.discountApplied: return 'Discount Applied';
+      case _PriceChangeType.discountRemoved: return 'Discount Removed';
+    }
+  }
 }
 
 String _fmtSalesReportDate(Timestamp? ts) {
@@ -1207,6 +1249,12 @@ List<_SalesReportRow> _buildSalesReportRows(
 
     final orderDateTs = (order?['created_at'] as Timestamp?) ?? g.latestDate;
     final orderTotal = (order?['total_price'] as num?)?.toDouble() ?? g.orderTotal;
+    // Live amount paid on the order to date — NOT g.totalPaid, which only
+    // sums the Sales_Records docs that fall inside the selected date range.
+    // A downpayment made last month plus a balance payment made this month
+    // would otherwise under-count what's actually been paid, inflating the
+    // computed remaining balance above what the order's live record shows.
+    final orderPaidLive = (order?['amount_paid'] as num?)?.toDouble() ?? g.totalPaid;
     final custDisplay = (g.custName.isNotEmpty && g.custName != '—')
         ? g.custName
         : (g.custId.isNotEmpty ? g.custId : '—');
@@ -1229,6 +1277,7 @@ List<_SalesReportRow> _buildSalesReportRows(
         paymentStatus: paymentStatus,
         orderStatus: orderStatus,
         orderTotal: orderTotal,
+        orderPaid: orderPaidLive,
       ));
       continue;
     }
@@ -1237,19 +1286,38 @@ List<_SalesReportRow> _buildSalesReportRows(
       final qty = (p['qty'] as num?)?.toInt() ?? 1;
       final unit = (p['unit_price'] as num?)?.toDouble() ?? 0;
       final line = (p['price'] as num?)?.toDouble() ?? (unit * qty);
+      final widthFt = (p['width_ft'] as num?)?.toDouble();
+      final heightFt = (p['height_ft'] as num?)?.toDouble();
+      final area = (widthFt != null && heightFt != null) ? widthFt * heightFt : null;
+      // Variant (e.g. Tarpaulin 10oz vs 13oz) is stored separately from the
+      // base product name — fold it in so reports don't blend variants
+      // together under one bare "Tarpaulin" line.
+      final baseName = (p['name']?.toString() ?? 'Item').trim();
+      final material = (p['material']?.toString() ?? '').trim();
+      final displayName = material.isNotEmpty ? '$baseName ($material)' : baseName;
+      // Add-on services (and any per-item discount) get baked into `price`
+      // (lineTotal) but not into `unit_price` — back out the net delta so
+      // BASE AMOUNT + ADJUSTMENT = TOTAL AMOUNT always reconciles exactly,
+      // whether the delta comes from add-ons (positive) or a discount
+      // (negative).
+      final baseAmount = area != null ? unit * area * qty : unit * qty;
+      final adjustment = line - baseAmount;
       rows.add(_SalesReportRow(
         salesRecordId: salesRecordId,
         orderId: g.orderId,
         customer: custDisplay,
         orderDate: _fmtSalesReportDate(orderDateTs),
         orderDateRaw: orderDateTs,
-        product: (p['name']?.toString() ?? 'Item'),
+        product: displayName,
         qty: qty,
         unitPrice: unit,
         lineTotal: line,
         paymentStatus: paymentStatus,
         orderStatus: orderStatus,
         orderTotal: orderTotal,
+        orderPaid: orderPaidLive,
+        areaSqft: area,
+        adjustmentAmount: adjustment,
       ));
     }
   }
@@ -1269,20 +1337,32 @@ List<_SalesReportRow> _buildSalesReportRows(
 // where present, per add-on nested under a product line item — across every
 // order, then flags any change whose new price was first introduced in an
 // order dated on/after `_priceChangeCutoff`. Add-ons are read defensively
-// from an optional `addons` list on each product entry (each with `name`
-// and `unit_price`/`price`); orders without that field are unaffected.
+// from an optional `selected_services` list on each product entry (each with
+// `name` and `unit_price`/`price`); orders without that field are unaffected.
+//
+// The base product/service occurrence is tracked using its EFFECTIVE price
+// (line total minus add-on charges, divided back out by qty/area) rather
+// than the raw stored `unit_price` field. A discount doesn't touch
+// `unit_price`, so tracking the nominal field alone would silently miss it —
+// a discount applied (then later removed) shows up here exactly like a
+// price decrease followed by a price increase, on the dates it actually
+// took effect.
 List<_PriceChangeRow> _buildPriceChangeRows(Map<String, Map<String, dynamic>> ordersById) {
   // key = 'product|||addon' ('' addon = the product/service itself).
   final byKey = <String, List<Map<String, dynamic>>>{};
   final keyMeta = <String, List<String>>{}; // key -> [product, addon]
 
   void addOccurrence(String product, String addon, Timestamp ts, double unit,
-      String orderId, String cust) {
+      String orderId, String cust, {double? rawUnit}) {
     final key = '$product|||$addon';
     keyMeta[key] = [product, addon];
     byKey.putIfAbsent(key, () => []).add({
       'ts': ts,
       'unit': unit,
+      // Only set for base-product occurrences — lets us tell a genuine
+      // unit_price edit apart from a discount changing the effective price
+      // while the listed price stays put.
+      'rawUnit': rawUnit ?? unit,
       'orderId': orderId,
       'cust': cust,
     });
@@ -1295,19 +1375,35 @@ List<_PriceChangeRow> _buildPriceChangeRows(Map<String, Map<String, dynamic>> or
     final orderId = order['order_id']?.toString() ?? '';
     final custName = order['customer_name']?.toString() ?? '';
     for (final p in products) {
-      final name = (p['name']?.toString() ?? '').trim();
-      if (name.isEmpty) continue;
+      final baseName = (p['name']?.toString() ?? '').trim();
+      if (baseName.isEmpty) continue;
+      // Fold in the variant (e.g. Tarpaulin 10oz vs 13oz) so a price change
+      // on one variant isn't conflated with another under one bare name.
+      final material = (p['material']?.toString() ?? '').trim();
+      final name = material.isNotEmpty ? '$baseName ($material)' : baseName;
       final unit = (p['unit_price'] as num?)?.toDouble() ?? 0;
-      addOccurrence(name, '', ts, unit, orderId, custName);
+      final qty = (p['qty'] as num?)?.toInt() ?? 1;
+      final widthFt = (p['width_ft'] as num?)?.toDouble();
+      final heightFt = (p['height_ft'] as num?)?.toDouble();
+      final area = (widthFt != null && heightFt != null) ? widthFt * heightFt : null;
+      final divisor = (area ?? 1) * (qty > 0 ? qty : 1);
+      final line = (p['price'] as num?)?.toDouble() ?? (unit * divisor);
 
-      final addons = (p['addons'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final addons = (p['selected_services'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      double addonsAmount = 0;
       for (final a in addons) {
         final aName = (a['name']?.toString() ?? '').trim();
         if (aName.isEmpty) continue;
         final aUnit = (a['unit_price'] as num?)?.toDouble() ??
             (a['price'] as num?)?.toDouble() ?? 0;
         addOccurrence(name, aName, ts, aUnit, orderId, custName);
+        addonsAmount += aUnit * divisor;
       }
+
+      // Back out add-on charges so a discount on the base item (which
+      // lowers `line` without touching `unit_price`) is still visible here.
+      final effectiveUnit = divisor > 0 ? (line - addonsAmount) / divisor : unit;
+      addOccurrence(name, '', ts, effectiveUnit, orderId, custName, rawUnit: unit);
     }
   }
 
@@ -1335,6 +1431,23 @@ List<_PriceChangeRow> _buildPriceChangeRows(Map<String, Map<String, dynamic>> or
         if (oid.isNotEmpty) affected.add(oid);
       }
 
+      // Addon rows (meta[1].isNotEmpty) don't carry a separate rawUnit
+      // (addOccurrence's default sets rawUnit == unit for them), so they
+      // always classify as a genuine price move — only base-product rows
+      // can surface as a discount event.
+      final prevRaw = prev['rawUnit'] as double;
+      final currRaw = curr['rawUnit'] as double;
+      final listedPriceMoved = (currRaw - prevRaw).abs() >= 0.01;
+      final increased = currPrice > prevPrice;
+      final _PriceChangeType changeType;
+      if (listedPriceMoved) {
+        changeType = increased ? _PriceChangeType.priceIncrease : _PriceChangeType.priceDecrease;
+      } else {
+        // Listed price didn't move, but the effective price did — a
+        // discount was applied (price dropped) or removed (price recovered).
+        changeType = increased ? _PriceChangeType.discountRemoved : _PriceChangeType.discountApplied;
+      }
+
       changes.add(_PriceChangeRow(
         orderId: curr['orderId'] as String,
         orderDate: _fmtSalesReportDate(currTs),
@@ -1345,6 +1458,7 @@ List<_PriceChangeRow> _buildPriceChangeRows(Map<String, Map<String, dynamic>> or
         changedPrice: currPrice,
         difference: currPrice - prevPrice,
         customer: (curr['cust'] as String).isNotEmpty ? curr['cust'] as String : '—',
+        changeType: changeType,
         affectedOrderIds: affected.toList(),
       ));
     }
@@ -1400,20 +1514,235 @@ String _srMethodLabel(String? m) {
 }
 
 // Ranks products/services (and add-ons folded into a line's total) by
-// revenue across every fanned-out sales row.
+// COLLECTED revenue (not billed total) across every fanned-out sales row —
+// a line item's share of its order's payment is allocated proportionally,
+// same approach as the Product/Service Performance table's COLLECTED column,
+// so a product with a lot of unpaid balance doesn't rank as if fully paid.
 List<_BestSellerEntry> _buildBestSellers(List<_SalesReportRow> rows, {int top = 10}) {
   final qty = <String, int>{};
   final revenue = <String, double>{};
   for (final r in rows) {
     if (r.product == '—' || r.qty <= 0) continue;
     qty[r.product] = (qty[r.product] ?? 0) + r.qty;
-    revenue[r.product] = (revenue[r.product] ?? 0) + r.lineTotal;
+    final ratio = r.orderTotal > 0 ? (r.orderPaid / r.orderTotal).clamp(0.0, 1.0) : 0.0;
+    revenue[r.product] = (revenue[r.product] ?? 0) + r.lineTotal * ratio;
   }
   final entries = qty.entries
       .map((e) => _BestSellerEntry(e.key, e.value, revenue[e.key] ?? 0))
       .toList()
     ..sort((a, b) => b.revenue.compareTo(a.revenue));
   return entries.take(top).toList();
+}
+
+// =============================================================================
+// Product/Service Performance — one row per (product, unit price) so a price
+// change produces a NEW entry instead of blending old and new pricing into
+// a single average. This is what "PRODUCT / SERVICE PERFORMANCE" prints.
+// =============================================================================
+class _ProductPerformanceRow {
+  final String product;
+  final double unitPrice;
+  final int qtySold;
+  final double? avgAreaSqft; // null when this item has no width/height data
+  final double totalAmount;
+  final double collectedAmount;
+  final double remainingBalance;
+  // Base = UNIT PRICE × QTY SOLD (× AVG AREA for size-based items) —
+  // BASE AMOUNT + ADJUSTMENT = TOTAL AMOUNT always, by construction.
+  final double baseAmount;
+  // Net effect of add-ons/discounts on top of the base price: positive when
+  // add-on services dominate, negative when a discount dominates.
+  final double adjustmentAmount;
+  final DateTime? effectiveFrom; // earliest order date sold at this price
+  final DateTime? effectiveTo;   // latest order date sold at this price
+  final double? priorPrice;      // null for a product's very first price tier
+  const _ProductPerformanceRow({
+    required this.product,
+    required this.unitPrice,
+    required this.qtySold,
+    required this.avgAreaSqft,
+    required this.totalAmount,
+    required this.collectedAmount,
+    required this.remainingBalance,
+    required this.baseAmount,
+    required this.adjustmentAmount,
+    required this.effectiveFrom,
+    required this.effectiveTo,
+    required this.priorPrice,
+  });
+
+  bool get isPriceChange => priorPrice != null;
+
+  // Rough daily sales pace over the period this price tier was active —
+  // used to compare demand before/after a price change.
+  double get dailyRate {
+    if (effectiveFrom == null || effectiveTo == null) return 0;
+    final days = effectiveTo!.difference(effectiveFrom!).inDays + 1;
+    return qtySold / days;
+  }
+}
+
+// Groups fanned-out sales rows by (product, unit price) — every distinct
+// price a product has sold at becomes its own row, in chronological order.
+List<_ProductPerformanceRow> _buildProductPerformanceRows(List<_SalesReportRow> rows) {
+  final byKey = <String, List<_SalesReportRow>>{};
+  for (final r in rows) {
+    if (r.product == '—' || r.qty <= 0) continue;
+    final key = '${r.product}|||${r.unitPrice.toStringAsFixed(2)}';
+    byKey.putIfAbsent(key, () => []).add(r);
+  }
+
+  final tiers = <_ProductPerformanceRow>[];
+  for (final list in byKey.values) {
+    final product = list.first.product;
+    final unitPrice = list.first.unitPrice;
+    final qtySold = list.fold<int>(0, (sum, r) => sum + r.qty);
+    final totalAmount = list.fold<double>(0, (sum, r) => sum + r.lineTotal);
+    final adjustmentAmount = list.fold<double>(0, (sum, r) => sum + r.adjustmentAmount);
+    final baseAmount = totalAmount - adjustmentAmount;
+
+    double collected = 0;
+    for (final r in list) {
+      final ratio = r.orderTotal > 0 ? (r.orderPaid / r.orderTotal).clamp(0.0, 1.0) : 0.0;
+      collected += r.lineTotal * ratio;
+    }
+    final remaining = (totalAmount - collected).clamp(0.0, double.infinity);
+
+    final areaItems = list.where((r) => r.areaSqft != null).toList();
+    double? avgArea;
+    if (areaItems.isNotEmpty) {
+      final totalArea = areaItems.fold<double>(0, (sum, r) => sum + r.areaSqft! * r.qty);
+      final totalQty = areaItems.fold<int>(0, (sum, r) => sum + r.qty);
+      avgArea = totalQty > 0 ? totalArea / totalQty : null;
+    }
+
+    DateTime? from, to;
+    for (final r in list) {
+      final d = r.orderDateRaw?.toDate();
+      if (d == null) continue;
+      if (from == null || d.isBefore(from)) from = d;
+      if (to == null || d.isAfter(to)) to = d;
+    }
+
+    tiers.add(_ProductPerformanceRow(
+      product: product,
+      unitPrice: unitPrice,
+      qtySold: qtySold,
+      avgAreaSqft: avgArea,
+      totalAmount: totalAmount,
+      collectedAmount: collected,
+      remainingBalance: remaining,
+      baseAmount: baseAmount,
+      adjustmentAmount: adjustmentAmount,
+      effectiveFrom: from,
+      effectiveTo: to,
+      priorPrice: null, // filled in below once tiers are ordered per product
+    ));
+  }
+
+  // Group tiers per product, order chronologically, then stamp each tier
+  // (after the first) with the price it replaced.
+  final byProduct = <String, List<_ProductPerformanceRow>>{};
+  for (final t in tiers) {
+    byProduct.putIfAbsent(t.product, () => []).add(t);
+  }
+
+  final result = <_ProductPerformanceRow>[];
+  for (final entry in byProduct.entries) {
+    final list = entry.value
+      ..sort((a, b) {
+        if (a.effectiveFrom == null && b.effectiveFrom == null) return 0;
+        if (a.effectiveFrom == null) return 1;
+        if (b.effectiveFrom == null) return -1;
+        return a.effectiveFrom!.compareTo(b.effectiveFrom!);
+      });
+    for (int i = 0; i < list.length; i++) {
+      final t = list[i];
+      result.add(i == 0 ? t : _ProductPerformanceRow(
+        product: t.product,
+        unitPrice: t.unitPrice,
+        qtySold: t.qtySold,
+        avgAreaSqft: t.avgAreaSqft,
+        totalAmount: t.totalAmount,
+        collectedAmount: t.collectedAmount,
+        remainingBalance: t.remainingBalance,
+        baseAmount: t.baseAmount,
+        adjustmentAmount: t.adjustmentAmount,
+        effectiveFrom: t.effectiveFrom,
+        effectiveTo: t.effectiveTo,
+        priorPrice: list[i - 1].unitPrice,
+      ));
+    }
+  }
+
+  result.sort((a, b) {
+    final c = a.product.compareTo(b.product);
+    if (c != 0) return c;
+    return (a.effectiveFrom ?? DateTime(1970)).compareTo(b.effectiveFrom ?? DateTime(1970));
+  });
+  return result;
+}
+
+// Compares sales pace immediately before vs. after each detected price
+// change to surface whether demand held up, grew, or dropped off. Returns
+// one bullet-point string per comparison.
+List<String> _buildPriceImpactAnalysis(List<_ProductPerformanceRow> perf, String Function(double) php) {
+  final withChanges = perf.where((t) => t.isPriceChange).toList();
+  if (withChanges.isEmpty) {
+    return [
+      'No product or service had more than one price in effect during this '
+          'report period, so there is no before/after pricing comparison to show.',
+    ];
+  }
+
+  final byProduct = <String, List<_ProductPerformanceRow>>{};
+  for (final t in perf) {
+    byProduct.putIfAbsent(t.product, () => []).add(t);
+  }
+
+  final sentences = <String>[];
+  for (final t in withChanges) {
+    final tiers = byProduct[t.product]!;
+    final idx = tiers.indexOf(t);
+    if (idx <= 0) continue;
+    final before = tiers[idx - 1];
+    if (before.dailyRate <= 0 || t.dailyRate <= 0) continue; // not enough data
+
+    final priceWentUp = t.unitPrice > before.unitPrice;
+    final pctRateChange = ((t.dailyRate - before.dailyRate) / before.dailyRate) * 100;
+    final rateDirection = pctRateChange >= 0 ? 'increased' : 'decreased';
+    final dateLabel = t.effectiveFrom != null
+        ? _formatDateLabel(t.effectiveFrom!)
+        : 'an undated point';
+
+    String verdict;
+    if (priceWentUp && pctRateChange < -10) {
+      verdict = 'suggesting the price increase reduced demand';
+    } else if (priceWentUp && pctRateChange >= -10) {
+      verdict = 'demand held up despite the higher price';
+    } else if (!priceWentUp && pctRateChange > 10) {
+      verdict = 'demand picked up alongside the lower price';
+    } else {
+      verdict = 'demand was largely unaffected by the price change';
+    }
+
+    sentences.add(
+      '${t.product}: price ${priceWentUp ? 'increased' : 'decreased'} from '
+          '${php(before.unitPrice)} to ${php(t.unitPrice)} on $dateLabel — average daily '
+          'sales pace $rateDirection from ${before.dailyRate.toStringAsFixed(2)} to '
+          '${t.dailyRate.toStringAsFixed(2)} units/day '
+          '(${pctRateChange >= 0 ? '+' : ''}${pctRateChange.toStringAsFixed(0)}%), $verdict.',
+    );
+  }
+
+  if (sentences.isEmpty) {
+    return [
+      '${withChanges.length} product/service price change'
+          '${withChanges.length == 1 ? '' : 's'} occurred in this period, but there is not '
+          'enough sales history before and after each change to reliably compare demand.',
+    ];
+  }
+  return sentences;
 }
 
 // Breaks down orders (not fanned-out line items) by the payment method
@@ -1473,6 +1802,8 @@ pw.Widget _srTable({
   Set<int> rightAlign = const {},
   Set<int> wrapTwoLines = const {},
   PdfColor? Function(int rowIndex, int colIndex, String value)? cellColor,
+  // Optional bolded, highlighted last row (e.g. column grand totals).
+  List<String>? footerRow,
 }) {
   return pw.Table(
     border: null,
@@ -1515,6 +1846,25 @@ pw.Widget _srTable({
           }).toList(),
         );
       }),
+      if (footerRow != null)
+        pw.TableRow(
+          decoration: pw.BoxDecoration(
+            color: rowAlt,
+            border: pw.Border(top: pw.BorderSide(color: navy, width: 1.1)),
+          ),
+          children: footerRow.asMap().entries.map((c) {
+            return pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+              child: pw.Align(
+                alignment: rightAlign.contains(c.key) ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
+                child: pw.Text(c.value,
+                    style: pw.TextStyle(font: bold, fontSize: 7.5, color: navy),
+                    maxLines: 1,
+                    overflow: pw.TextOverflow.clip),
+              ),
+            );
+          }).toList(),
+        ),
     ],
   );
 }
@@ -1523,6 +1873,7 @@ Future<Uint8List> _buildSalesReportPdf({
   required List<_SalesReportRow> rows,
   required List<_PriceChangeRow> priceChanges,
   required List<_GroupedRecord> groups,
+  DateTimeRange? range,
 }) async {
   final regular = await PdfGoogleFonts.notoSansRegular();
   final bold    = await PdfGoogleFonts.notoSansBold();
@@ -1584,11 +1935,39 @@ Future<Uint8List> _buildSalesReportPdf({
     ]),
   );
 
+  pw.Widget bulletList(List<String> items, {PdfColor? color}) => pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: items.map((t) => pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 5),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text("•  ", style: s(bold, 8.5, color ?? textMid)),
+          pw.Expanded(child: pw.Text(t, style: s(regular, 8.5, color ?? textMid))),
+        ],
+      ),
+    )).toList(),
+  );
+
+  // Live per-order total/paid (not scoped to the selected date range) — an
+  // order's "fully paid?" status and remaining balance should reflect its
+  // *current* state (matching every other screen in the app), not just
+  // whatever portion of its payment history happened to land inside this
+  // report's date range.
+  final liveOrderData = <String, ({double total, double paid})>{};
+  for (final r in rows) {
+    liveOrderData[r.orderId] = (total: r.orderTotal, paid: r.orderPaid);
+  }
+
   final totalOrders = groups.length;
   final totalRevenue = groups.fold<double>(0, (sum, g) => sum + g.totalPaid);
-  final fullyPaidCount = groups.where((g) =>
-  g.paymentType == 'full' || (g.orderTotal > 0 && g.totalPaid >= g.orderTotal - 0.01)).length;
+  final fullyPaidCount = liveOrderData.values
+      .where((o) => o.total <= 0 || o.paid >= o.total - 0.01)
+      .length;
   final partialCount = totalOrders - fullyPaidCount;
+  final avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0.0;
+  final outstandingBalance = liveOrderData.values.fold<double>(
+      0, (sum, o) => sum + (o.total - o.paid).clamp(0.0, double.infinity));
 
   // ── Sales period covered — earliest/latest order date among the rows ────
   DateTime? periodStart, periodEnd;
@@ -1604,12 +1983,12 @@ Future<Uint8List> _buildSalesReportPdf({
       : 'No records';
 
   // ── Price Changes table ─────────────────────────────────────────────────
-  final pcHeaders = ['PRODUCT / SERVICE', 'ADD-ON SERVICE', 'PREVIOUS PRICE',
+  final pcHeaders = ['PRODUCT / SERVICE', 'TYPE', 'PREVIOUS PRICE',
     'UPDATED PRICE', 'CHANGE STARTED', 'DIFFERENCE', 'RELATED ORDERS'];
 
   final pcRows = priceChanges.map((c) => [
-    shorten(c.product, 24),
-    c.addonName.isEmpty ? '—' : shorten(c.addonName, 20),
+    shorten(c.itemLabel, 34),
+    c.typeLabel,
     php(c.previousPrice),
     php(c.changedPrice),
     c.orderDate,
@@ -1622,31 +2001,61 @@ Future<Uint8List> _buildSalesReportPdf({
   // ── Price-change impact analysis (narrative) ─────────────────────────────
   final increaseCount = priceChanges.where((c) => c.difference > 0).length;
   final decreaseCount = priceChanges.where((c) => c.difference < 0).length;
+  final discountAppliedCount =
+      priceChanges.where((c) => c.changeType == _PriceChangeType.discountApplied).length;
+  final discountRemovedCount =
+      priceChanges.where((c) => c.changeType == _PriceChangeType.discountRemoved).length;
+  final genuinePriceEditCount = priceChanges.length - discountAppliedCount - discountRemovedCount;
   final affectedOrdersTotal =
       priceChanges.expand((c) => c.affectedOrderIds).toSet().length;
   final estRevenueImpact = priceChanges.fold<double>(
       0, (sum, c) => sum + c.difference * c.affectedOrderIds.length);
+  final discountRevenueImpact = priceChanges
+      .where((c) => c.isDiscountEvent)
+      .fold<double>(0, (sum, c) => sum + c.difference * c.affectedOrderIds.length);
 
-  final String analysisText;
+  // Per-item net revenue impact, so the biggest single mover (up or down)
+  // can be called out by name instead of leaving the reader to add it up.
+  final impactByItem = <String, double>{};
+  for (final c in priceChanges) {
+    impactByItem[c.itemLabel] =
+        (impactByItem[c.itemLabel] ?? 0) + c.difference * c.affectedOrderIds.length;
+  }
+  final rankedImpact = impactByItem.entries.toList()
+    ..sort((a, b) => b.value.abs().compareTo(a.value.abs()));
+  final topMover = rankedImpact.isNotEmpty ? rankedImpact.first : null;
+
+  final List<String> revenueImpactBullets;
   if (priceChanges.isEmpty) {
-    analysisText =
-    'No product, service, or add-on price changes were detected in orders '
-        'dated June 2026 or later. Sales performance in this report reflects '
-        'pricing that was already in effect before that period.';
+    revenueImpactBullets = [
+      'No product, service, or add-on price changes — including discounts — '
+          'were detected in orders dated June 2026 or later.',
+      'Sales performance in this report reflects pricing that was already in '
+          'effect before that period.',
+    ];
   } else {
-    final direction = estRevenueImpact >= 0 ? 'increased' : 'decreased';
-    analysisText =
-    'Since June 2026, ${priceChanges.length} product/service and add-on '
-        'price change${priceChanges.length == 1 ? '' : 's'} took effect — '
-        '$increaseCount price increase${increaseCount == 1 ? '' : 's'} and '
-        '$decreaseCount price decrease${decreaseCount == 1 ? '' : 's'}. '
-        'These changes are reflected in $affectedOrdersTotal order'
-        '${affectedOrdersTotal == 1 ? '' : 's'} sold at the new price, for '
-        'an estimated net revenue $direction of ${php(estRevenueImpact.abs())} '
-        'on those orders compared with pre-change pricing. See the table '
-        'above for the specific products, services, and add-ons driving '
-        'this shift, and the separate Sales Records PDF for the full '
-        'order-level detail.';
+    final direction = estRevenueImpact >= 0 ? 'a net increase' : 'a net decrease';
+    revenueImpactBullets = [
+      'Since June 2026, ${priceChanges.length} product/service and add-on '
+          'price change${priceChanges.length == 1 ? '' : 's'} took effect — '
+          '$genuinePriceEditCount deliberate price edit${genuinePriceEditCount == 1 ? '' : 's'} '
+          '($increaseCount up, $decreaseCount down), $discountAppliedCount discount'
+          '${discountAppliedCount == 1 ? '' : 's'} applied, and $discountRemovedCount discount'
+          '${discountRemovedCount == 1 ? '' : 's'} removed.',
+      'These changes are reflected in $affectedOrdersTotal order'
+          '${affectedOrdersTotal == 1 ? '' : 's'} sold at the new price, for '
+          '$direction of ${php(estRevenueImpact.abs())} on those orders compared '
+          'with pre-change pricing.',
+      if (discountAppliedCount + discountRemovedCount > 0)
+        'Discounts specifically account for '
+            '${discountRevenueImpact >= 0 ? '+' : '-'}${php(discountRevenueImpact.abs())} of that '
+            'total — ${discountRevenueImpact >= 0 ? 'net revenue recovered as discounts were removed' : 'net revenue given up to discounting'}.',
+      if (topMover != null)
+        '${topMover.key} is the single biggest mover, contributing '
+            '${topMover.value >= 0 ? '+' : '-'}${php(topMover.value.abs())} to revenue on its own.',
+      'See the Price Change Analysis table above for the specific products, '
+          'services, and add-ons driving this shift.',
+    ];
   }
 
   // ── Best-selling products/services, payment breakdown, order status
@@ -1654,6 +2063,11 @@ Future<Uint8List> _buildSalesReportPdf({
   final bestSellers = _buildBestSellers(rows);
   final paymentBreakdown = _buildPaymentBreakdown(groups);
   final orderStatusBreakdown = _buildOrderStatusBreakdown(rows, groups);
+  // Per-(product, price-tier) performance — a price change produces a new
+  // row rather than blending old/new pricing into one average — plus a
+  // before/after demand comparison for every detected price change.
+  final productPerf = _buildProductPerformanceRows(rows);
+  final priceImpactBullets = _buildPriceImpactAnalysis(productPerf, php);
 
   // ── Remarks & Analysis (narrative synthesis of the whole report) ────────
   final fullyPaidPct = totalOrders > 0 ? (fullyPaidCount / totalOrders * 100) : 0;
@@ -1665,36 +2079,78 @@ Future<Uint8List> _buildSalesReportPdf({
   );
   final cancelledPct = totalOrders > 0 ? (cancelledEntry.orderCount / totalOrders * 100) : 0;
 
-  final remarksText = StringBuffer()
-    ..write('This report covers $totalOrders order${totalOrders == 1 ? '' : 's'} '
-        'totaling ${php(totalRevenue)} in collected revenue over $periodLabel. ')
-    ..write('$fullyPaidCount order${fullyPaidCount == 1 ? '' : 's'} '
+  // Add-on and discount revenue, pulled from the same per-price-tier
+  // ADJUSTMENTS figures printed in the Product/Service Performance table —
+  // gives Remarks concrete numbers instead of just a pointer to the table.
+  final totalAddonRevenue = productPerf.fold<double>(
+      0, (sum, t) => sum + (t.adjustmentAmount > 0 ? t.adjustmentAmount : 0));
+  final totalDiscountGiven = productPerf.fold<double>(
+      0, (sum, t) => sum + (t.adjustmentAmount < 0 ? -t.adjustmentAmount : 0));
+  final totalBaseAmount = productPerf.fold<double>(0, (sum, t) => sum + t.baseAmount);
+  final discountPct = totalBaseAmount > 0 ? (totalDiscountGiven / totalBaseAmount * 100) : 0;
+
+  // Flag the single most concerning price-increase-with-falling-demand case
+  // (if any) — same underlying data as "DID DEMAND CHANGE AFTER A PRICE
+  // MOVE?" above, surfaced here as an explicit recommendation.
+  String? demandWarning;
+  final withChanges = productPerf.where((t) => t.isPriceChange).toList();
+  final byProductTiers = <String, List<_ProductPerformanceRow>>{};
+  for (final t in productPerf) {
+    byProductTiers.putIfAbsent(t.product, () => []).add(t);
+  }
+  double worstDropPct = -10; // only flag drops worse than -10%
+  for (final t in withChanges) {
+    if (t.unitPrice <= t.priorPrice!) continue; // only price increases
+    final tiers = byProductTiers[t.product]!;
+    final idx = tiers.indexOf(t);
+    if (idx <= 0) continue;
+    final before = tiers[idx - 1];
+    if (before.dailyRate <= 0 || t.dailyRate <= 0) continue;
+    final pctChange = ((t.dailyRate - before.dailyRate) / before.dailyRate) * 100;
+    if (pctChange < worstDropPct) {
+      worstDropPct = pctChange;
+      demandWarning = '${t.product} saw sales pace drop ${pctChange.abs().toStringAsFixed(0)}% '
+          'after its price increase to ${php(t.unitPrice)} — worth monitoring before any further increase.';
+    }
+  }
+
+  final remarksBullets = <String>[
+    'This report covers $totalOrders order${totalOrders == 1 ? '' : 's'} '
+        'totaling ${php(totalRevenue)} in collected revenue over $periodLabel '
+        '(average order value: ${php(avgOrderValue)}).',
+    '$fullyPaidCount order${fullyPaidCount == 1 ? '' : 's'} '
         '(${fullyPaidPct.toStringAsFixed(1)}%) ${fullyPaidCount == 1 ? 'is' : 'are'} fully paid, '
-        'while $partialCount remain${partialCount == 1 ? 's' : ''} partially paid or with a balance due. ');
-  if (topPaymentMethod != null) {
-    remarksText.write('${topPaymentMethod.label} is the most-used payment method, '
-        'covering ${topPaymentMethod.orderCount} order${topPaymentMethod.orderCount == 1 ? '' : 's'} '
-        'and ${php(topPaymentMethod.revenue)} in revenue. ');
-  }
-  if (topSeller != null) {
-    remarksText.write('${topSeller.product} is the top-selling product/service by revenue, '
-        'with ${topSeller.qty} unit${topSeller.qty == 1 ? '' : 's'} sold '
-        'for ${php(topSeller.revenue)}. ');
-  }
-  if (cancelledEntry.orderCount > 0) {
-    remarksText.write('${cancelledEntry.orderCount} order${cancelledEntry.orderCount == 1 ? '' : 's'} '
-        '(${cancelledPct.toStringAsFixed(1)}%) ${cancelledEntry.orderCount == 1 ? 'was' : 'were'} cancelled. ');
-  }
-  if (priceChanges.isEmpty) {
-    remarksText.write('No pricing changes were recorded from June 2026 onward, '
-        'so current pricing has remained stable throughout this period.');
-  } else {
-    final direction = estRevenueImpact >= 0 ? 'a net revenue increase' : 'a net revenue decrease';
-    remarksText.write('Pricing changes effective June 2026 onward ($increaseCount increase'
-        '${increaseCount == 1 ? '' : 's'}, $decreaseCount decrease${decreaseCount == 1 ? '' : 's'}) '
-        'have resulted in $direction of ${php(estRevenueImpact.abs())} on the '
-        '$affectedOrdersTotal order${affectedOrdersTotal == 1 ? '' : 's'} sold at the new prices.');
-  }
+        'while $partialCount remain${partialCount == 1 ? 's' : ''} partially paid or with a balance due'
+        '${outstandingBalance > 0.004 ? ' — ${php(outstandingBalance)} still outstanding across those orders' : ''}.',
+    if (topPaymentMethod != null)
+      '${topPaymentMethod.label} is the most-used payment method, '
+          'covering ${topPaymentMethod.orderCount} order${topPaymentMethod.orderCount == 1 ? '' : 's'} '
+          'and ${php(topPaymentMethod.revenue)} in revenue.',
+    if (topSeller != null)
+      '${topSeller.product} is the top-selling product/service by collected revenue, '
+          'with ${topSeller.qty} unit${topSeller.qty == 1 ? '' : 's'} sold '
+          'for ${php(topSeller.revenue)} collected.',
+    if (cancelledEntry.orderCount > 0)
+      '${cancelledEntry.orderCount} order${cancelledEntry.orderCount == 1 ? '' : 's'} '
+          '(${cancelledPct.toStringAsFixed(1)}%) ${cancelledEntry.orderCount == 1 ? 'was' : 'were'} cancelled.',
+    if (totalDiscountGiven > 0.004)
+      'Discounts given this period total ${php(totalDiscountGiven)} '
+          '(${discountPct.toStringAsFixed(1)}% of gross base pricing before discounts).',
+    if (totalAddonRevenue > 0.004)
+      'Add-on services contributed an extra ${php(totalAddonRevenue)} in revenue on top of base pricing.',
+    if (priceChanges.isEmpty)
+      'No pricing changes were recorded from June 2026 onward, so current '
+          'pricing has remained stable throughout this period.'
+    else
+      'Pricing changes effective June 2026 onward ($genuinePriceEditCount price edit'
+          '${genuinePriceEditCount == 1 ? '' : 's'}, $discountAppliedCount discount'
+          '${discountAppliedCount == 1 ? '' : 's'} applied, $discountRemovedCount discount'
+          '${discountRemovedCount == 1 ? '' : 's'} removed) have resulted in '
+          '${estRevenueImpact >= 0 ? 'a net revenue increase' : 'a net revenue decrease'} '
+          'of ${php(estRevenueImpact.abs())} on the $affectedOrdersTotal '
+          'order${affectedOrdersTotal == 1 ? '' : 's'} sold at the new prices.',
+    if (demandWarning != null) demandWarning,
+  ];
 
   doc.addPage(
     pw.MultiPage(
@@ -1765,7 +2221,7 @@ Future<Uint8List> _buildSalesReportPdf({
                   pw.SizedBox(height: 4),
                   pdfMeta('Generated By', 'Admin', const PdfColor.fromInt(0xFFCBD5E1)),
                   pw.SizedBox(height: 4),
-                  pdfMeta('Report Scope', 'All Sales Records', const PdfColor.fromInt(0xFFCBD5E1)),
+                  pdfMeta('Report Scope', _formatDateRangeLabel(range), const PdfColor.fromInt(0xFFCBD5E1)),
                   pw.SizedBox(height: 4),
                   pdfMeta('Sales Period Covered', periodLabel, const PdfColor.fromInt(0xFFCBD5E1)),
                 ],
@@ -1782,7 +2238,7 @@ Future<Uint8List> _buildSalesReportPdf({
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('SUMMARY', style: s(bold, 7.5, textLight)),
+              pw.Text('EXECUTIVE SUMMARY', style: s(bold, 7.5, textLight)),
               pw.SizedBox(height: 6),
               pw.Wrap(spacing: 0, runSpacing: 0, children: [
                 summaryChip('Total Orders', '$totalOrders', navy),
@@ -1791,26 +2247,190 @@ Future<Uint8List> _buildSalesReportPdf({
                 summaryChip('Price Changes (Jun 2026+)', '${priceChanges.length}', red),
               ]),
               pw.SizedBox(height: 8),
-              pw.Text('Total Revenue Collected: ${php(totalRevenue)}', style: s(bold, 9, textDark)),
+              pw.Row(children: [
+                pw.Text('Total Revenue Collected: ${php(totalRevenue)}', style: s(bold, 9, textDark)),
+                pw.SizedBox(width: 18),
+                pw.Text('Average Order Value: ${php(avgOrderValue)}', style: s(bold, 9, textDark)),
+                if (outstandingBalance > 0.004) ...[
+                  pw.SizedBox(width: 18),
+                  pw.Text('Outstanding Balance: ${php(outstandingBalance)}',
+                      style: s(bold, 9, red)),
+                ],
+              ]),
             ],
           ),
         ),
 
         pw.SizedBox(height: 18),
-
-        // ── Price Change Analysis ────────────────────────────────────────
+        // ── Product / Service Performance — the lead content of this report:
+        // actual sales made in the selected date range, one row per
+        // (product, price). A price change creates a new row instead of
+        // blending old/new pricing into one average. ─────────────────────
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(horizontal: 36),
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
+              pw.Text('PRODUCT / SERVICE PERFORMANCE', style: pw.TextStyle(
+                  font: bold, fontSize: 13, color: navy, letterSpacing: 0.5)),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Every product/service sold in this report\'s date range, broken out by the '
+                    'price it sold at. A price change creates a new row (marked "was ₱X") '
+                    'instead of blending old and new pricing into one average.',
+                style: s(regular, 8, textMid),
+              ),
+              pw.SizedBox(height: 14),
+            ],
+          ),
+        ),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: productPerf.isEmpty
+              ? pw.Text('No product/service sales data available.',
+              style: s(italic, 9, textMid))
+              : _srTable(
+            headers: const ['PRODUCT / SERVICE', 'UNIT PRICE', 'QTY SOLD', 'AVG AREA (SQFT)',
+              'BASE AMOUNT', 'ADJUSTMENTS', 'TOTAL AMOUNT', 'COLLECTED', 'REMAINING'],
+            data: productPerf.map((t) {
+              final name = t.isPriceChange
+                  ? '${shorten(t.product, 32)}  (was ${php(t.priorPrice!)}'
+                  '${t.effectiveFrom != null ? ' until ${_formatDateLabel(t.effectiveFrom!)}' : ''})'
+                  : shorten(t.product, 40);
+              return [
+                name,
+                php(t.unitPrice),
+                '${t.qtySold}',
+                t.avgAreaSqft != null ? t.avgAreaSqft!.toStringAsFixed(2) : '—',
+                php(t.baseAmount),
+                t.adjustmentAmount.abs() > 0.004
+                    ? '${t.adjustmentAmount >= 0 ? '+' : '-'}${php(t.adjustmentAmount.abs())}'
+                    : '—',
+                php(t.totalAmount),
+                php(t.collectedAmount),
+                t.remainingBalance > 0.004 ? php(t.remainingBalance) : '—',
+              ];
+            }).toList(),
+            regular: regular,
+            bold: bold,
+            navy: navy,
+            gold: gold,
+            textDark: textDark,
+            rowAlt: rowAlt,
+            rowBorder: rowBorder,
+            rightAlign: const {1, 2, 3, 4, 5, 6, 7, 8},
+            wrapTwoLines: const {0},
+            cellColor: (rowIndex, colIndex, value) {
+              if (colIndex != 5) return null;
+              if (value.startsWith('+')) return green;
+              if (value.startsWith('-')) return red;
+              return null;
+            },
+            columnWidths: const {
+              0: pw.FlexColumnWidth(2.4),
+              1: pw.FlexColumnWidth(1.0),
+              2: pw.FlexColumnWidth(0.8),
+              3: pw.FlexColumnWidth(1.1),
+              4: pw.FlexColumnWidth(1.1),
+              5: pw.FlexColumnWidth(1.1),
+              6: pw.FlexColumnWidth(1.1),
+              7: pw.FlexColumnWidth(1.1),
+              8: pw.FlexColumnWidth(1.1),
+            },
+            footerRow: [
+              'TOTAL — ${productPerf.length} price tier${productPerf.length == 1 ? '' : 's'}',
+              '', '', '', '',
+              '',
+              php(productPerf.fold<double>(0, (sum, t) => sum + t.totalAmount)),
+              php(productPerf.fold<double>(0, (sum, t) => sum + t.collectedAmount)),
+              php(productPerf.fold<double>(0, (sum, t) => sum + t.remainingBalance)),
+            ],
+          ),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.fromLTRB(36, 4, 36, 0),
+          child: pw.Text(
+            '* ADJUSTMENTS is the net effect of add-on services (+) and/or discounts (−) on top of '
+                'the base price — BASE AMOUNT + ADJUSTMENTS = TOTAL AMOUNT exactly. BASE AMOUNT = '
+                'UNIT PRICE × QTY SOLD (× AVG AREA for size-based items).',
+            style: s(italic, 7, textLight),
+          ),
+        ),
+
+        // ── Best-Selling Products/Services (ranked by revenue, collapsed
+        // across price tiers — a quick top-10 view alongside the detailed
+        // per-price-tier table above) ───────────────────────────────────
+        pw.NewPage(),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(height: 26),
+              pw.Text('TOP 10 BY REVENUE', style: pw.TextStyle(
+                  font: bold, fontSize: 11, color: navy, letterSpacing: 0.4)),
+              pw.SizedBox(height: 8),
+            ],
+          ),
+        ),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: bestSellers.isEmpty
+              ? pw.Text('No product/service sales data available.',
+              style: s(italic, 9, textMid))
+              : _srTable(
+            headers: const ['#', 'PRODUCT / SERVICE', 'QTY SOLD', 'COLLECTED REVENUE', '% OF TOTAL COLLECTED'],
+            data: bestSellers.asMap().entries.map((e) {
+              final i = e.key;
+              final b = e.value;
+              final pct = totalRevenue > 0 ? (b.revenue / totalRevenue * 100) : 0.0;
+              return [
+                '${i + 1}',
+                shorten(b.product, 40),
+                '${b.qty}',
+                php(b.revenue),
+                '${pct.toStringAsFixed(1)}%',
+              ];
+            }).toList(),
+            regular: regular,
+            bold: bold,
+            navy: navy,
+            gold: gold,
+            textDark: textDark,
+            rowAlt: rowAlt,
+            rowBorder: rowBorder,
+            rightAlign: const {2, 3, 4},
+            wrapTwoLines: const {1},
+            columnWidths: const {
+              0: pw.FixedColumnWidth(28),
+              1: pw.FlexColumnWidth(2.6),
+              2: pw.FlexColumnWidth(1.0),
+              3: pw.FlexColumnWidth(1.2),
+              4: pw.FlexColumnWidth(1.4),
+            },
+          ),
+        ),
+
+        // ── Price Change Analysis ────────────────────────────────────────
+        pw.NewPage(),
+
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(height: 26),
               pw.Text('PRICE CHANGE ANALYSIS — JUNE 2026 ONWARD', style: pw.TextStyle(
                   font: bold, fontSize: 13, color: navy, letterSpacing: 0.5)),
               pw.SizedBox(height: 4),
               pw.Text(
-                'Products, services, and add-on services whose per-unit price differs from the price '
-                    'they were previously sold at, first appearing in an order dated June 2026 or later, '
-                    'together with the orders sold at each new price.',
+                'Products, services, and add-on services whose effective per-unit price differs from '
+                    'the price they were previously sold at — including discounts applied on top of the '
+                    'listed price — first appearing in an order dated June 2026 or later, together with '
+                    'the orders sold at each new price.',
                 style: s(regular, 8, textMid),
               ),
               pw.SizedBox(height: 14),
@@ -1834,13 +2454,19 @@ Future<Uint8List> _buildSalesReportPdf({
             rowAlt: rowAlt,
             rowBorder: rowBorder,
             rightAlign: const {2, 3, 5},
-            wrapTwoLines: const {0, 1},
+            wrapTwoLines: const {0},
             cellColor: (rowIndex, colIndex, value) {
-              if (colIndex != 5) return null;
-              return value.startsWith('+') ? red : green;
+              if (colIndex == 5) {
+                return value.startsWith('+') ? green : red;
+              }
+              if (colIndex == 1) {
+                if (value == 'Discount Applied' || value == 'Price Decrease') return red;
+                if (value == 'Discount Removed' || value == 'Price Increase') return green;
+              }
+              return null;
             },
             columnWidths: const {
-              0: pw.FlexColumnWidth(1.9),
+              0: pw.FlexColumnWidth(2.4),
               1: pw.FlexColumnWidth(1.5),
               2: pw.FlexColumnWidth(1.0),
               3: pw.FlexColumnWidth(1.0),
@@ -1887,180 +2513,23 @@ Future<Uint8List> _buildSalesReportPdf({
                   borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
                   border: pw.Border.all(color: rowBorder, width: 0.7),
                 ),
-                child: pw.Text(analysisText, style: s(regular, 8.5, textMid)),
+                child: bulletList(revenueImpactBullets),
+              ),
+              pw.SizedBox(height: 16),
+              pw.Text('DID DEMAND CHANGE AFTER A PRICE MOVE?', style: pw.TextStyle(
+                  font: bold, fontSize: 10.5, color: navy, letterSpacing: 0.3)),
+              pw.SizedBox(height: 8),
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: white,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                  border: pw.Border.all(color: rowBorder, width: 0.7),
+                ),
+                child: bulletList(priceImpactBullets),
               ),
             ],
-          ),
-        ),
-
-        // ── Best-Selling Products/Services ────────────────────────────────
-        pw.NewPage(),
-
-        pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.SizedBox(height: 26),
-              pw.Text('BEST-SELLING PRODUCTS / SERVICES', style: pw.TextStyle(
-                  font: bold, fontSize: 13, color: navy, letterSpacing: 0.5)),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                'Top products and services in this report, ranked by revenue.',
-                style: s(regular, 8, textMid),
-              ),
-              pw.SizedBox(height: 14),
-            ],
-          ),
-        ),
-
-        pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
-          child: bestSellers.isEmpty
-              ? pw.Text('No product/service sales data available.',
-              style: s(italic, 9, textMid))
-              : _srTable(
-            headers: const ['#', 'PRODUCT / SERVICE', 'QTY SOLD', 'REVENUE', '% OF TOTAL REVENUE'],
-            data: bestSellers.asMap().entries.map((e) {
-              final i = e.key;
-              final b = e.value;
-              final pct = totalRevenue > 0 ? (b.revenue / totalRevenue * 100) : 0.0;
-              return [
-                '${i + 1}',
-                shorten(b.product, 40),
-                '${b.qty}',
-                php(b.revenue),
-                '${pct.toStringAsFixed(1)}%',
-              ];
-            }).toList(),
-            regular: regular,
-            bold: bold,
-            navy: navy,
-            gold: gold,
-            textDark: textDark,
-            rowAlt: rowAlt,
-            rowBorder: rowBorder,
-            rightAlign: const {2, 3, 4},
-            wrapTwoLines: const {1},
-            columnWidths: const {
-              0: pw.FixedColumnWidth(22),
-              1: pw.FlexColumnWidth(2.6),
-              2: pw.FlexColumnWidth(1.0),
-              3: pw.FlexColumnWidth(1.2),
-              4: pw.FlexColumnWidth(1.4),
-            },
-          ),
-        ),
-
-        // ── Payment Breakdown ──────────────────────────────────────────────
-        pw.NewPage(),
-
-        pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.SizedBox(height: 26),
-              pw.Text('PAYMENT BREAKDOWN', style: pw.TextStyle(
-                  font: bold, fontSize: 13, color: navy, letterSpacing: 0.5)),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                'Orders and revenue in this report grouped by payment method.',
-                style: s(regular, 8, textMid),
-              ),
-              pw.SizedBox(height: 14),
-            ],
-          ),
-        ),
-
-        pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
-          child: paymentBreakdown.isEmpty
-              ? pw.Text('No payment data available.', style: s(italic, 9, textMid))
-              : _srTable(
-            headers: const ['PAYMENT METHOD', 'ORDERS', 'REVENUE', '% OF TOTAL REVENUE'],
-            data: paymentBreakdown.map((p) {
-              final pct = totalRevenue > 0 ? (p.revenue / totalRevenue * 100) : 0.0;
-              return [
-                p.label,
-                '${p.orderCount}',
-                php(p.revenue),
-                '${pct.toStringAsFixed(1)}%',
-              ];
-            }).toList(),
-            regular: regular,
-            bold: bold,
-            navy: navy,
-            gold: gold,
-            textDark: textDark,
-            rowAlt: rowAlt,
-            rowBorder: rowBorder,
-            rightAlign: const {1, 2, 3},
-            columnWidths: const {
-              0: pw.FlexColumnWidth(1.8),
-              1: pw.FlexColumnWidth(1.0),
-              2: pw.FlexColumnWidth(1.3),
-              3: pw.FlexColumnWidth(1.4),
-            },
-          ),
-        ),
-
-        // ── Order Status Breakdown ─────────────────────────────────────────
-        pw.NewPage(),
-
-        pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.SizedBox(height: 26),
-              pw.Text('ORDER STATUS BREAKDOWN', style: pw.TextStyle(
-                  font: bold, fontSize: 13, color: navy, letterSpacing: 0.5)),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                'Orders in this report grouped by current order status.',
-                style: s(regular, 8, textMid),
-              ),
-              pw.SizedBox(height: 14),
-            ],
-          ),
-        ),
-
-        pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 36),
-          child: orderStatusBreakdown.isEmpty
-              ? pw.Text('No order status data available.', style: s(italic, 9, textMid))
-              : _srTable(
-            headers: const ['ORDER STATUS', 'ORDERS', '% OF ORDERS', 'REVENUE'],
-            data: orderStatusBreakdown.map((o) {
-              final pct = totalOrders > 0 ? (o.orderCount / totalOrders * 100) : 0.0;
-              return [
-                o.label,
-                '${o.orderCount}',
-                '${pct.toStringAsFixed(1)}%',
-                php(o.revenue),
-              ];
-            }).toList(),
-            regular: regular,
-            bold: bold,
-            navy: navy,
-            gold: gold,
-            textDark: textDark,
-            rowAlt: rowAlt,
-            rowBorder: rowBorder,
-            rightAlign: const {1, 2, 3},
-            cellColor: (rowIndex, colIndex, value) {
-              if (colIndex != 0) return null;
-              if (value == 'Cancelled') return red;
-              if (value == 'Completed') return green;
-              return null;
-            },
-            columnWidths: const {
-              0: pw.FlexColumnWidth(1.6),
-              1: pw.FlexColumnWidth(1.0),
-              2: pw.FlexColumnWidth(1.1),
-              3: pw.FlexColumnWidth(1.3),
-            },
           ),
         ),
 
@@ -2088,7 +2557,7 @@ Future<Uint8List> _buildSalesReportPdf({
                   borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
                   border: pw.Border.all(color: rowBorder, width: 0.7),
                 ),
-                child: pw.Text(remarksText.toString(), style: s(regular, 8.5, textMid)),
+                child: bulletList(remarksBullets),
               ),
             ],
           ),
@@ -2100,7 +2569,7 @@ Future<Uint8List> _buildSalesReportPdf({
   return Uint8List.fromList(await doc.save());
 }
 
-Future<void> generateAdminSalesReportPdf(BuildContext context) async {
+Future<void> generateAdminSalesReportPdf(BuildContext context, {DateTimeRange? range}) async {
   final messenger = ScaffoldMessenger.of(context);
   messenger.showSnackBar(
     const SnackBar(content: Text('Preparing sales report…'), duration: Duration(seconds: 2)),
@@ -2119,7 +2588,10 @@ Future<void> generateAdminSalesReportPdf(BuildContext context) async {
     final oqSnap = results[2];
 
     // Merge Orders + Order_Queue, de-duplicated by order_id (Orders preferred)
-    // so price history covers both current and archived orders.
+    // so price history covers both current and archived orders. Kept
+    // unfiltered by date — price-change detection needs the full history to
+    // find the *previous* price, even if that earlier order falls outside
+    // the selected range.
     final seenOrderIds = <String>{};
     final orderDocs = [...ordSnap.docs, ...oqSnap.docs].where((d) {
       final oid = (d.data() as Map<String, dynamic>)['order_id']?.toString() ?? d.id;
@@ -2131,10 +2603,24 @@ Future<void> generateAdminSalesReportPdf(BuildContext context) async {
         d.data() as Map<String, dynamic>,
     };
 
+    // Date-range filter applied to the raw Sales_Records docs BEFORE
+    // grouping — mirrors _SalesRecordTableState._loadRecords' server-side
+    // `sale_date` range query exactly, so a grouped order only shows up (and
+    // only totals the payments) that actually fall inside the selected
+    // range, instead of pulling in a whole order's history just because its
+    // *latest* payment happens to land in range.
+    final rangeFilteredDocs = range == null
+        ? srSnap.docs
+        : srSnap.docs.where((d) {
+      final ts = (d.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
+      if (ts == null) return false;
+      return _isWithinDateRange(ts.toDate().toLocal(), range);
+    }).toList();
+
     // Sort ascending by sale_date so, per order_id, the first doc encountered
     // by _groupRecordsAsync is the earliest — used as the canonical
     // "Sales Record ID" for that order.
-    final sortedDocs = [...srSnap.docs]..sort((a, b) {
+    final sortedDocs = [...rangeFilteredDocs]..sort((a, b) {
       final ta = (a.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
       final tb = (b.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
       if (ta == null && tb == null) return 0;
@@ -2144,16 +2630,29 @@ Future<void> generateAdminSalesReportPdf(BuildContext context) async {
     });
 
     final groups = await _groupRecordsAsync(sortedDocs);
-    // Same "real records only" rule the on-screen Sales Record list uses.
-    final realGroups = groups.where((g) => !g.isImported && !g.isXlsxImport).toList();
+    // Matches the on-screen Sales Report tab's own rule exactly: exclude
+    // only historical_seed data — manual Excel imports count as real sales
+    // there (unlike the separate Sales Record tab/PDF, which hides xlsx
+    // imports from its list and totals). Using the Sales Record tab's
+    // stricter rule here was why this PDF's totals didn't match what was
+    // on screen.
+    final realGroups = groups.where((g) => !g.isImported).toList();
 
     final rows = _buildSalesReportRows(realGroups, ordersById);
-    final priceChanges = _buildPriceChangeRows(ordersById);
+    // Price changes are detected from the full order history above, then
+    // only the changes that took effect within the selected range are shown
+    // — mirrors the on-screen "Price Change Analysis" panel exactly.
+    final priceChanges = _buildPriceChangeRows(ordersById).where((c) {
+      if (range == null) return true;
+      if (c.orderDateRaw == null) return false;
+      return _isWithinDateRange(c.orderDateRaw!.toDate().toLocal(), range);
+    }).toList();
 
     final bytes = await _buildSalesReportPdf(
       rows: rows,
       priceChanges: priceChanges,
       groups: realGroups,
+      range: range,
     );
 
     final now = DateTime.now();
@@ -2189,6 +2688,7 @@ Future<void> generateAdminSalesReportPdf(BuildContext context) async {
 Future<Uint8List> _buildSalesRecordsPdf({
   required List<_SalesReportRow> rows,
   required List<_GroupedRecord> groups,
+  DateTimeRange? range,
 }) async {
   final regular = await PdfGoogleFonts.notoSansRegular();
   final bold    = await PdfGoogleFonts.notoSansBold();
@@ -2249,10 +2749,18 @@ Future<Uint8List> _buildSalesRecordsPdf({
     ]),
   );
 
+  // Live per-order total/paid — see _buildSalesReportPdf for why this must
+  // not be derived from g.totalPaid (range-scoped payment history).
+  final liveOrderData = <String, ({double total, double paid})>{};
+  for (final r in rows) {
+    liveOrderData[r.orderId] = (total: r.orderTotal, paid: r.orderPaid);
+  }
+
   final totalOrders = groups.length;
   final totalRevenue = groups.fold<double>(0, (sum, g) => sum + g.totalPaid);
-  final fullyPaidCount = groups.where((g) =>
-  g.paymentType == 'full' || (g.orderTotal > 0 && g.totalPaid >= g.orderTotal - 0.01)).length;
+  final fullyPaidCount = liveOrderData.values
+      .where((o) => o.total <= 0 || o.paid >= o.total - 0.01)
+      .length;
   final partialCount = totalOrders - fullyPaidCount;
 
   // ── Sales period covered — earliest/latest order date among the rows ────
@@ -2359,7 +2867,7 @@ Future<Uint8List> _buildSalesRecordsPdf({
                   pw.SizedBox(height: 4),
                   pdfMeta('Generated By', 'Admin', const PdfColor.fromInt(0xFFCBD5E1)),
                   pw.SizedBox(height: 4),
-                  pdfMeta('Report Scope', 'All Sales Records', const PdfColor.fromInt(0xFFCBD5E1)),
+                  pdfMeta('Report Scope', _formatDateRangeLabel(range), const PdfColor.fromInt(0xFFCBD5E1)),
                   pw.SizedBox(height: 4),
                   pdfMeta('Period Covered', periodLabel, const PdfColor.fromInt(0xFFCBD5E1)),
                 ],
@@ -2412,13 +2920,13 @@ Future<Uint8List> _buildSalesRecordsPdf({
             rightAlign: const {7, 8, 11},
             wrapTwoLines: const {5},
             columnWidths: const {
-              0: pw.FixedColumnWidth(20),
+              0: pw.FixedColumnWidth(28),
               1: pw.FlexColumnWidth(1.1),
               2: pw.FlexColumnWidth(1.1),
               3: pw.FlexColumnWidth(1.3),
               4: pw.FlexColumnWidth(1.0),
               5: pw.FlexColumnWidth(1.8),
-              6: pw.FixedColumnWidth(30),
+              6: pw.FixedColumnWidth(36),
               7: pw.FlexColumnWidth(0.9),
               8: pw.FlexColumnWidth(0.9),
               9: pw.FlexColumnWidth(1.0),
@@ -2434,7 +2942,7 @@ Future<Uint8List> _buildSalesRecordsPdf({
   return Uint8List.fromList(await doc.save());
 }
 
-Future<void> generateAdminSalesRecordsPdf(BuildContext context) async {
+Future<void> generateAdminSalesRecordsPdf(BuildContext context, {DateTimeRange? range}) async {
   final messenger = ScaffoldMessenger.of(context);
   messenger.showSnackBar(
     const SnackBar(content: Text('Preparing sales records…'), duration: Duration(seconds: 2)),
@@ -2464,10 +2972,24 @@ Future<void> generateAdminSalesRecordsPdf(BuildContext context) async {
         d.data() as Map<String, dynamic>,
     };
 
+    // Date-range filter applied to the raw Sales_Records docs BEFORE
+    // grouping — mirrors _SalesRecordTableState._loadRecords' server-side
+    // `sale_date` range query exactly, so a grouped order only shows up (and
+    // only totals the payments) that actually fall inside the selected
+    // range, instead of pulling in a whole order's history just because its
+    // *latest* payment happens to land in range.
+    final rangeFilteredDocs = range == null
+        ? srSnap.docs
+        : srSnap.docs.where((d) {
+      final ts = (d.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
+      if (ts == null) return false;
+      return _isWithinDateRange(ts.toDate().toLocal(), range);
+    }).toList();
+
     // Sort ascending by sale_date so, per order_id, the first doc encountered
     // by _groupRecordsAsync is the earliest — used as the canonical
     // "Sales Record ID" for that order.
-    final sortedDocs = [...srSnap.docs]..sort((a, b) {
+    final sortedDocs = [...rangeFilteredDocs]..sort((a, b) {
       final ta = (a.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
       final tb = (b.data() as Map<String, dynamic>)['sale_date'] as Timestamp?;
       if (ta == null && tb == null) return 0;
@@ -2485,6 +3007,7 @@ Future<void> generateAdminSalesRecordsPdf(BuildContext context) async {
     final bytes = await _buildSalesRecordsPdf(
       rows: rows,
       groups: realGroups,
+      range: range,
     );
 
     final now = DateTime.now();
@@ -2535,6 +3058,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
   void initState() {
     super.initState();
     _selectedRange = _pLast31();
+    adminSalesRecordsRange.value = _selectedRange;
     _loadRecords();
     _startLiveSubscription();
   }
@@ -2808,6 +3332,7 @@ class _SalesRecordTableState extends State<SalesRecordTable> {
             activeType: _typeFilter,
             onDateChanged: (range) {
               setState(() => _selectedRange = range);
+              adminSalesRecordsRange.value = range;
               _loadRecords();
             },
             onTypeChanged: (t) => setState(() => _typeFilter = t),
@@ -3279,7 +3804,7 @@ class _UnifiedFilterBar extends StatelessWidget {
                       const SizedBox(width: 10),
                       Container(width: 1, height: 28, color: _T.divider),
                       const SizedBox(width: 10),
-                      _DateFilterButton(
+                      DateFilterButton(
                         selectedRange: selectedRange,
                         onChanged: onDateChanged,
                       ),
@@ -3644,9 +4169,17 @@ class _SalesReportContentState extends State<_SalesReportContent> {
   List<_PriceChangeRow>? _priceChanges;
   bool _priceChangesLoading = true;
 
+  // Keeps the printable PDF (triggered by a sibling widget) in sync with
+  // whatever date range is currently selected on screen.
+  void _setRange(DateTimeRange? r) {
+    setState(() => _range = r);
+    adminSalesReportRange.value = r;
+  }
+
   @override
   void initState() {
     super.initState();
+    adminSalesReportRange.value = _range;
     _loadPriceChanges();
   }
 
@@ -3873,32 +4406,32 @@ class _SalesReportContentState extends State<_SalesReportContent> {
                 _PresetChip(
                   label: 'All time',
                   active: _range == null,
-                  onTap: () => setState(() => _range = null),
+                  onTap: () => _setRange(null),
                 ),
                 const SizedBox(width: 6),
                 _PresetChip(
                   label: 'Last 31 days',
                   active: _rangesMatch(_range, l31),
-                  onTap: () => setState(() => _range = l31),
+                  onTap: () => _setRange(l31),
                 ),
                 const SizedBox(width: 6),
                 _PresetChip(
                   label: 'Last 6 months',
                   active: _rangesMatch(_range, l180),
-                  onTap: () => setState(() => _range = l180),
+                  onTap: () => _setRange(l180),
                 ),
                 const SizedBox(width: 6),
                 _PresetChip(
                   label: 'This year',
                   active: _rangesMatch(_range, tyr),
-                  onTap: () => setState(() => _range = tyr),
+                  onTap: () => _setRange(tyr),
                 ),
                 const SizedBox(width: 10),
                 Container(width: 1, height: 28, color: _T.divider),
                 const SizedBox(width: 10),
-                _DateFilterButton(
+                DateFilterButton(
                   selectedRange: _range,
-                  onChanged: (r) => setState(() => _range = r),
+                  onChanged: (r) => _setRange(r),
                 ),
               ],
             ),

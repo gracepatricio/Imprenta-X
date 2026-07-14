@@ -891,9 +891,9 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
 
   static String _trendPdfLabel(_TrendDir d) {
     switch (d) {
-      case _TrendDir.up:   return '\u25B2 Up';
-      case _TrendDir.down: return '\u25BC Down';
-      case _TrendDir.flat: return '\u25B6 Stable';
+      case _TrendDir.up:   return 'Rising';
+      case _TrendDir.down: return 'Falling';
+      case _TrendDir.flat: return 'Stable';
     }
   }
 
@@ -955,9 +955,19 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         ? 'Overstocked relative to demand — hold future orders.'
         : 'No recent demand signal — verify before reordering.';
 
+    // Recommendation groups render as a single non-splittable block, so an
+    // uncapped list (e.g. from selecting "all" statuses) could grow taller
+    // than one page and trigger the same pagination failure as the table.
+    // Capping to the most relevant items keeps the section both safe and
+    // genuinely useful — the full detail for every material still lives in
+    // the forecast table above.
+    const maxRecItems = 20;
+
     pw.Widget recGroup(String title, PdfColor color, PdfColor bgColor,
         List<_Material> list,
         String Function(_Material) reason, String emptyText) {
+      final shown = list.take(maxRecItems).toList();
+      final remaining = list.length - shown.length;
       return pw.Container(
         width: double.infinity,
         margin: const pw.EdgeInsets.only(bottom: 10),
@@ -975,8 +985,8 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
             pw.SizedBox(height: 6),
             if (list.isEmpty)
               pw.Text(emptyText, style: s(italic, 8.5, textMid))
-            else
-              ...list.map((m) => pw.Padding(
+            else ...[
+              ...shown.map((m) => pw.Padding(
                 padding: const pw.EdgeInsets.only(bottom: 3),
                 child: pw.RichText(
                   text: pw.TextSpan(children: [
@@ -987,6 +997,10 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
                   ]),
                 ),
               )),
+              if (remaining > 0)
+                pw.Text('+ $remaining more — see forecast table above.',
+                    style: s(italic, 8, textMid)),
+            ],
           ],
         ),
       );
@@ -1012,26 +1026,30 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
         );
 
     // ── Table rows ───────────────────────────────────────────────────────────
+    // Trimmed to the columns that actually drive a restocking decision —
+    // dropping 7-day/90-day forecasts and MAPE (accuracy metric) keeps the
+    // report readable and avoids ballooning the table when many materials
+    // are included.
     final headers = ['MATERIAL', 'STATUS', 'CURRENT STOCK', 'RESTOCK LEVEL',
-      '7-DAY', '30-DAY', '90-DAY', 'REORDER QTY', 'TREND', 'MAPE'];
+      '30-DAY FORECAST', 'REORDER QTY', 'TREND'];
 
     final rows = materials.map((m) => [
       m.name,
       m.statusLabel,
       m.unit.isEmpty ? _fmtNum(m.stock) : '${_fmtNum(m.stock)} ${m.unit}',
       m.unit.isEmpty ? _fmtNum(m.restock) : '${_fmtNum(m.restock)} ${m.unit}',
-      _fmtNum(m.forecast7d),
       _fmtNum(m.forecast30d),
-      _fmtNum(m.forecast90d),
       m.reorderQty < 0.001 ? 'None' : _fmtNum(m.reorderQty),
       _trendPdfLabel(m.trendDir),
-      m.mapeText,
     ]).toList();
 
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
         margin: pw.EdgeInsets.zero,
+        // Selecting "all" statuses can include hundreds of materials; the
+        // default cap of 20 pages is easily hit by a wide forecast table.
+        maxPages: 500,
         header: (ctx) => ctx.pageNumber == 1
             ? pw.SizedBox()
             : pw.Container(
@@ -1144,59 +1162,49 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
           pw.NewPage(freeSpace: 150),
 
           // ── Forecast table ──────────────────────────────────────────────────
+          // The heading and the table are kept as separate top-level items
+          // (not nested in a shared Column) — MultiPage only lets a direct
+          // build-list item span across pages. Wrapping the Table inside a
+          // Column with sibling Text made the whole block non-splittable,
+          // which is what triggered TooManyPagesException once "select all"
+          // produced a table too tall to fit on any single page.
+          pw.Padding(
+            padding: const pw.EdgeInsets.fromLTRB(36, 0, 36, 8),
+            child: pw.Text('FORECAST TABLE', style: s(bold, 7.5, textLight)),
+          ),
           pw.Padding(
             padding: const pw.EdgeInsets.symmetric(horizontal: 36),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text('FORECAST TABLE', style: s(bold, 7.5, textLight)),
-                pw.SizedBox(height: 8),
-                pw.TableHelper.fromTextArray(
-                  headers: headers,
-                  data: rows,
-                  border: null,
-                  headerDecoration: const pw.BoxDecoration(color: navy),
-                  headerStyle: pw.TextStyle(font: bold, fontSize: 7.5, color: gold),
-                  headerPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
-                  cellStyle: pw.TextStyle(font: regular, fontSize: 8, color: textDark),
-                  cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                  rowDecoration: const pw.BoxDecoration(
-                    border: pw.Border(bottom: pw.BorderSide(color: rowBorder, width: 0.5)),
-                  ),
-                  oddRowDecoration: const pw.BoxDecoration(color: rowAlt),
-                  cellAlignments: {
-                    0: pw.Alignment.centerLeft,
-                    1: pw.Alignment.centerLeft,
-                    2: pw.Alignment.centerRight,
-                    3: pw.Alignment.centerRight,
-                    4: pw.Alignment.centerRight,
-                    5: pw.Alignment.centerRight,
-                    6: pw.Alignment.centerRight,
-                    7: pw.Alignment.centerRight,
-                    8: pw.Alignment.centerLeft,
-                    9: pw.Alignment.centerRight,
-                  },
-                  columnWidths: {
-                    0: const pw.FlexColumnWidth(2.6),
-                    1: const pw.FlexColumnWidth(1.5),
-                    2: const pw.FlexColumnWidth(1.6),
-                    3: const pw.FlexColumnWidth(1.6),
-                    4: const pw.FlexColumnWidth(1.1),
-                    5: const pw.FlexColumnWidth(1.1),
-                    6: const pw.FlexColumnWidth(1.1),
-                    7: const pw.FlexColumnWidth(1.4),
-                    8: const pw.FlexColumnWidth(1.2),
-                    9: const pw.FlexColumnWidth(1.0),
-                  },
-                ),
-                pw.SizedBox(height: 4),
-                pw.Text(
-                  '* MAPE (Mean Absolute Percentage Error) reflects forecast '
-                      'accuracy where available; "—" indicates insufficient history '
-                      '(estimated / synthetic baseline).',
-                  style: s(italic, 7, textLight),
-                ),
-              ],
+            child: pw.TableHelper.fromTextArray(
+              headers: headers,
+              data: rows,
+              border: null,
+              headerDecoration: const pw.BoxDecoration(color: navy),
+              headerStyle: pw.TextStyle(font: bold, fontSize: 7.5, color: gold),
+              headerPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+              cellStyle: pw.TextStyle(font: regular, fontSize: 8, color: textDark),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              rowDecoration: const pw.BoxDecoration(
+                border: pw.Border(bottom: pw.BorderSide(color: rowBorder, width: 0.5)),
+              ),
+              oddRowDecoration: const pw.BoxDecoration(color: rowAlt),
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.centerRight,
+                5: pw.Alignment.centerRight,
+                6: pw.Alignment.centerLeft,
+              },
+              columnWidths: {
+                0: const pw.FlexColumnWidth(3.0),
+                1: const pw.FlexColumnWidth(1.6),
+                2: const pw.FlexColumnWidth(1.8),
+                3: const pw.FlexColumnWidth(1.8),
+                4: const pw.FlexColumnWidth(1.6),
+                5: const pw.FlexColumnWidth(1.6),
+                6: const pw.FlexColumnWidth(1.4),
+              },
             ),
           ),
 
@@ -1207,33 +1215,39 @@ class _ForecastState extends State<EmployeeInventoryForecastScreen> {
           pw.NewPage(freeSpace: 170),
 
           // ── Recommendations ─────────────────────────────────────────────────
+          // Heading and each group are separate top-level items (not one
+          // shared Column) so a tall group can still land on its own page
+          // instead of forcing the whole section to fit in one block.
+          pw.Padding(
+            padding: const pw.EdgeInsets.fromLTRB(36, 0, 36, 8),
+            child: pw.Text('RECOMMENDATIONS', style: s(bold, 7.5, textLight)),
+          ),
           pw.Padding(
             padding: const pw.EdgeInsets.symmetric(horizontal: 36),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text('RECOMMENDATIONS', style: s(bold, 7.5, textLight)),
-                pw.SizedBox(height: 8),
-                recGroup('Needs Restocking',
-                    _statusPdfColor(_Status.critical),
-                    const PdfColor.fromInt(0xFFFEF2F2),
-                    needsRestock,
-                    restockReason,
-                    'No materials currently need restocking.'),
-                recGroup('Needs Monitoring',
-                    _statusPdfColor(_Status.overstock),
-                    const PdfColor.fromInt(0xFFEEF2FF),
-                    needsMonitoring,
-                    monitorReason,
-                    'No materials currently require monitoring.'),
-                recGroup('No Immediate Action',
-                    emerald,
-                    const PdfColor.fromInt(0xFFF0FDF4),
-                    noActionNeeded,
-                        (m) => 'Stock and demand are within healthy range.',
-                    'None of the included materials are currently healthy.'),
-              ],
-            ),
+            child: recGroup('Needs Restocking',
+                _statusPdfColor(_Status.critical),
+                const PdfColor.fromInt(0xFFFEF2F2),
+                needsRestock,
+                restockReason,
+                'No materials currently need restocking.'),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+            child: recGroup('Needs Monitoring',
+                _statusPdfColor(_Status.overstock),
+                const PdfColor.fromInt(0xFFEEF2FF),
+                needsMonitoring,
+                monitorReason,
+                'No materials currently require monitoring.'),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 36),
+            child: recGroup('No Immediate Action',
+                emerald,
+                const PdfColor.fromInt(0xFFF0FDF4),
+                noActionNeeded,
+                    (m) => 'Stock and demand are within healthy range.',
+                'None of the included materials are currently healthy.'),
           ),
 
           pw.SizedBox(height: 20),
