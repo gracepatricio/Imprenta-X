@@ -1531,18 +1531,14 @@ class _CategoryChoiceChip extends StatelessWidget {
 
 enum _ActivityCategory { inventory, jobQueue, pos }
 
-enum _ActPrintMode { allCategories, specificCategory, specificDate, specificEmployeeDate }
-
 class _EmployeeActivityPrintRequest {
-  final _ActPrintMode mode;
-  final _ActivityCategory category;
-  final DateTime? date;
-  final String employeeQuery;
+  final _ActivityCategory? category; // null = All
+  final DateTimeRange range;
+  final String? employeeName; // null = All employees
   const _EmployeeActivityPrintRequest({
-    required this.mode,
     required this.category,
-    required this.date,
-    required this.employeeQuery,
+    required this.range,
+    required this.employeeName,
   });
 }
 
@@ -1647,45 +1643,52 @@ class _EmployeeActivityPrintDialog extends StatefulWidget {
 }
 
 class _EmployeeActivityPrintDialogState extends State<_EmployeeActivityPrintDialog> {
-  _ActPrintMode _mode = _ActPrintMode.allCategories;
-  _ActivityCategory _category = _ActivityCategory.inventory;
-  DateTime? _date;
-  final _empCtrl = TextEditingController();
+  _ActivityCategory? _category; // null = All
+  DateTimeRange? _range;
+  String? _employeeName; // null = All employees
   String? _error;
+  bool _loadingEmployees = true;
+  List<String> _employeeNames = const [];
 
   @override
-  void dispose() {
-    _empCtrl.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    final today = DateTime.now();
+    final day = DateTime(today.year, today.month, today.day);
+    _range = DateTimeRange(start: day, end: day); // defaults to today only
+    _loadEmployeeNames();
   }
 
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _date ?? now,
-      firstDate: DateTime(now.year - 5),
-      lastDate: now,
-    );
-    if (picked == null) return;
-    setState(() { _date = picked; _error = null; });
+  Future<void> _loadEmployeeNames() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('User')
+          .where('user_role', isEqualTo: 'employee')
+          .get();
+      final names = snap.docs
+          .map((d) => (d.data())['full_name'] as String? ?? '')
+          .where((n) => n.trim().isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      if (!mounted) return;
+      setState(() { _employeeNames = names; _loadingEmployees = false; });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingEmployees = false);
+    }
   }
 
   void _confirm() {
-    final needsDate = _mode == _ActPrintMode.specificDate || _mode == _ActPrintMode.specificEmployeeDate;
-    if (needsDate && _date == null) {
-      setState(() => _error = 'Please select a date.');
-      return;
-    }
-    if (_mode == _ActPrintMode.specificEmployeeDate && _empCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'Please enter an employee name or ID.');
+    final range = _range;
+    if (range == null) {
+      setState(() => _error = 'Please select a date range.');
       return;
     }
     Navigator.of(context).pop(_EmployeeActivityPrintRequest(
-      mode: _mode,
       category: _category,
-      date: _date,
-      employeeQuery: _empCtrl.text.trim().toLowerCase(),
+      range: range,
+      employeeName: _employeeName,
     ));
   }
 
@@ -1718,103 +1721,80 @@ class _EmployeeActivityPrintDialogState extends State<_EmployeeActivityPrintDial
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Choose what to include in the report:',
-                    style: TextStyle(color: _G.textSecondary, fontSize: 12)),
-                const SizedBox(height: 10),
-
-                _PrintModeOption(
-                  icon: Icons.all_inclusive_rounded,
-                  title: 'All activity categories',
-                  subtitle: 'Includes Inventory, Job Queue, and POS activity together.',
-                  active: _mode == _ActPrintMode.allCategories,
-                  onTap: () => setState(() { _mode = _ActPrintMode.allCategories; _error = null; }),
-                ),
+                const Text('Activity category',
+                    style: TextStyle(color: _G.textSecondary, fontSize: 12,
+                        fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
-                _PrintModeOption(
-                  icon: Icons.category_outlined,
-                  title: 'Specific activity category',
-                  subtitle: 'Includes only Inventory, POS, or Job Queue activity.',
-                  active: _mode == _ActPrintMode.specificCategory,
-                  onTap: () => setState(() { _mode = _ActPrintMode.specificCategory; _error = null; }),
-                ),
+                Row(children: [
+                  Expanded(child: _CategoryChoiceChip(
+                    label: 'Inventory', icon: Icons.inventory_2_outlined,
+                    active: _category == _ActivityCategory.inventory,
+                    onTap: () => setState(() => _category = _ActivityCategory.inventory),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: _CategoryChoiceChip(
+                    label: 'POS', icon: Icons.point_of_sale_outlined,
+                    active: _category == _ActivityCategory.pos,
+                    onTap: () => setState(() => _category = _ActivityCategory.pos),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: _CategoryChoiceChip(
+                    label: 'Job Queue', icon: Icons.queue_outlined,
+                    active: _category == _ActivityCategory.jobQueue,
+                    onTap: () => setState(() => _category = _ActivityCategory.jobQueue),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: _CategoryChoiceChip(
+                    label: 'All', icon: Icons.all_inclusive_rounded,
+                    active: _category == null,
+                    onTap: () => setState(() => _category = null),
+                  )),
+                ]),
+
+                const SizedBox(height: 18),
+                const Text('Date range',
+                    style: TextStyle(color: _G.textSecondary, fontSize: 12,
+                        fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
-                _PrintModeOption(
-                  icon: Icons.event_rounded,
-                  title: 'Specific date',
-                  subtitle: 'Includes all activity (any category) from the chosen date.',
-                  active: _mode == _ActPrintMode.specificDate,
-                  onTap: () => setState(() { _mode = _ActPrintMode.specificDate; _error = null; }),
-                ),
-                const SizedBox(height: 8),
-                _PrintModeOption(
-                  icon: Icons.person_search_rounded,
-                  title: 'Specific employee on a date',
-                  subtitle: "Includes one employee's activity (any category) on the chosen date.",
-                  active: _mode == _ActPrintMode.specificEmployeeDate,
-                  onTap: () => setState(() { _mode = _ActPrintMode.specificEmployeeDate; _error = null; }),
+                DateFilterButton(
+                  selectedRange: _range,
+                  onChanged: (r) => setState(() { _range = r; _error = null; }),
                 ),
 
-                if (_mode == _ActPrintMode.specificCategory) ...[
-                  const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(child: _CategoryChoiceChip(
-                      label: 'Inventory', icon: Icons.inventory_2_outlined,
-                      active: _category == _ActivityCategory.inventory,
-                      onTap: () => setState(() => _category = _ActivityCategory.inventory),
-                    )),
-                    const SizedBox(width: 8),
-                    Expanded(child: _CategoryChoiceChip(
-                      label: 'POS', icon: Icons.point_of_sale_outlined,
-                      active: _category == _ActivityCategory.pos,
-                      onTap: () => setState(() => _category = _ActivityCategory.pos),
-                    )),
-                    const SizedBox(width: 8),
-                    Expanded(child: _CategoryChoiceChip(
-                      label: 'Job Queue', icon: Icons.queue_outlined,
-                      active: _category == _ActivityCategory.jobQueue,
-                      onTap: () => setState(() => _category = _ActivityCategory.jobQueue),
-                    )),
-                  ]),
-                ],
-
-                if (_mode == _ActPrintMode.specificDate || _mode == _ActPrintMode.specificEmployeeDate) ...[
-                  const SizedBox(height: 14),
-                  GestureDetector(
-                    onTap: _pickDate,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _G.surface,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: _G.borderSolid),
-                      ),
-                      child: Row(children: [
-                        const Icon(Icons.calendar_today_outlined, size: 15, color: _G.navyBlue),
-                        const SizedBox(width: 8),
-                        Text(
-                          _date == null ? 'Select a date' : _fmtPrintDate(_date!),
-                          style: TextStyle(
-                              color: _date == null ? _G.textMuted : _G.textPrimary,
-                              fontSize: 13, fontWeight: FontWeight.w600),
-                        ),
-                        const Spacer(),
-                        const Icon(Icons.expand_more_rounded, size: 16, color: _G.textMuted),
-                      ]),
+                const SizedBox(height: 18),
+                const Text('Employee',
+                    style: TextStyle(color: _G.textSecondary, fontSize: 12,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: _G.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _G.borderSolid),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: _employeeName,
+                      isExpanded: true,
+                      icon: const Icon(Icons.expand_more_rounded, size: 16, color: _G.textMuted),
+                      hint: Text(_loadingEmployees ? 'Loading employees…' : 'All Employees',
+                          style: const TextStyle(color: _G.textMuted, fontSize: 13)),
+                      style: const TextStyle(color: _G.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+                      items: [
+                        const DropdownMenuItem<String?>(value: null, child: Text('All Employees')),
+                        for (final name in _employeeNames)
+                          DropdownMenuItem<String?>(value: name, child: Text(name)),
+                      ],
+                      onChanged: _loadingEmployees
+                          ? null
+                          : (v) => setState(() => _employeeName = v),
                     ),
                   ),
-                ],
-
-                if (_mode == _ActPrintMode.specificEmployeeDate) ...[
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _empCtrl,
-                    style: const TextStyle(color: _G.textPrimary, fontSize: 13),
-                    decoration: _G.field('Employee name or ID', icon: Icons.person_outline_rounded),
-                  ),
-                ],
+                ),
 
                 if (_error != null) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
                   Text(_error!, style: const TextStyle(color: _G.accentRose, fontSize: 12)),
                 ],
               ]),
@@ -1861,100 +1841,74 @@ Future<void> _generateEmployeeActivityReport(
     final db = FirebaseFirestore.instance;
     final rows = <_ActivityReportRow>[];
 
+    final dayStart = DateTime(req.range.start.year, req.range.start.month, req.range.start.day);
+    final dayEnd = DateTime(req.range.end.year, req.range.end.month, req.range.end.day)
+        .add(const Duration(days: 1));
+
     Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> fetchRange(String collection) async {
-      Query<Map<String, dynamic>> q = db.collection(collection);
-      if (req.date != null) {
-        final dayStart = DateTime(req.date!.year, req.date!.month, req.date!.day);
-        final dayEnd = dayStart.add(const Duration(days: 1));
-        q = q
-            .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
-            .where('timestamp', isLessThan: Timestamp.fromDate(dayEnd));
-      }
-      final snap = await q.get();
+      final snap = await db.collection(collection)
+          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+          .where('timestamp', isLessThan: Timestamp.fromDate(dayEnd))
+          .get();
       return snap.docs;
     }
 
-    bool matchesEmployee(Map<String, dynamic> d,
-        {required String nameField, required String idField}) {
-      if (req.employeeQuery.isEmpty) return true;
-      final name = (d[nameField]?.toString() ?? '').toLowerCase();
-      final id = (d[idField]?.toString() ?? '').toLowerCase();
-      return name.contains(req.employeeQuery) || id.contains(req.employeeQuery);
+    bool matchesEmployee(Map<String, dynamic> d, {required String nameField}) {
+      if (req.employeeName == null) return true;
+      return (d[nameField]?.toString() ?? '') == req.employeeName;
     }
 
-    String scopeLabel;
-
-    Future<void> addInventoryRows({bool Function(Map<String, dynamic>)? filter}) async {
+    Future<void> addInventoryRows() async {
       for (final doc in await fetchRange('InventoryLogs')) {
         final d = doc.data();
         final method = d['update_method']?.toString() ?? 'manual';
         if (method != 'manual' && method != 'qr_scan') continue;
-        if (filter != null && !filter(d)) continue;
+        if (!matchesEmployee(d, nameField: 'updated_by_name')) continue;
         rows.add(_rowFromInventoryDoc(d));
       }
     }
 
-    Future<void> addJobQueueRows({bool Function(Map<String, dynamic>)? filter}) async {
+    Future<void> addJobQueueRows() async {
       for (final doc in await fetchRange('JobQueueActivityLogs')) {
         final d = doc.data();
-        if (filter != null && !filter(d)) continue;
+        if (!matchesEmployee(d, nameField: 'employee_name')) continue;
         rows.add(_rowFromJobQueueDoc(d));
       }
     }
 
-    Future<void> addPosRows({bool Function(Map<String, dynamic>)? filter}) async {
+    Future<void> addPosRows() async {
       for (final doc in await fetchRange('PosActivityLogs')) {
         final d = doc.data();
-        if (filter != null && !filter(d)) continue;
+        if (!matchesEmployee(d, nameField: 'employee_name')) continue;
         rows.add(_rowFromPosDoc(d));
       }
     }
 
-    switch (req.mode) {
-      case _ActPrintMode.allCategories:
+    switch (req.category) {
+      case _ActivityCategory.inventory:
+        await addInventoryRows();
+        break;
+      case _ActivityCategory.jobQueue:
+        await addJobQueueRows();
+        break;
+      case _ActivityCategory.pos:
+        await addPosRows();
+        break;
+      case null:
         await addInventoryRows();
         await addJobQueueRows();
         await addPosRows();
-        scopeLabel = 'All Activity Categories';
-        break;
-
-      case _ActPrintMode.specificCategory:
-        switch (req.category) {
-          case _ActivityCategory.inventory:
-            await addInventoryRows();
-            break;
-          case _ActivityCategory.jobQueue:
-            await addJobQueueRows();
-            break;
-          case _ActivityCategory.pos:
-            await addPosRows();
-            break;
-        }
-        final catLabel = switch (req.category) {
-          _ActivityCategory.inventory => 'Inventory',
-          _ActivityCategory.jobQueue => 'Job Queue',
-          _ActivityCategory.pos => 'POS',
-        };
-        scopeLabel = 'Category: $catLabel';
-        break;
-
-      case _ActPrintMode.specificDate:
-        await addInventoryRows();
-        await addJobQueueRows();
-        await addPosRows();
-        scopeLabel = 'Date: ${_fmtPrintDate(req.date!)}';
-        break;
-
-      case _ActPrintMode.specificEmployeeDate:
-        await addInventoryRows(filter: (d) =>
-            matchesEmployee(d, nameField: 'updated_by_name', idField: 'updated_by_display_id'));
-        await addJobQueueRows(filter: (d) =>
-            matchesEmployee(d, nameField: 'employee_name', idField: 'employee_display_id'));
-        await addPosRows(filter: (d) =>
-            matchesEmployee(d, nameField: 'employee_name', idField: 'employee_display_id'));
-        scopeLabel = 'Employee "${req.employeeQuery}" on ${_fmtPrintDate(req.date!)}';
         break;
     }
+
+    final catLabel = switch (req.category) {
+      _ActivityCategory.inventory => 'Inventory',
+      _ActivityCategory.jobQueue => 'Job Queue',
+      _ActivityCategory.pos => 'POS',
+      null => 'All Categories',
+    };
+    final empLabel = req.employeeName == null ? 'All Employees' : req.employeeName!;
+    final scopeLabel = '$catLabel · $empLabel · ${_fmtPrintDateRange(req.range)}';
 
     rows.sort((a, b) {
       if (a.ts == null && b.ts == null) return 0;
@@ -2252,7 +2206,7 @@ class _FeedbackPrintDialogState extends State<_FeedbackPrintDialog> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(5, (i) {
                     final star = i + 1;
-                    final active = _rating == star;
+                    final active = star <= _rating;
                     return GestureDetector(
                       onTap: () => setState(() => _rating = star),
                       child: Padding(
@@ -2265,6 +2219,12 @@ class _FeedbackPrintDialogState extends State<_FeedbackPrintDialog> {
                       ),
                     );
                   }),
+                ),
+                const SizedBox(height: 6),
+                Center(
+                  child: Text('$_rating Star${_rating == 1 ? '' : 's'}',
+                      style: const TextStyle(color: _G.textSecondary, fontSize: 12,
+                          fontWeight: FontWeight.w600)),
                 ),
               ],
               const SizedBox(height: 8),
@@ -2427,7 +2387,7 @@ Future<Uint8List> _buildFeedbackPdf({
     return [
       '${i + 1}',
       _reportShorten(custDisplay, 22),
-      rating > 0 ? '$rating ★' : '—',
+      rating > 0 ? '$rating Star${rating == 1 ? '' : 's'}' : '—',
       _reportShorten(message.isEmpty ? '—' : message, 70),
       _reportShorten(orderId, 16),
       _reportFmtDate(ts),
@@ -2514,11 +2474,11 @@ Future<Uint8List> _buildFeedbackPdf({
               pw.Wrap(spacing: 0, runSpacing: 0, children: [
                 summaryChip('Total Feedback', '${docs.length}', navy),
                 summaryChip('Average Rating', avgRating.toStringAsFixed(1), amber),
-                summaryChip('5★', '${ratingCounts[5]}', const PdfColor.fromInt(0xFF16A34A)),
-                summaryChip('4★', '${ratingCounts[4]}', const PdfColor.fromInt(0xFF65A30D)),
-                summaryChip('3★', '${ratingCounts[3]}', const PdfColor.fromInt(0xFFD97706)),
-                summaryChip('2★', '${ratingCounts[2]}', const PdfColor.fromInt(0xFFEA580C)),
-                summaryChip('1★', '${ratingCounts[1]}', const PdfColor.fromInt(0xFFDC2626)),
+                summaryChip('5 Stars', '${ratingCounts[5]}', const PdfColor.fromInt(0xFF16A34A)),
+                summaryChip('4 Stars', '${ratingCounts[4]}', const PdfColor.fromInt(0xFF65A30D)),
+                summaryChip('3 Stars', '${ratingCounts[3]}', const PdfColor.fromInt(0xFFD97706)),
+                summaryChip('2 Stars', '${ratingCounts[2]}', const PdfColor.fromInt(0xFFEA580C)),
+                summaryChip('1 Star', '${ratingCounts[1]}', const PdfColor.fromInt(0xFFDC2626)),
               ]),
             ],
           ),
